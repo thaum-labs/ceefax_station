@@ -1811,15 +1811,15 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     t = Object(r.useState)(!1),
                     n = (t[0], t[1], [{
                         day: "1/2 Day",
-                        description: "We have middle day per week for some differentes cases for every one to do",
+                        description: "if you only require basic admin managed on an ongoing basis",
                         isRecommend: !1
                     }, {
                         day: "1 Day",
-                        description: "We have middle day per week for some differentes cases for every one to do",
+                        description: "for businesses that need a regular presence and also wish to make small incremental changes regularly",
                         isRecommend: !0
                     }, {
-                        day: "2 Day",
-                        description: "We have middle day per week for some differentes cases for every one to do",
+                        day: "2 Days",
+                        description: "when you require a regular presence and have plans to scale, making medium sized changes week to week",
                         isRecommend: !1
                     }]),
                     i = [{
@@ -1912,14 +1912,14 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         lineNumber: 89,
                         columnNumber: 21
                     }
-                }, "Plans for you"), te("span", {
+                }, "Available Plans"), te("span", {
                     __self: this,
                     __source: {
                         fileName: ee,
                         lineNumber: 90,
                         columnNumber: 21
                     }
-                }, "We offer some hours at week")), te("div", {
+                }, "the most popular choices explained...")), te("div", {
                     className: "list-pricing",
                     __self: this,
                     __source: {
@@ -1977,7 +1977,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         lineNumber: 110,
                         columnNumber: 21
                     }
-                }, "2 Day")), te("div", {
+                }, "2 Days")), te("div", {
                     className: "list-features-content",
                     __self: this,
                     __source: {
@@ -2084,7 +2084,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         lineNumber: 151,
                         columnNumber: 29
                     }
-                }, "2 Day per week"), te("button", {
+                }, "2 Days per week"), te("button", {
                     onClick: function(e) {
                         e.preventDefault(), $("html,body").animate({
                             scrollTop: $("#footer").offset().top
@@ -2288,7 +2288,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                             lineNumber: 30,
                             columnNumber: 29
                         }
-                    }, "Cost Comparison table"),
+                    }, "How we Compare"),
                     __self: this,
                     __source: {
                         fileName: ae,
