@@ -1399,7 +1399,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: o ? "visible" : null,
-                        text: "\u201cWe\u2019ve wanted a consulting hand in the business but we didn't want to pay £1000+ per day rates - THAUM is the perfect option we didn't know we could had.\u201d",
+                        text: "\u201cWe\u2019ve wanted a consulting hand in the business but we didn't want to pay £1000+ per day rates - thaum is the perfect option we didn't know we could have.\u201d",
                         name: "Syed Jafar",
                         role: "IT Project Manager",
                         image: "../../../people1.png",
@@ -1425,7 +1425,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: l ? "visible" : null,
-                        text: "\u201cthaum provides us with 1 day a week of time, they are like a member of the team that we can contact any time and deliver quickly - if we have a big project we can always add days as we need which helps keep costs down for us.\u201d",
+                        text: "\u201cthaum provides us with 1 day a week of time, they are like a member of the team that we can contact any time and deliver quickly!.\u201d",
                         name: "Harry Platts",
                         role: "Operations Manager",
                         image: "../../../people2.png",
@@ -1451,7 +1451,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: m ? "visible" : null,
-                        text: "\u201cWe\u2019ve have the same contact everytime and they know our business and its people - its a personal touch and an attention to detail other services just don't provide and costs us less than a full time member of staff with comparable skills. powerful.\u201d",
+                        text: "\u201cWe\u2019ve had the same contact everytime and they know our business and its people - its a personal touch and an attention to detail other services just don't provide.\u201d",
                         name: "Tim Franklin",
                         role: "Project Delivery Manager",
                         image: "../../../people3.png",
