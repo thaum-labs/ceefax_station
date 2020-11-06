@@ -624,7 +624,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                 o = n.n(r),
                 i = n("JtKM"),
                 a = n.n(i),
-                s = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/cover/components/header/index.jsx",
+                s = "/thaum-master-mainthaum-master-main/src/sections/cover/components/header/index.jsx",
                 u = o.a.createElement,
                 l = function(e) {
                     return u("svg", e, u("path", {
@@ -953,7 +953,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                 y = n("Ji7U"),
                 g = n("md7G"),
                 w = n("foSv"),
-                x = "/Users/gulkirats/Downloads/thaum-master-main/src/components/input/index.jsx",
+                x = "/thaum-master-mainthaum-master-main/src/components/input/index.jsx",
                 E = o.a.createElement;
 
             function O(e) {
@@ -1077,7 +1077,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     }]), n
                 }(o.a.Component),
                 k = n("1w3K"),
-                S = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/cover/components/content_cover/index.jsx",
+                S = "/thaum-master-mainthaum-master-main/src/sections/cover/components/content_cover/index.jsx",
                 D = o.a.createElement;
 
             function C(e) {
@@ -1330,7 +1330,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         }
                     }]), n
                 }(o.a.Component),
-                P = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/cover/index.jsx",
+                P = "/thaum-master-mainthaum-master-main/src/sections/cover/index.jsx",
                 L = o.a.createElement;
 
             function R() {
@@ -1406,7 +1406,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     }
                 }))
             }
-            var A = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/why_us/components/people/index.jsx",
+            var A = "/thaum-master-mainthaum-master-main/src/sections/why_us/components/people/index.jsx",
                 z = o.a.createElement;
 
             function B(e) {
@@ -1531,7 +1531,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                 }))))))
             }
             var I = n("uuth"),
-                V = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/why_us/index.jsx",
+                V = "/thaum-master-mainthaum-master-main/src/sections/why_us/index.jsx",
                 U = o.a.createElement;
 
             function H() {
@@ -1695,7 +1695,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     }
                 }))))
             }
-            var W = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/pricing/components/list/index.jsx",
+            var W = "/thaum-master-mainthaum-master-main/src/sections/pricing/components/list/index.jsx",
                 F = o.a.createElement;
 
             function q(e) {
@@ -1890,7 +1890,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         }
                     }]), n
                 }(o.a.Component),
-                Q = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/pricing/components/card/index.jsx",
+                Q = "/thaum-master-mainthaum-master-main/src/sections/pricing/components/card/index.jsx",
                 Y = o.a.createElement;
 
             function X(e) {
@@ -2009,7 +2009,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         }
                     }]), n
                 }(o.a.Component),
-                ee = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/pricing/index.jsx",
+                ee = "/thaum-master-mainthaum-master-main/src/sections/pricing/index.jsx",
                 te = o.a.createElement,
                 ne = function(e) {
                     return te("svg", e, te("circle", {
@@ -2327,7 +2327,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                 fill: "none",
                 xmlns: "http://www.w3.org/2000/svg"
             };
-            var oe = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/about/index.jsx",
+            var oe = "/thaum-master-mainthaum-master-main/src/sections/about/index.jsx",
                 ie = o.a.createElement;
 
             function ae() {
@@ -2433,7 +2433,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     }
                 })))
             }
-            var se = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/price/index.jsx",
+            var se = "/thaum-master-mainthaum-master-main/src/sections/price/index.jsx",
                 ue = o.a.createElement;
 
             function le() {
@@ -2538,7 +2538,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     }
                 }))))
             }
-            var ce = "/Users/gulkirats/Downloads/thaum-master-main/src/sections/footer/index.jsx",
+            var ce = "/thaum-master-mainthaum-master-main/src/sections/footer/index.jsx",
                 fe = o.a.createElement;
 
             function me(e) {
@@ -2858,7 +2858,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                         }
                     }]), n
                 }(o.a.Component),
-                _e = "/Users/gulkirats/Downloads/thaum-master-main/pages/index.jsx",
+                _e = "/thaum-master-mainthaum-master-main/pages/index.jsx",
                 be = o.a.createElement;
 
             function ve() {

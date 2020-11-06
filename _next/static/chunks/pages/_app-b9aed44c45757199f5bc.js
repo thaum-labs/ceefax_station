@@ -233,7 +233,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                 p = n.n(l),
                 d = n("JtKM"),
                 m = n.n(d),
-                h = "/Users/gulkirats/Downloads/thaum-master-main/pages/_app.jsx",
+                h = "/thaum-master-mainthaum-master-main/pages/_app.jsx",
                 y = f.a.createElement;
 
             function v(e) {
