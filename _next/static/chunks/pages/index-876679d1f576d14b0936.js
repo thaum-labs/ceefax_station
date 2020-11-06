@@ -1811,7 +1811,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     t = Object(r.useState)(!1),
                     n = (t[0], t[1], [{
                         day: "1/2 Day",
-                        description: "if you only require basic admin managed on an ongoing basis",
+                        description: "if you only require basic admin managed on an ongoing basis, examples of this are shown below",
                         isRecommend: !1
                     }, {
                         day: "1 Day",
