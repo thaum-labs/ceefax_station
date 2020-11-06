@@ -1378,7 +1378,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                             lineNumber: 24,
                             columnNumber: 25
                         }
-                    }, "Trusted by The best companies"),
+                    }, "Trusted by major companies"),
                     __self: this,
                     __source: {
                         fileName: I,
@@ -1399,9 +1399,9 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: o ? "visible" : null,
-                        text: "\u201cWe\u2019ve tried countless prototyping tools and ProtoPie is hands down the most flexible and powerful tool that fits perfectly.\u201d",
-                        name: "Gregg Meyer",
-                        role: "Engineer Software",
+                        text: "\u201cWe\u2019ve wanted a consulting hand in the business but we didn't want to pay £1000+ per day rates - THAUM is the perfect option we didn't know we could had.\u201d",
+                        name: "Syed Jafar",
+                        role: "IT Project Manager",
                         image: "../../../people1.png",
                         enterprise: "../../../enterprise1.png",
                         shape: "../../../small.png",
@@ -1425,9 +1425,9 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: l ? "visible" : null,
-                        text: "\u201cWe\u2019ve tried countless prototyping tools and ProtoPie is hands down the most flexible and.\u201d",
-                        name: "Gregg Meyer",
-                        role: "Engineer Software",
+                        text: "THAUM provides us with 1 day a week of time, they are like a member of the team that we can contact any time and deliver quickly - if we have a big project we can always add days as we need which helps keep costs down for us.",
+                        name: "Harry Platts",
+                        role: "Operations Manager",
                         image: "../../../people2.png",
                         enterprise: "../../../enterprise2.png",
                         shape: "../../../big.png",
@@ -1451,9 +1451,9 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                     },
                     children: W(A, {
                         className: m ? "visible" : null,
-                        text: "\u201cWe\u2019ve tried countless prototyping tools and ProtoPie is hands down the most flexible and powerful.\u201d",
-                        name: "Gregg Meyer",
-                        role: "Engineer Software",
+                        text: "\u201cWe\u2019ve have the same contact everytime and they know our business and its people - its a personal touch and an attention to detail other services just don't provide and costs us less than a full time member of staff with comparable skills. powerful.\u201d",
+                        name: "Tim Franklin",
+                        role: "Project Delivery Manager",
                         image: "../../../people3.png",
                         enterprise: "../../../enterprise3.png",
                         shape: "../../../middle.png",
