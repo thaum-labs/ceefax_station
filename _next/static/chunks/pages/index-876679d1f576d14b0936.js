@@ -1378,7 +1378,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                             lineNumber: 24,
                             columnNumber: 25
                         }
-                    }, "Trusted by major companies"),
+                    }, "Trusted by Business"),
                     __self: this,
                     __source: {
                         fileName: I,
