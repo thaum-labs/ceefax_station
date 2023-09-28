@@ -2445,7 +2445,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                                                         isLoading: !0
                                                     }), r = e.child2.current.state.value, i = e.child3.current.state.value, o = e.child4.current.state.value, t.next = 8, axios.post("https://sheetdb.io/api/v1/dzy6vocpe9pep", {
                                                         data: {
-                                                            name: r,
+                                                            first_name: r,
                                                             last_name: i,
                                                             email: o,
                                                             comments: ""
@@ -2479,7 +2479,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                                 }
                             }, me(O, {
                                 key: "1",
-                                placeholder: "Your name",
+                                placeholder: "Your first name",
                                 label: "First name",
                                 typeInput: "text",
                                 form: "form_contact_us",
@@ -2571,7 +2571,7 @@ _N_E = (window.webpackJsonp_N_E = window.webpackJsonp_N_E || []).push([
                                     lineNumber: 135,
                                     columnNumber: 37
                                 }
-                            }, "We\u2019re successfully received your submission. Thank you!") : null), me("div", {
+                            }, "We\u2019ve successfully received your submission. Thank you!") : null), me("div", {
                                 className: "footer-footer",
                                 __self: this,
                                 __source: {
