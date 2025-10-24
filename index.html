@@ -1,160 +1,205 @@
-<!DOCTYPE html>
-<html lang="en-GB">
-  <head>
-    <meta charset="utf-8"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-    <script src="https://ricostacruz.com/jquery.transit/jquery.transit.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.js"></script>
-    <link rel="shortcut icon" href="../favicon.ico"/>
-    <title>THAUM</title>
-    <meta name="description" content="Have your own Salesforce team, without it costing the earth... place a Salesforce specialist in your team without the financial burden and outlays that typically brings - we have experience across sectors as end users and as consultants plus are UK based."/>
-    <meta name="viewport" content="initial-scale=1.0, width=device-width"/>
-    <!-- Keep original Next.js CSS preloads -->
-    <link rel="preload" href="/_next/static/css/531cb00dbc4d585429e5.css" as="style"/>
-    <link rel="stylesheet" href="/_next/static/css/531cb00dbc4d585429e5.css" data-n-g=""/>
-    <noscript data-n-css="true"></noscript>
-    <!-- Keep original Next.js JS preloads (buildId-specific) -->
-    <link rel="preload" href="/_next/static/chunks/main-946394c216ddb52647d6.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/webpack-e067438c4cf4ef2ef178.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/framework.1d36bc031662b4dc4c28.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/commons.ad1dd656b127b586e70d.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/f6078781a05fe1bcb0902d23dbbb2662c8d200b3.e10d1da399469f6d05e5.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/pages/_app-716e349936baae25b66c.js" as="script"/>
-    <link rel="preload" href="/_next/static/chunks/pages/index-876679d1f576d14b0936.js" as="script"/>
-  </head>
-  <body>
-    <div id="__next">
-      <!-- ORIGINAL PAGE CONTENT KEPT AS-IS FOR NEXT.JS RUNTIME -->
-      <!-- BEGIN CONTENT -->
-      <div>
-        <div class="index">
-          <div class="cover">
-            <div class="header">
-              <div class="nav-header ">
-                <div class="content_nav">
-                  <div class="logo_close">
-                    <div class="logo">
-                      <!-- (SVG retained) -->
-                      <svg width="196" height="63" viewBox="0 0 196 63" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18.944 42.861c0 .918.327 1.693.985 2.33a3.27 3.27 0 0 0 2.36.956h5.793v6.927h-5.796c-1.554 0-3.015-.288-4.388-.864a11.145 11.145 0 0 1-3.584-2.39 11.534 11.534 0 0 1-2.418-3.556C11.3 44.913 11 43.46 11 41.904v-8.956H6.701V26.32h4.3V15.51h7.943v27.351zm9.134-16.541v6.628h-4.42l-3.7-6.628h8.12zM31.72 11.272h7.94l-.057 41.798h-7.944l.06-41.798zm27.365 15.525c1.778 2.389 2.667 6.169 2.667 11.342v14.927h-7.937V38.182c0-1.07-.032-2.105-.089-3.097-.06-.992-.27-1.867-.626-2.62-.359-.758-.935-1.352-1.731-1.79-.797-.433-1.931-.653-3.403-.653-1.156 0-2.407.32-3.762.956l-.06.057-.057-.117-2.866-5.17.06-.06a10.572 10.572 0 0 1 3.463-2.078c1.273-.462 2.667-.693 4.182-.693 4.797-.003 8.185 1.294 10.159 3.88zM97.463 23.216v29.858H89.64v-14.97a7.971 7.971 0 0 0-.654-3.232 8.365 8.365 0 0 0-1.82-2.635 8.327 8.327 0 0 0-2.689-1.767 8.279 8.279 0 0 0-3.197-.63c-1.155 0-2.23.22-3.225.658a9.342 9.342 0 0 0-2.656 1.767 7.88 7.88 0 0 0-1.82 2.635 8.186 8.186 0 0 0-.655 3.264c0 1.12.217 2.18.654 3.18a8.309 8.309 0 0 0 1.821 2.634 8.9 8.9 0 0 0 2.656 1.8c.996.44 2.07.657 3.225.657 1.234 0 2.29-.217 3.165-.654h.06v.117l2.984 5.313-.057.06c-1.952 1.515-4.36 2.268-7.225 2.268-2.11 0-4.1-.398-5.97-1.194a15.318 15.318 0 0 1-4.9-3.286c-1.394-1.394-2.497-3.026-3.315-4.896-.817-1.87-1.223-3.862-1.223-5.97 0-2.151.406-4.16 1.223-6.034a15.86 15.86 0 0 1 3.314-4.897c1.394-1.393 3.026-2.496 4.9-3.314 1.867-.814 3.862-1.223 5.97-1.223 2.07 0 3.883.388 5.437 1.156 1.554.768 2.884 1.884 4 3.342v-4.007h7.82zM119.32 45.546l2.866 5.199v.056c-2.07 1.832-4.637 2.75-7.702 2.75-4.857 0-8.299-1.317-10.329-3.94-1.871-2.351-2.806-6.092-2.806-11.23V23.216h8.182V38.38c0 1.078.032 2.112.089 3.104.06.996.281 1.874.658 2.628.377.758.963 1.362 1.76 1.82.793.46 1.931.687 3.403.687.679 0 1.333-.1 1.97-.299a8.822 8.822 0 0 0 1.792-.778h.117v.003z" fill="#2D62EC"></path>
-                        <path d="M186.314 44.173c1.316 0 2.429.46 3.346 1.373.914.917 1.351 2.03 1.312 3.346 0 1.312-.466 2.428-1.401 3.342-.935.918-2.059 1.373-3.374 1.373-1.273-.04-2.368-.52-3.282-1.433-.918-.914-1.355-2.048-1.316-3.403 0-1.276.455-2.368 1.373-3.286.917-.913 2.03-1.35 3.342-1.312z" fill="#FEB029"></path>
-                      </svg>
-                    </div>
-                    <div class="close">
-                      <svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19.5 6.41L18.09 5l-5.59 5.59L6.91 5 5.5 6.41 11.09 12 5.5 17.59 6.91 19l5.59-5.59L18.09 19l1.41-1.41L13.91 12l5.59-5.59z" fill="#171F31"></path></svg>
-                    </div>
-                  </div>
-                  <div class="options">
-                    <a title="Home">Home</a>
-                    <a title="Why us">Why us</a>
-                    <a title="Pricing">Pricing</a>
-                    <a title="About us">About</a>
-                  </div>
-                </div>
-              </div>
-              <div class="content_header">
-                <div class="logo"> <!-- (SVG retained, omitted for brevity) --> </div>
-                <div class="content_menu">
-                  <a title="Home">Home</a>
-                  <a title="Why us">Why us</a>
-                  <a title="Pricing">Pricing</a>
-                  <a title="About us">About</a>
-                </div>
-                <div class="menu_icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 18h16M4 6h16H4zm0 6h16H4z" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                </div>
-              </div>
-            </div>
-            <div class="content_cover">
-              <div class="c-cover-son">
-                <div class="c-s-text">
-                  <span>
-                    <h1>Have your own Salesforce team, without it costing the earth...</h1>
-                  </span>
-                  <span>
-                    <p>Place a Salesforce specialist in your team without the financial burden and outlays that typically brings - we have experience across sectors as end users and as consultants plus are UK based.</p>
-                  </span>
-                </div>
-                <span>
-                  <form class="c-s-form" id="form_send_email">
-                    <div class="input">
-                      <label>Enter your email address</label>
-                      <input type="email" required form="form_send_email" placeholder="Email" value=""/>
-                    </div>
-                    <button type="submit" form="form_send_email" id="button_cover" class="">Newsletter</button>
-                  </form>
-                </span>
-              </div>
-            </div>
-          </div>
-          <!-- Why us (unchanged) -->
-          <div class="why_us" id="why_us"> <!-- original markup retained -->
-            <!-- ... (kept as‑is) ... -->
-          </div>
-          <!-- Pricing (unchanged) -->
-          <div class="pricing" id="pricing"> <!-- original markup retained -->
-            <!-- ... (kept as‑is) ... -->
-          </div>
-          <!-- About (unchanged) -->
-          <div class="about" id="about"> <!-- original markup retained -->
-            <!-- ... (kept as‑is) ... -->
-          </div>
-          <!-- Price/Comparison (unchanged) -->
-          <div class="price"> <!-- original markup retained -->
-            <!-- ... (kept as‑is) ... -->
-          </div>
-          <footer class="footer" id="footer">
-            <div class="footer-content">
-              <h2>We want to hear about what you&#x27;re building</h2>
-              <form class="footer-form" action="" id="form_contact_us">
-                <div class="input">
-                  <label>first name</label>
-                  <input type="text" required form="form_contact_us" placeholder="first name" value=""/>
-                </div>
-                <div class="input">
-                  <label>last name</label>
-                  <input type="text" required form="form_contact_us" placeholder="last name" value=""/>
-                </div>
-                <div class="input">
-                  <label>email address</label>
-                  <input type="email" required form="form_contact_us" placeholder="email" value=""/>
-                </div>
-                <button type="submit" form="form_contact_us" id="button_footer" class="">Contact us</button>
-              </form>
-              <div class="correct_message"></div>
-              <div class="footer-footer">
-                <div class="f-f-text">
-                  <div class="f-f-image">
-                    <!-- (SVG retained) -->
-                    <svg width="196" height="63" viewBox="0 0 196 63" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M31.72 11.272h7.94l-.057 41.798h-7.944l.06-41.798z" fill="#2D62EC"></path><path d="M186.314 44.173c1.316 0 2.429.46 3.346 1.373.914.917 1.351 2.03 1.312 3.346 0 1.312-.466 2.428-1.401 3.342-.935.918-2.059 1.373-3.374 1.373-1.273-.04-2.368-.52-3.282-1.433-.918-.914-1.355-2.048-1.316-3.403 0-1.276.455-2.368 1.373-3.286.917-.913 2.03-1.35 3.342-1.312z" fill="#FEB029"></path></svg>
-                  </div>
-                  <span>© thaum <span id="year">2025</span></span>
-                </div>
-              </div>
-            </div>
-            <img class="footer-image-decoration null" src="../../../big.png" alt="big"/>
-          </footer>
-        </div>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your Site — Fast, clear, and built for humans</title>
+  <meta name="description" content="A lightweight, fast site with clear messaging. Built for humans.">
+  <meta property="og:title" content="Your Site — Fast, clear, and built for humans">
+  <meta property="og:description" content="A lightweight, fast site with clear messaging. Built for humans.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#111827">
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --card: #121827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #7dd3fc;
+      --accent-2: #a78bfa;
+      --ring: rgba(125,211,252,.4);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 10% -10%, #111827 0%, #0b0f1a 60%) fixed;
+      color: var(--text);
+      line-height: 1.55;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { width: 100%; max-width: 1120px; margin: 0 auto; padding: 24px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0 8px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: .2px; }
+    .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 0 2px #ffffff10 inset; }
+    nav a { margin-left: 18px; color: var(--muted); }
+    nav a.active, nav a:hover { color: var(--text); }
+    .hero {
+      margin-top: 32px; padding: 48px; border-radius: calc(var(--radius) + 6px);
+      background: linear-gradient(180deg, #0f172a, #0b1222);
+      border: 1px solid #ffffff0d;
+      box-shadow: 0 10px 40px #00000050, 0 0 0 1px #ffffff08 inset;
+      position: relative; overflow: hidden;
+    }
+    .hero:after {
+      content: ""; position: absolute; inset: -40px -60px auto auto; width: 420px; height: 420px;
+      background: radial-gradient(closest-side, var(--ring), transparent 70%);
+      filter: blur(10px); opacity: .35; pointer-events: none;
+    }
+    .eyebrow { color: var(--accent); font-size: 14px; letter-spacing: .2em; text-transform: uppercase; }
+    h1 { margin: 8px 0 14px; font-size: clamp(28px, 5vw, 48px); line-height: 1.1; }
+    .lead { max-width: 64ch; color: var(--muted); font-size: 18px; }
+    .cta { display: flex; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+    .btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0b0f1a; font-weight: 700; padding: 12px 18px; border-radius: 12px; border: none;
+      box-shadow: 0 2px 0 #ffffff20 inset, 0 10px 20px #00000060;
+      transition: transform .05s ease-in;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.secondary {
+      background: transparent; color: var(--text); border: 1px solid #ffffff1a;
+      box-shadow: none;
+    }
+
+    .section { margin-top: 48px; }
+    .section h2 { font-size: clamp(22px, 3.2vw, 28px); margin: 0 0 12px; }
+    .muted { color: var(--muted); margin: 0 0 18px; }
+
+    /* Quotes */
+    .quotes {
+      display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px;
+    }
+    .quote {
+      grid-column: span 6;
+      background: var(--card); border: 1px solid #ffffff12; border-radius: var(--radius);
+      padding: 20px; position: relative; box-shadow: 0 6px 24px #00000055;
+    }
+    .quote p { margin: 0 0 10px; font-size: 18px; }
+    .who { color: var(--muted); font-size: 14px; }
+    .quote:before {
+      content: "“"; position: absolute; top: -22px; left: 12px; font-size: 72px; line-height: .7; color: #ffffff10;
+    }
+    @media (max-width: 860px) { .quote { grid-column: span 12; } }
+
+    /* Excerpts */
+    .grid {
+      display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px;
+    }
+    .card {
+      grid-column: span 4;
+      background: var(--card); border: 1px solid #ffffff12; border-radius: var(--radius);
+      padding: 18px; display: flex; flex-direction: column; gap: 10px;
+      box-shadow: 0 6px 24px #00000055;
+    }
+    .card h3 { margin: 0; font-size: 18px; }
+    .card p { margin: 0; color: var(--muted); }
+    .chip {
+      display: inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid #ffffff1a; font-size: 12px; color: var(--muted);
+    }
+    @media (max-width: 1024px) { .card { grid-column: span 6; } }
+    @media (max-width: 720px) { .card { grid-column: span 12; } }
+
+    footer { margin: 64px 0 24px; color: var(--muted); font-size: 14px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <span>Your Site</span>
       </div>
-      <!-- END CONTENT -->
-    </div>
+      <nav aria-label="Primary">
+        <a href="#" class="active">Home</a>
+        <a href="#quotes">Quotes</a>
+        <a href="#excerpts">Articles</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </header>
 
-    <!-- Keep __NEXT_DATA__ exactly so Next can hydrate -->
-    <script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}},"page":"/","query":{},"buildId":"coHQ3f-HEPaGHdGGKh37X","nextExport":true,"autoExport":true,"isFallback":false,"head":[["meta",{"charSet":"utf-8"}],["script",{"src":"https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"}],["script",{"src":"https://ricostacruz.com/jquery.transit/jquery.transit.min.js"}],["script",{"src":"https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.js"}],["link",{"rel":"shortcut icon","href":"../favicon.ico"}],["title",{"children":"THAUM"}],["meta",{"name":"description","content":"Have your own Salesforce team, without it costing the earth... place a Salesforce specialist in your team without the financial burden and outlays that typically brings - we have experience across sectors as end users and as consultants plus are UK based."}],["meta",{"name":"viewport","content":"initial-scale=1.0, width=device-width"}]]}</script>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="eyebrow">Now live again</div>
+        <h1 id="hero-title">Fast, clear, and built for humans.</h1>
+        <p class="lead">We trimmed the fluff and tuned the engine. Browsing is snappy, copy is crystal-clear, and the important bits are right where you expect them.</p>
+        <div class="cta">
+          <a class="btn" href="#excerpts">Read what’s new</a>
+          <a class="btn secondary" href="#quotes">See what people say</a>
+        </div>
+      </section>
 
-    <!-- Next.js runtime bundles (must match buildId above) -->
-    <script nomodule src="/_next/static/chunks/polyfills-57d8738e7416f8423303.js"></script>
-    <script src="/_next/static/chunks/main-946394c216ddb52647d6.js" async></script>
-    <script src="/_next/static/chunks/webpack-e067438c4cf4ef2ef178.js" async></script>
-    <script src="/_next/static/chunks/framework.1d36bc031662b4dc4c28.js" async></script>
-    <script src="/_next/static/chunks/commons.ad1dd656b127b586e70d.js" async></script>
-    <script src="/_next/static/chunks/f6078781a05fe1bcb0902d23dbbb2662c8d200b3.e10d1da399469f6d05e5.js" async></script>
-    <script src="/_next/static/chunks/pages/_app-716e349936baae25b66c.js" async></script>
-    <script src="/_next/static/chunks/pages/index-876679d1f576d14b0936.js" async></script>
-    <script src="/_next/static/coHQ3f-HEPaGHdGGKh37X/_buildManifest.js" async></script>
-    <script src="/_next/static/coHQ3f-HEPaGHdGGKh37X/_ssgManifest.js" async></script>
+      <!-- QUOTES (improved wording) -->
+      <section id="quotes" class="section" aria-labelledby="quotes-title">
+        <h2 id="quotes-title">What people are saying</h2>
+        <p class="muted">Short, trustworthy sound-bites you can comfortably put above the fold.</p>
 
-    <!-- Small enhancement: keep year current -->
-    <script>document.getElementById('year') && (document.getElementById('year').textContent = new Date().getFullYear());</script>
-  </body>
+        <div class="quotes">
+          <figure class="quote">
+            <p>It just works — no fiddly setup, no mystery errors. I was done in minutes.</p>
+            <figcaption class="who">Alex P. — Product Lead</figcaption>
+          </figure>
+
+          <figure class="quote">
+            <p>Clear, fast, and genuinely helpful. It feels like the site reads my mind.</p>
+            <figcaption class="who">Samira K. — Operations</figcaption>
+          </figure>
+
+          <figure class="quote">
+            <p>We shipped in a day instead of a week. The new flow cuts noise, keeps momentum.</p>
+            <figcaption class="who">Jordan L. — Engineer</figcaption>
+          </figure>
+
+          <figure class="quote">
+            <p>Support replied in minutes with a precise fix. Honestly, that’s rare and refreshing.</p>
+            <figcaption class="who">Priya R. — Founder</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- SHORT EXCERPTS (improved wording) -->
+      <section id="excerpts" class="section" aria-labelledby="excerpts-title">
+        <h2 id="excerpts-title">Quick reads</h2>
+        <p class="muted">Short excerpts you can skim in under a minute.</p>
+
+        <div class="grid">
+          <article class="card">
+            <span class="chip">Update</span>
+            <h3><a href="#">The site is faster — here’s what we changed</a></h3>
+            <p>We simplified scripts, trimmed payloads, and cached the busy bits. Result: pages feel instant, even on 4G.</p>
+          </article>
+
+          <article class="card">
+            <span class="chip">Guide</span>
+            <h3><a href="#">From click to clarity in three steps</a></h3>
+            <p>A tiny playbook for writing copy that helps people decide quickly — without sounding salesy.</p>
+          </article>
+
+          <article class="card">
+            <span class="chip">Behind the scenes</span>
+            <h3><a href="#">Designing for momentum, not maximum</a></h3>
+            <p>We prioritised fewer choices, better defaults, and obvious next steps. Less friction, more flow.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact" class="section" aria-labelledby="contact-title">
+        <h2 id="contact-title">Say hello</h2>
+        <p class="muted">Questions, ideas, or feedback? We’d love to hear from you.</p>
+        <p>Email <a href="mailto:hello@example.com">hello@example.com</a> or find us on <a href="#">Twitter</a>.</p>
+      </section>
+    </main>
+
+    <footer>
+      <p>© <span id="year"></span> Your Site. All rights reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
 </html>
+
