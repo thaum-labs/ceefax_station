@@ -112,6 +112,56 @@ def maidenhead_bbox(grid: str) -> tuple[tuple[float, float], tuple[float, float]
     return (sw, ne)
 
 
+def latlon_to_maidenhead(lat: float, lon: float, precision: int = 6) -> str:
+    """
+    Convert (lat, lon) to Maidenhead locator.
+    precision: 2, 4, 6, or 8 characters (default 6 = subsquare precision)
+    """
+    # Normalize longitude to -180..180
+    lon = ((lon + 180) % 360) - 180
+    # Normalize latitude to -90..90
+    lat = max(-90, min(90, lat))
+    
+    # Field (A-R, 18 divisions)
+    lon += 180
+    lat += 90
+    field_lon = int(lon / 20)
+    field_lat = int(lat / 10)
+    grid = chr(ord("A") + field_lon) + chr(ord("A") + field_lat)
+    
+    if precision >= 4:
+        # Square (0-9, 10 divisions)
+        lon_remainder = lon % 20
+        lat_remainder = lat % 10
+        square_lon = int(lon_remainder / 2)
+        square_lat = int(lat_remainder / 1)
+        grid += str(square_lon) + str(square_lat)
+    
+    if precision >= 6:
+        # Subsquare (a-x, 24 divisions)
+        lon_remainder = lon % 20
+        lat_remainder = lat % 10
+        square_lon_remainder = (lon_remainder % 2) / 2.0
+        square_lat_remainder = (lat_remainder % 1) / 1.0
+        subsquare_lon = int(square_lon_remainder * 24)
+        subsquare_lat = int(square_lat_remainder * 24)
+        grid += chr(ord("a") + subsquare_lon) + chr(ord("a") + subsquare_lat)
+    
+    if precision >= 8:
+        # Extended square (0-9, 10 divisions)
+        lon_remainder = lon % 20
+        lat_remainder = lat % 10
+        square_lon_remainder = (lon_remainder % 2) / 2.0
+        square_lat_remainder = (lat_remainder % 1) / 1.0
+        subsquare_lon_remainder = (square_lon_remainder * 24) % 1
+        subsquare_lat_remainder = (square_lat_remainder * 24) % 1
+        extended_lon = int(subsquare_lon_remainder * 10)
+        extended_lat = int(subsquare_lat_remainder * 10)
+        grid += str(extended_lon) + str(extended_lat)
+    
+    return grid.upper()[:precision]
+
+
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     r = 6371.0
     p1 = math.radians(lat1)

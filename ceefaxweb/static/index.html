@@ -314,9 +314,10 @@
             for (const l of layers) l.addTo(map);
 
             const role = isTx ? 'TX' : ((s.is_rx) ? 'RX' : 'RX (none)');
-            const popupHtml = `<b>${s.callsign}</b><br/>Grid: ${s.grid || '-'}<br/>Role: ${role}<br/>Status: ${s.status || '-'}<br/><span class="muted">Last seen: ${s.last_seen_utc || '-'}</span>`;
+            const gridDisplay = s.grid ? ` (${s.grid})` : '';
+            const popupHtml = `<b>${s.callsign}${gridDisplay}</b><br/>Grid: ${s.grid || '-'}<br/>Role: ${role}<br/>Status: ${s.status || '-'}<br/><span class="muted">Last seen: ${s.last_seen_utc || '-'}</span>`;
             for (const l of layers) l.bindPopup(popupHtml);
-            for (const l of layers) l.bindTooltip(`${s.callsign} (${s.grid || '-'})`, { sticky: true });
+            for (const l of layers) l.bindTooltip(`${s.callsign}${gridDisplay}`, { sticky: true });
 
             stationMarkers.set(s.callsign, { layers });
           }
@@ -365,7 +366,9 @@
           poly.on('click', onClick);
 
           const total = (l.tx_pages_unique || 0);
-          const tip = `${l.tx_callsign} → ${l.rx_callsign} (${l.rx_pages_ok_unique || 0}/${total} pages ok)`;
+          const txGrid = tx && tx.grid ? ` (${tx.grid})` : '';
+          const rxGrid = rx && rx.grid ? ` (${rx.grid})` : '';
+          const tip = `${l.tx_callsign}${txGrid} → ${l.rx_callsign}${rxGrid} (${l.rx_pages_ok_unique || 0}/${total} pages ok)`;
           hit.bindTooltip(tip, { sticky: true });
           poly.bindTooltip(tip, { sticky: true });
 
@@ -391,7 +394,9 @@
         const resp = await fetch(`/api/link?tx=${encodeURIComponent(tx)}&rx=${encodeURIComponent(rx)}&range=${encodeURIComponent(currentRange)}`);
         const d = await resp.json();
         detailBox.style.display = '';
-        linkTitle.textContent = `${d.tx_callsign} → ${d.rx_callsign}`;
+        const txGrid = d.tx_grid ? ` (${d.tx_grid})` : '';
+        const rxGrid = d.rx_grid ? ` (${d.rx_grid})` : '';
+        linkTitle.textContent = `${d.tx_callsign}${txGrid} → ${d.rx_callsign}${rxGrid}`;
         linkMeta.textContent = `Range=${d.range} (since ${d.since_utc})`;
 
         // Distance

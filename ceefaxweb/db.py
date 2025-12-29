@@ -453,20 +453,26 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
             }
         )
 
-    # Distance (best-effort): use stored lat/lon from stations table.
+    # Distance and grid squares (best-effort): use stored lat/lon/grid from stations table.
     distance_km: float | None = None
     distance_mi: float | None = None
+    tx_grid: str | None = None
+    rx_grid: str | None = None
     try:
-        tx_loc = conn.execute(
-            "SELECT lat, lon FROM stations WHERE callsign = ?",
+        tx_station = conn.execute(
+            "SELECT lat, lon, grid FROM stations WHERE callsign = ?",
             (tx_cs,),
         ).fetchone()
-        rx_loc = conn.execute(
-            "SELECT lat, lon FROM stations WHERE callsign = ?",
+        rx_station = conn.execute(
+            "SELECT lat, lon, grid FROM stations WHERE callsign = ?",
             (rx_cs,),
         ).fetchone()
-        if tx_loc and rx_loc and tx_loc["lat"] is not None and tx_loc["lon"] is not None and rx_loc["lat"] is not None and rx_loc["lon"] is not None:
-            distance_km = float(haversine_km(float(tx_loc["lat"]), float(tx_loc["lon"]), float(rx_loc["lat"]), float(rx_loc["lon"])))
+        if tx_station:
+            tx_grid = tx_station.get("grid") or None
+        if rx_station:
+            rx_grid = rx_station.get("grid") or None
+        if tx_station and rx_station and tx_station["lat"] is not None and tx_station["lon"] is not None and rx_station["lat"] is not None and rx_station["lon"] is not None:
+            distance_km = float(haversine_km(float(tx_station["lat"]), float(tx_station["lon"]), float(rx_station["lat"]), float(rx_station["lon"])))
             distance_mi = float(distance_km * 0.621371)
     except Exception:  # noqa: BLE001
         distance_km = None
@@ -477,6 +483,8 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
         "since_utc": since,
         "tx_callsign": tx_cs,
         "rx_callsign": rx_cs,
+        "tx_grid": tx_grid,
+        "rx_grid": rx_grid,
         "distance_km": distance_km,
         "distance_mi": distance_mi,
         "pages_sent": sent,

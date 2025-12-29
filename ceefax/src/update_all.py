@@ -118,10 +118,15 @@ _user_callsign: Optional[str] = None
 _user_frequency: Optional[str] = None
 
 
-def persist_radio_config(callsign: Optional[str], frequency: Optional[str] = None) -> None:
+def persist_radio_config(callsign: Optional[str], frequency: Optional[str] = None, grid: Optional[str] = None) -> None:
     """
     Write ceefax/radio_config.json for the viewer / start page.
     Safe to call in non-interactive scheduled runs.
+    
+    Args:
+        callsign: Callsign to save
+        frequency: Optional frequency to save
+        grid: Optional Maidenhead grid square to save (only if not already set in config)
     """
     if not callsign:
         return
@@ -131,9 +136,28 @@ def persist_radio_config(callsign: Optional[str], frequency: Optional[str] = Non
 
         root = Path(__file__).resolve().parent.parent
         config_file = root / "radio_config.json"
+        
+        # Read existing config to preserve grid if already set
+        existing_data = {}
+        if config_file.exists():
+            try:
+                existing_data = json.loads(config_file.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                pass
+        
         config_data = {"callsign": callsign}
         if frequency:
             config_data["frequency"] = frequency
+        
+        # Only set grid if:
+        # 1. Grid is provided AND
+        # 2. No grid is already set in existing config (don't overwrite user's manual setting)
+        if grid and not existing_data.get("grid"):
+            config_data["grid"] = grid.strip().upper()
+        elif existing_data.get("grid"):
+            # Preserve existing grid
+            config_data["grid"] = existing_data["grid"]
+        
         config_file.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
     except Exception:  # noqa: BLE001
         # Never fail page updates due to config persistence issues.
@@ -152,7 +176,10 @@ def auto_detect_location_silent() -> Tuple[str, str]:
         if not location:
             location = get_location_from_timezone()
         if location:
-            _lat, _lon, city = location
+            if len(location) == 4:
+                _lat, _lon, city, _grid = location
+            else:
+                _lat, _lon, city = location
             city_name = city.split(",")[0] if "," in city else city
             # Default to GB for simplicity; wttr.in accepts "City,GB"
             return (city_name, f"{city_name},GB")
@@ -610,7 +637,13 @@ def get_user_location() -> Optional[Tuple[str, str]]:
                         print(_GLYPH_FAIL)
                 
                 if location:
-                    lat, lon, city = location
+                    detected_grid = None
+                    if len(location) == 4:
+                        lat, lon, city, detected_grid = location
+                        if detected_grid:
+                            print(f"  Maidenhead Grid: {detected_grid}")
+                    else:
+                        lat, lon, city = location
                     # Extract city name from "City,Country" format
                     city_name = city.split(",")[0] if "," in city else city
                     # Try to detect country from the location data
@@ -630,6 +663,11 @@ def get_user_location() -> Optional[Tuple[str, str]]:
                             # Default to GB for UK locations, otherwise try the country as-is
                             query = f"{city_name},{country_part}"
                     _user_location = (city_name, query)
+                    
+                    # Optionally save detected grid to config (only if not already set)
+                    if detected_grid and _user_callsign:
+                        persist_radio_config(_user_callsign, _user_frequency, detected_grid)
+                    
                     print(f"{_GLYPH_OK} Detected location via {method}: {city_name}")
                     return _user_location
                 else:

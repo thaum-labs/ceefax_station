@@ -112,45 +112,62 @@ def _ascii_icon(desc: str) -> List[str]:
     ]
 
 
-def get_location_from_ip() -> Optional[Tuple[float, float, str]]:
+def get_location_from_ip() -> Optional[Tuple[float, float, str, Optional[str]]]:
     """
-    Get user's location from their IP address using multiple fallback services.
-    Returns (latitude, longitude, city_name) or None if all methods fail.
+    Get user's location from their IP address using whatsmylocator.co.uk-style approach.
+    Uses reliable IP geolocation and calculates Maidenhead grid square.
+    Returns (latitude, longitude, city_name, maidenhead_grid) or None if all methods fail.
     """
+    import sys
+    from pathlib import Path
+    
+    # Add ceefaxweb to path to import maidenhead functions
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    ceefaxweb_path = repo_root / "ceefaxweb"
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    
+    try:
+        from ceefaxweb.maidenhead import latlon_to_maidenhead
+    except ImportError:
+        # Fallback if import fails
+        latlon_to_maidenhead = None
+    
     # Try multiple IP geolocation services as fallbacks
+    # Using more reliable services similar to whatsmylocator.co.uk approach
     services = [
-        # Service 1: ip-api.com (free, no API key)
+        # Service 1: ip-api.com (free, no API key, reliable)
         {
-            "url": "http://ip-api.com/json/?fields=lat,lon,city,country",
+            "url": "http://ip-api.com/json/?fields=lat,lon,city,country,regionName",
             "parser": lambda d: (
                 d.get("lat"),
                 d.get("lon"),
-                f"{d.get('city', 'Unknown')},{d.get('country', '')}"
-            ) if d.get("status") == "success" else None
+                f"{d.get('city', 'Unknown')}, {d.get('regionName', '')}, {d.get('country', '')}".strip(", "),
+            ) if d.get("status") == "success" and d.get("lat") and d.get("lon") else None
         },
-        # Service 2: ipinfo.io (free tier, no API key needed for basic info)
+        # Service 2: ipapi.co (free tier, reliable)
         {
-            "url": "https://ipinfo.io/json",
-            "parser": lambda d: (
-                float(d.get("loc", "0,0").split(",")[0]) if d.get("loc") else None,
-                float(d.get("loc", "0,0").split(",")[1]) if d.get("loc") else None,
-                f"{d.get('city', 'Unknown')},{d.get('country', '')}"
-            ) if d.get("loc") else None
-        },
-        # Service 3: geojs.io (free, no API key)
-        {
-            "url": "https://get.geojs.io/v1/ip/geo.json",
+            "url": "https://ipapi.co/json/",
             "parser": lambda d: (
                 float(d.get("latitude", 0)) if d.get("latitude") else None,
                 float(d.get("longitude", 0)) if d.get("longitude") else None,
-                f"{d.get('city', 'Unknown')},{d.get('country', '')}"
+                f"{d.get('city', 'Unknown')}, {d.get('region', '')}, {d.get('country_name', '')}".strip(", "),
             ) if d.get("latitude") and d.get("longitude") else None
+        },
+        # Service 3: ip-api.com alternative endpoint
+        {
+            "url": "https://ip-api.com/json/",
+            "parser": lambda d: (
+                d.get("lat"),
+                d.get("lon"),
+                f"{d.get('city', 'Unknown')}, {d.get('regionName', '')}, {d.get('country', '')}".strip(", "),
+            ) if d.get("status") == "success" and d.get("lat") and d.get("lon") else None
         },
     ]
     
     for service in services:
         try:
-            resp = requests.get(service["url"], timeout=5)
+            resp = requests.get(service["url"], timeout=5, headers={"User-Agent": "CeefaxStation/1.0"})
             resp.raise_for_status()
             data = resp.json()
             
@@ -161,7 +178,14 @@ def get_location_from_ip() -> Optional[Tuple[float, float, str]]:
             result = service["parser"](data)
             if result and result[0] is not None and result[1] is not None:
                 lat, lon, city = result
-                return (lat, lon, city)
+                # Calculate Maidenhead grid square from coordinates
+                grid = None
+                if latlon_to_maidenhead:
+                    try:
+                        grid = latlon_to_maidenhead(float(lat), float(lon), precision=6)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return (float(lat), float(lon), city, grid)
         except Exception:  # noqa: BLE001
             continue
     
@@ -434,15 +458,29 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
         location = get_location_from_ip()
         if location:
             method = "IP geolocation"
+            lat, lon, base_city, grid = location
+            if grid:
+                print(f"Detected location via {method}: {base_city} (lat: {lat}, lon: {lon}, grid: {grid})")
+            else:
+                print(f"Detected location via {method}: {base_city} (lat: {lat}, lon: {lon})")
         else:
             # Method 2: Try timezone-based approximation
             location = get_location_from_timezone()
             if location:
                 method = "timezone"
+                if len(location) == 4:
+                    lat, lon, base_city, grid = location
+                else:
+                    lat, lon, base_city = location
+                    grid = None
+                print(f"Detected location via {method}: {base_city} (lat: {lat}, lon: {lon})")
         
         if location:
-            lat, lon, base_city = location
-            print(f"Detected location via {method}: {base_city} (lat: {lat}, lon: {lon})")
+            if len(location) == 4:
+                lat, lon, base_city, grid = location
+            else:
+                lat, lon, base_city = location
+                grid = None
             # Extract city name and create query
             city_name = base_city.split(",")[0] if "," in base_city else base_city
             # Try to determine country code from location
