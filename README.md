@@ -41,7 +41,7 @@ A modern recreation of the classic Ceefax teletext service, running on Windows w
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.11 (specific version required for special character support)
 - Windows
 
 ### Installation
