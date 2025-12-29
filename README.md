@@ -165,6 +165,8 @@ Pages can be updated manually or via API update scripts in `ceefax/src/update_*.
 
 ## License
 
+MIT License - see [LICENSE](LICENSE) for details.
+
 Created by M7TJF
 
 ## Links
