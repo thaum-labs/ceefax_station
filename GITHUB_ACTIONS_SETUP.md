@@ -37,17 +37,13 @@ Click "New repository secret" and add these three secrets:
 
 ## Private Key for DO_SSH_KEY Secret:
 
-```
------BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-QyNTUxOQAAACC0Os4Axyu7vuSmQamydn1XiuaIelUzvDVRDzxL+wJ6zAAAAJhygvqKcoL6
-igAAAAtzc2gtZWQyNTUxOQAAACC0Os4Axyu7vuSmQamydn1XiuaIelUzvDVRDzxL+wJ6zA
-AAAEDUBYnjWpDfxaXRNwjGboA8SlDm4/owUijCRUHsYtqAObQ6zgDHK7u+5KZBqbJ2fVeK
-5oh6VTO8NVEPPEv7AnrMAAAAFWdpdGh1Yi1hY3Rpb25zLWRlcGxveQ==
------END OPENSSH PRIVATE KEY-----
+**On your local machine, run this command to get the private key:**
+
+```powershell
+Get-Content $env:USERPROFILE\.ssh\github_actions_deploy
 ```
 
-**Important:** Copy the ENTIRE block above (including the BEGIN and END lines) and paste it as the value for `DO_SSH_KEY`.
+**Important:** Copy the ENTIRE output (including the `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----` lines) and paste it as the value for `DO_SSH_KEY` in GitHub.
 
 ## Step 3: Test the Deployment
 
