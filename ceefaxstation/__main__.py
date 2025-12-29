@@ -160,9 +160,21 @@ def main(argv: list[str] | None = None) -> int:
             "  ceefaxstation rx latest --listener M7TJF\n"
             "  ceefaxstation rx live --device USB --listener M7TJF\n"
             "  ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 2\n"
+            "  ceefaxstation shell\n"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    # ---- shell ----
+    p_shell = sub.add_parser(
+        "shell",
+        help="Print the repo root path (useful for scripts / shortcuts).",
+    )
+    p_shell.add_argument(
+        "--spawn",
+        action="store_true",
+        help="Spawn a new interactive shell in the repo root (best effort).",
+    )
 
     # ---- debug ----
     p_debug = sub.add_parser("debug", help="Refresh feeds/pages and open the viewer (no signal processing).")
@@ -281,6 +293,17 @@ def main(argv: list[str] | None = None) -> int:
     p_tx_now.add_argument("--play-player", default=None)
 
     args = parser.parse_args(argv)
+
+    if args.cmd == "shell":
+        root = str(_repo_root())
+        print(root)
+        if getattr(args, "spawn", False):
+            # Best-effort: spawn a child shell rooted at the repo.
+            if sys.platform.startswith("win"):
+                return subprocess.call(["powershell", "-NoExit", "-Command", f"Set-Location '{root}'"])
+            # Unix-ish:
+            return subprocess.call(["bash", "-lc", f"cd '{root}' && exec \"$SHELL\" -i"])
+        return 0
 
     if args.cmd == "debug":
         if args.refresh:
