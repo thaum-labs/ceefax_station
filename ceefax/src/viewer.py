@@ -1181,16 +1181,55 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     src = callsign or cfg.ax25.callsign or "N0CALL"
     loops_in_wav = cfg.ax25.loops_per_hour or 3
     
-    # Step 1: Refresh pages first
+    # Step 1: Refresh pages first (run in background so ESC is responsive)
     _draw_tx_screen(stdscr, "Refreshing pages...", 0.0, "Refreshing")
     stdscr.refresh()
-    
+
     try:
-        # Refresh pages before generating
-        from ceefax.src.update_all import update_all
-        
-        # Refresh all pages (this updates weather, news, etc.)
-        update_all()
+        from ceefax.src.update_all import prime_user_settings, update_all
+
+        # Prevent update_all() from prompting for input while curses owns the terminal.
+        prime_user_settings(callsign=src, frequency="", auto_location=True)
+
+        refresh_done = threading.Event()
+        refresh_err: dict = {"err": None}
+
+        def _refresh_worker() -> None:
+            try:
+                update_all()
+            except Exception as e:  # noqa: BLE001
+                refresh_err["err"] = e
+            finally:
+                refresh_done.set()
+
+        t_refresh = threading.Thread(target=_refresh_worker, daemon=True)
+        t_refresh.start()
+
+        # Indeterminate progress animation while refresh runs
+        tick = 0
+        while not refresh_done.is_set():
+            ch = stdscr.getch()
+            if ch == 27:  # ESC
+                _draw_tx_screen(
+                    stdscr,
+                    "Refresh cancelled (finishing current tasks in background)...",
+                    0.0,
+                    "Refreshing",
+                    "",
+                    "Returning to viewer. You can retry TX after refresh completes.",
+                )
+                time.sleep(1.0)
+                return
+
+            # animate bar 0..100% repeating
+            progress = (tick % 100) / 100.0
+            _draw_tx_screen(stdscr, "Refreshing pages...", progress, "Refreshing")
+            stdscr.refresh()
+            tick += 3
+            time.sleep(0.1)
+
+        if refresh_err["err"] is not None:
+            raise refresh_err["err"]
         
         # Reload pages after refresh
         new_pages = load_all_pages(cfg.general.page_dir)
