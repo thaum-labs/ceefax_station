@@ -1,0 +1,47 @@
+name: Replace Callsign in Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_callsign:
+        description: 'Old callsign to replace'
+        required: true
+        default: 'SM6OPW'
+      new_callsign:
+        description: 'New anonymous callsign'
+        required: true
+        default: 'TEST1'
+
+jobs:
+  replace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Replace callsign on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            
+            echo "=== Locate repo directory ==="
+            REPO_DIR="/root/ceefax_station"
+            if [ -d "/root/ceefax_station_website/.git" ] && [ ! -d "/root/ceefax_station/.git" ]; then
+              REPO_DIR="/root/ceefax_station_website"
+            fi
+            echo "Using REPO_DIR=${REPO_DIR}"
+            
+            cd "${REPO_DIR}"
+            
+            echo ""
+            echo "=== Update repo to latest ==="
+            git remote set-url origin https://github.com/thaum-labs/ceefax_station.git
+            git fetch origin
+            git reset --hard origin/main
+            
+            echo ""
+            echo "=== Running replace_callsign script ==="
+            cd "${REPO_DIR}"
+            echo "yes" | python3 -m ceefaxweb.scripts.replace_callsign "${{ github.event.inputs.old_callsign }}" "${{ github.event.inputs.new_callsign }}" || true
+
