@@ -89,15 +89,16 @@ def update_frequencies(conn, dry_run: bool = False) -> dict[str, int]:
                 print(f"  '{freq}'")
     print()
     
-    # Update transmissions table
+    # Update transmissions table - also use LIKE for partial matches to catch variations
     for old_freq, new_freq in FREQ_MAPPING.items():
+        # Try exact match first
         if dry_run:
             count = conn.execute(
                 "SELECT COUNT(*) FROM transmissions WHERE freq = ?",
                 (old_freq,)
             ).fetchone()[0]
             if count > 0:
-                print(f"Would update {count} transmissions: {old_freq} -> {new_freq}")
+                print(f"Would update {count} transmissions (exact): {old_freq} -> {new_freq}")
             updated_counts["transmissions"] += count
         else:
             cursor = conn.execute(
@@ -106,18 +107,39 @@ def update_frequencies(conn, dry_run: bool = False) -> dict[str, int]:
             )
             count = cursor.rowcount
             if count > 0:
-                print(f"Updated {count} transmissions: {old_freq} -> {new_freq}")
+                print(f"Updated {count} transmissions (exact): {old_freq} -> {new_freq}")
             updated_counts["transmissions"] += count
+        
+        # Also try LIKE match for 2m to catch any remaining variations
+        if "2m" in old_freq.lower():
+            if dry_run:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM transmissions WHERE freq LIKE ? AND freq != ?",
+                    (f"%2m%{old_freq.split('(')[1] if '(' in old_freq else ''}%", new_freq)
+                ).fetchone()[0]
+                if count > 0:
+                    print(f"Would update {count} transmissions (LIKE pattern): {old_freq} -> {new_freq}")
+            else:
+                # Use a more flexible pattern for 2m
+                cursor = conn.execute(
+                    "UPDATE transmissions SET freq = ? WHERE freq LIKE ? AND freq != ?",
+                    (new_freq, f"%2m%144%", new_freq)
+                )
+                count = cursor.rowcount
+                if count > 0:
+                    print(f"Updated {count} transmissions (LIKE pattern): -> {new_freq}")
+                updated_counts["transmissions"] += count
     
-    # Update receptions table
+    # Update receptions table - also use LIKE for partial matches to catch variations
     for old_freq, new_freq in FREQ_MAPPING.items():
+        # Try exact match first
         if dry_run:
             count = conn.execute(
                 "SELECT COUNT(*) FROM receptions WHERE freq = ?",
                 (old_freq,)
             ).fetchone()[0]
             if count > 0:
-                print(f"Would update {count} receptions: {old_freq} -> {new_freq}")
+                print(f"Would update {count} receptions (exact): {old_freq} -> {new_freq}")
             updated_counts["receptions"] += count
         else:
             cursor = conn.execute(
@@ -126,8 +148,28 @@ def update_frequencies(conn, dry_run: bool = False) -> dict[str, int]:
             )
             count = cursor.rowcount
             if count > 0:
-                print(f"Updated {count} receptions: {old_freq} -> {new_freq}")
+                print(f"Updated {count} receptions (exact): {old_freq} -> {new_freq}")
             updated_counts["receptions"] += count
+        
+        # Also try LIKE match for 2m to catch any remaining variations
+        if "2m" in old_freq.lower():
+            if dry_run:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM receptions WHERE freq LIKE ? AND freq != ?",
+                    (f"%2m%{old_freq.split('(')[1] if '(' in old_freq else ''}%", new_freq)
+                ).fetchone()[0]
+                if count > 0:
+                    print(f"Would update {count} receptions (LIKE pattern): {old_freq} -> {new_freq}")
+            else:
+                # Use a more flexible pattern for 2m
+                cursor = conn.execute(
+                    "UPDATE receptions SET freq = ? WHERE freq LIKE ? AND freq != ?",
+                    (new_freq, f"%2m%144%", new_freq)
+                )
+                count = cursor.rowcount
+                if count > 0:
+                    print(f"Updated {count} receptions (LIKE pattern): -> {new_freq}")
+                updated_counts["receptions"] += count
     
     if not dry_run:
         conn.commit()
