@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .db import connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
+from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
 
 
 def _repo_root() -> Path:
@@ -31,13 +34,53 @@ class Hub:
             self.websockets.discard(ws)
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="Ceefaxstation Tracker")
-    hub = Hub()
+async def periodic_cleanup(conn: sqlite3.Connection) -> None:
+    """Run database cleanup every 24 hours."""
+    while True:
+        try:
+            await asyncio.sleep(24 * 60 * 60)  # 24 hours
+            deleted = cleanup_old_data(conn)
+            if any(deleted.values()):
+                print(f"Periodic database cleanup: deleted {deleted}")
+        except Exception as e:  # noqa: BLE001
+            print(f"Warning: Periodic cleanup error: {e}")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     db_path = Path(os.environ.get("CEEFAXWEB_DB", "")).expanduser() if os.environ.get("CEEFAXWEB_DB") else default_db_path(_repo_root())
     conn = connect(db_path)
     init_db(conn)
+    
+    # Store connection and hub in app state
+    app.state.db_conn = conn
+    app.state.hub = Hub()
+    
+    # Run cleanup on startup (best effort - don't block if it fails)
+    try:
+        deleted = cleanup_old_data(conn)
+        if any(deleted.values()):
+            print(f"Startup database cleanup: deleted {deleted}")
+    except Exception:  # noqa: BLE001
+        pass  # Cleanup is best effort, don't fail startup
+    
+    # Start periodic cleanup task
+    cleanup_task = asyncio.create_task(periodic_cleanup(conn))
+    
+    yield
+    
+    # Shutdown
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    conn.close()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="Ceefaxstation Tracker", lifespan=lifespan)
 
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -47,15 +90,17 @@ def create_app() -> FastAPI:
         return (static_dir / "index.html").read_text(encoding="utf-8")
 
     @app.get("/api/map")
-    def api_map(range: str = "24h") -> JSONResponse:  # noqa: A002
+    def api_map(request: Request, range: str = "24h") -> JSONResponse:  # noqa: A002
+        conn = request.app.state.db_conn
         return JSONResponse(query_map(conn, range_key=range))
 
     @app.get("/api/link")
-    def api_link(tx: str, rx: str, range: str = "24h") -> JSONResponse:  # noqa: A002
+    def api_link(request: Request, tx: str, rx: str, range: str = "24h") -> JSONResponse:  # noqa: A002
+        conn = request.app.state.db_conn
         return JSONResponse(query_link_detail(conn, tx=tx, rx=rx, range_key=range))
 
     @app.post("/api/ingest/log")
-    async def api_ingest(body: dict[str, Any]) -> JSONResponse:
+    async def api_ingest(request: Request, body: dict[str, Any]) -> JSONResponse:
         """
         Ingest a single TX/RX log blob.
 
@@ -67,6 +112,9 @@ def create_app() -> FastAPI:
             "log": {...}                    // required: the log JSON
           }
         """
+        conn = request.app.state.db_conn
+        hub = request.app.state.hub
+        
         # Token is optional - allow public uploads for seamless user experience
         # If a token is set in environment, it's still accepted but not required
         required_token = os.environ.get("CEEFAXWEB_UPLOAD_TOKEN") or ""
@@ -92,6 +140,8 @@ def create_app() -> FastAPI:
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
+        # Access app state through the WebSocket's application
+        hub = app.state.hub
         hub.websockets.add(ws)
         try:
             await ws.send_text(json.dumps({"type": "hello"}))

@@ -493,3 +493,71 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
     }
 
 
+def cleanup_old_data(conn: sqlite3.Connection) -> dict[str, int]:
+    """
+    Clean up old data from the database to prevent unbounded growth.
+    
+    Retention policy:
+    - ingested_logs: 90 days
+    - transmissions: 90 days
+    - receptions: 90 days
+    - stations: Keep if seen within 180 days, otherwise remove
+    
+    Returns dict with counts of deleted records.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Calculate cutoff dates
+    logs_cutoff = (now - timedelta(days=90)).isoformat().replace("+00:00", "Z")
+    tx_rx_cutoff = (now - timedelta(days=90)).isoformat().replace("+00:00", "Z")
+    stations_cutoff = (now - timedelta(days=180)).isoformat().replace("+00:00", "Z")
+    
+    deleted_counts = {}
+    
+    try:
+        # Delete old ingested_logs
+        result = conn.execute(
+            "DELETE FROM ingested_logs WHERE observed_at_utc < ?",
+            (logs_cutoff,)
+        )
+        deleted_counts["ingested_logs"] = result.rowcount
+        
+        # Delete old transmissions
+        result = conn.execute(
+            "DELETE FROM transmissions WHERE generated_at_utc < ?",
+            (tx_rx_cutoff,)
+        )
+        deleted_counts["transmissions"] = result.rowcount
+        
+        # Delete old receptions
+        result = conn.execute(
+            "DELETE FROM receptions WHERE received_at_utc < ?",
+            (tx_rx_cutoff,)
+        )
+        deleted_counts["receptions"] = result.rowcount
+        
+        # Delete stations that haven't been seen in 180+ days
+        result = conn.execute(
+            "DELETE FROM stations WHERE last_seen_utc < ? OR last_seen_utc IS NULL",
+            (stations_cutoff,)
+        )
+        deleted_counts["stations"] = result.rowcount
+        
+        conn.commit()
+        
+    except Exception as e:  # noqa: BLE001
+        # Log error but don't fail - cleanup is best effort
+        print(f"Warning: Database cleanup encountered an error: {e}")
+        conn.rollback()
+        return deleted_counts
+    
+    # Vacuum database to reclaim space (run after successful commit)
+    try:
+        conn.execute("VACUUM")
+    except Exception as e:  # noqa: BLE001
+        # VACUUM failure is non-critical, just log it
+        print(f"Warning: Database VACUUM failed: {e}")
+    
+    return deleted_counts
+
+
