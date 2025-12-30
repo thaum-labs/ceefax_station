@@ -694,13 +694,13 @@ def get_user_location() -> Optional[Tuple[str, str]]:
                 else:
                     print(f"{_GLYPH_FAIL} Could not detect location automatically.")
                     print("  Using default: London, UK")
-                    _user_location = ("London", "London,GB")
+                    _user_location = ("London", "London,UK")  # Use UK instead of GB
                     return _user_location
             else:
                 print(f"{_GLYPH_FAIL} Please enter Y for Yes or N for No.")
         except (EOFError, KeyboardInterrupt):
             print(f"\n{_GLYPH_FAIL} Input cancelled. Using default: London, UK")
-            _user_location = ("London", "London,GB")
+            _user_location = ("London", "London,UK")  # Use UK instead of GB
             return _user_location
 
 
