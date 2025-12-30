@@ -328,14 +328,10 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
     link_params: list[Any] = [since]
     if freq_pattern:
         # Show link if either reception or transmission frequency matches the selected band
-        # Check r.freq first (most reliable), then t.freq as fallback
-        # Handle NULLs properly - if r.freq is NULL, check t.freq; if both NULL, exclude
-        link_query += """ AND (
-            (r.freq IS NOT NULL AND r.freq LIKE ?) OR 
-            (r.freq IS NULL AND t.freq IS NOT NULL AND t.freq LIKE ?) OR
-            (t.freq IS NOT NULL AND t.freq LIKE ?)
-        )"""
-        link_params.extend([freq_pattern, freq_pattern, freq_pattern])
+        # Use COALESCE to handle NULLs: if r.freq is NULL, use t.freq; if both NULL, use empty string
+        # This ensures the LIKE check works correctly even when one frequency is missing
+        link_query += " AND (COALESCE(r.freq, t.freq, '') LIKE ? OR COALESCE(t.freq, r.freq, '') LIKE ?)"
+        link_params.extend([freq_pattern, freq_pattern])
     link_query += " GROUP BY r.tx_callsign, r.rx_callsign"
     
     links = [
