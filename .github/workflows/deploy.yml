@@ -16,10 +16,44 @@ jobs:
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
+            set -euo pipefail
+
+            echo "=== Host info ==="
+            hostname
+            date -u
+
+            echo ""
+            echo "=== ceefaxweb systemd unit (as running) ==="
+            systemctl show ceefaxweb -p ExecStart -p WorkingDirectory -p FragmentPath
+            echo ""
+            systemctl status ceefaxweb --no-pager || true
+
+            echo ""
+            echo "=== Repo status (/root/ceefax_station) BEFORE update ==="
             cd /root/ceefax_station
+            git remote -v
+            git rev-parse --short HEAD || true
+            git log -1 --oneline || true
+
+            echo ""
+            echo "=== Update repo to origin/main ==="
             git fetch origin
             git reset --hard origin/main
+            git rev-parse --short HEAD
+            git log -1 --oneline
+
+            echo ""
+            echo "=== Restart ceefaxweb ==="
             systemctl restart ceefaxweb
             sleep 2
-            systemctl status ceefaxweb --no-pager
+            systemctl status ceefaxweb --no-pager || true
+
+            echo ""
+            echo "=== Local health checks (localhost) ==="
+            # These should return 200 when the new routes are live.
+            curl -sS -i http://127.0.0.1:8088/api/version || true
+            echo ""
+            curl -sS -i http://127.0.0.1:8088/changelog || true
+            echo ""
+            curl -sS -i http://127.0.0.1:8088/api/changelog || true
 
