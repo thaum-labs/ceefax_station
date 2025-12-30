@@ -123,11 +123,12 @@ def main() -> int:
     
     # Sample data with frequency and dB information
     # Format: (tx_callsign, tx_grid, rx_callsign, rx_grid, tx_freq, rx_freq, rx_db)
+    # Note: M7TJF is exclusively at IO81UF, no other stations use this grid
     samples = [
-        # M7TJF (10m) transmissions
-        ("M7TJF", "IO91WM", "M0XYZ", "IO83PR", freq_10m, freq_10m, -12.5),  # TX1 (10m) -> RX1
-        ("M7TJF", "IO91WM", "G8DEF", "IO92AB", freq_10m, freq_10m, -14.2),  # TX1 (10m) -> RX2
-        ("M7TJF", "IO91WM", "G9GHI", "IO93CD", freq_10m, freq_10m, -15.8),  # TX1 (10m) -> RX3 (also receives from G4ABC)
+        # M7TJF (10m) transmissions - located at IO81UF
+        ("M7TJF", "IO81UF", "M0XYZ", "IO83PR", freq_10m, freq_10m, -12.5),  # TX1 (10m) -> RX1
+        ("M7TJF", "IO81UF", "G8DEF", "IO92AB", freq_10m, freq_10m, -14.2),  # TX1 (10m) -> RX2
+        ("M7TJF", "IO81UF", "G9GHI", "IO93CD", freq_10m, freq_10m, -15.8),  # TX1 (10m) -> RX3 (also receives from G4ABC)
         
         # G4ABC (2m) transmissions
         ("G4ABC", "IO91VW", "G9GHI", "IO93CD", freq_2m, freq_2m, -11.3),   # TX2 (2m) -> RX3 (also receives from M7TJF)
@@ -176,7 +177,7 @@ def main() -> int:
             for payload, source in ((tx, f"sample:{tx_cs}:{rx_cs}:tx"), (rx, f"sample:{tx_cs}:{rx_cs}:rx")):
                 body = {
                     "token": args.token,
-                    "uploader": {"callsign": "SAMPLE", "grid": "IO91WM"},
+                    "uploader": {"callsign": "SAMPLE", "grid": "IO91VW"},  # Use different grid for sample uploader
                     "source_path": source,
                     "log": payload,
                 }
