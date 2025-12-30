@@ -29,14 +29,25 @@ jobs:
             systemctl status ceefaxweb --no-pager || true
 
             echo ""
-            echo "=== Repo status (/root/ceefax_station) BEFORE update ==="
-            cd /root/ceefax_station
+            echo "=== Locate repo directory ==="
+            # Support older server layouts that still use ceefax_station_website.
+            REPO_DIR="/root/ceefax_station"
+            if [ -d "/root/ceefax_station_website/.git" ] && [ ! -d "/root/ceefax_station/.git" ]; then
+              REPO_DIR="/root/ceefax_station_website"
+            fi
+            echo "Using REPO_DIR=${REPO_DIR}"
+
+            echo ""
+            echo "=== Repo status (${REPO_DIR}) BEFORE update ==="
+            cd "${REPO_DIR}"
             git remote -v
             git rev-parse --short HEAD || true
             git log -1 --oneline || true
 
             echo ""
             echo "=== Update repo to origin/main ==="
+            # Ensure origin points to the renamed repo
+            git remote set-url origin https://github.com/thaum-labs/ceefax_station.git
             git fetch origin
             git reset --hard origin/main
             git rev-parse --short HEAD
