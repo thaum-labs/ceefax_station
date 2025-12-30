@@ -1509,7 +1509,9 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             stdscr.refresh()
     
     src = callsign or cfg.ax25.callsign or "N0CALL"
-    loops_in_wav = cfg.ax25.loops_per_hour or 3
+    # Note: We generate WAV with loops=1, then play it 3 times in the transmission loop
+    # This avoids double-looping (WAV already containing 3 loops, then playing 3 times = 9 loops)
+    loops_in_wav = 1  # Generate single loop, we'll play it multiple times
     
     # Step 1: Refresh pages first (run in background so ESC is responsive)
     _draw_tx_screen(stdscr, "Refreshing pages...", 0.0, "Refreshing")
