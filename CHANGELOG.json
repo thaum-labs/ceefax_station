@@ -6,6 +6,9 @@
       "date": "2025-12-30",
       "version": "0.1.0-alpha",
       "changes": [
+        "Added comprehensive about page with Ceefax history and technical details",
+        "Added historical Ceefax photo to about page",
+        "Added Cursor AI credit to about page",
         "Added automatic database cleanup to prevent unbounded growth",
         "Implemented 90-day retention for logs, transmissions, and receptions",
         "Implemented 180-day retention for stations",
