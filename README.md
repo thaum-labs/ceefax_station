@@ -103,15 +103,26 @@ ceefaxstation tx hourly --play
 ```
 
 ### Upload Logs to Web Tracker
-Upload logs to the public tracker website:
+
+Upload your logs to the public tracker website automatically. **No configuration needed!**
+
+Simply run:
 ```bash
-ceefaxstation upload --token YOUR_TOKEN --callsign YOUR_CALLSIGN --grid YOUR_GRID
+ceefaxstation upload
 ```
 
-Or use the provided PowerShell script:
+The uploader will:
+- Automatically use the public tracker at https://ceefaxstation.com
+- Read your callsign and grid from `ceefax/radio_config.json`
+- Watch for new log files and upload them automatically
+- No token or additional configuration required
+
+Or use the provided PowerShell script (reads config automatically):
 ```powershell
 .\start_uploader.ps1
 ```
+
+**Note:** The public tracker at [ceefaxstation.com](https://ceefaxstation.com) is the only supported upload destination. Users should not run their own tracker servers.
 
 ## Project Structure
 
@@ -137,9 +148,9 @@ The web tracker is a public website that visualizes:
 - Page transmission statistics
 - Reception quality (dB, frequency, age)
 
-### Deploying the Web Tracker
+### Web Tracker
 
-See deployment instructions in the repository or visit [ceefaxstation.com](https://ceefaxstation.com) for the live version.
+The public web tracker is hosted at [ceefaxstation.com](https://ceefaxstation.com). Users should upload their logs to this central tracker rather than running their own servers.
 
 ## Configuration
 

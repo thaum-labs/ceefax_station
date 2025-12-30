@@ -1,10 +1,24 @@
 ## Ceefaxstation Tracker (Web)
 
-Public, no-login website + API that visualizes **TX/RX stations** and **links** (lines) between them, driven by the JSON logs in:
-- `ceefax/logs_tx/*.json`
-- `ceefax/logs_rx/*.json`
+**Note:** This is the web tracker code for the central server at [ceefaxstation.com](https://ceefaxstation.com). 
 
-### Run the server locally
+**Users should NOT run their own tracker servers.** Instead, they should upload their logs to the public tracker using:
+
+```bash
+ceefaxstation upload
+```
+
+This will automatically upload to https://ceefaxstation.com with no configuration needed.
+
+---
+
+### For Server Administrators Only
+
+The following information is for administrators of the central tracker server only.
+
+Public, no-login website + API that visualizes **TX/RX stations** and **links** (lines) between them, driven by the JSON logs uploaded from user stations.
+
+### Run the server locally (development/testing)
 
 Install deps:
 
@@ -21,27 +35,17 @@ python -m ceefaxweb
 Open:
 - `http://127.0.0.1:8088/`
 
-### Configure upload auth (optional but recommended)
+### Upload Configuration
 
-Set an upload token on the server:
+Uploads are **public by default** - no token required. This allows seamless uploads from user stations.
+
+If you want to add optional token-based authentication, set:
 
 ```bash
 set CEEFAXWEB_UPLOAD_TOKEN=your-secret-token
 ```
 
-### Upload logs (near real-time)
-
-From any machine running `ceefaxstation`, run:
-
-```bash
-ceefaxstation upload --server http://127.0.0.1:8088 --grid IO91WM --callsign M7TJF
-```
-
-If server enforces token:
-
-```bash
-ceefaxstation upload --server http://127.0.0.1:8088 --token your-secret-token --grid IO91WM --callsign M7TJF
-```
+Note: Even with a token set, uploads without tokens are still accepted (public uploads).
 
 The uploader:
 - Watches `ceefax/logs_tx` and `ceefax/logs_rx`

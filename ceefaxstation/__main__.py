@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
         default="https://ceefaxstation.com",
         help="Server base URL (default: https://ceefaxstation.com). Use http://127.0.0.1:8088 for local testing.",
     )
-    p_upload.add_argument("--token", default=None, help="Upload token (optional; required if server enforces).")
+    p_upload.add_argument("--token", default=None, help="Upload token (optional; public uploads are allowed by default).")
     p_upload.add_argument("--callsign", default=None, help="Uploader callsign (defaults to ceefax/radio_config.json).")
     p_upload.add_argument("--grid", default=None, help="Uploader Maidenhead grid (e.g. IO91wm) (defaults to ceefax/radio_config.json).")
     p_upload.add_argument("--poll", type=float, default=2.0, help="Poll interval seconds (default 2.0).")
