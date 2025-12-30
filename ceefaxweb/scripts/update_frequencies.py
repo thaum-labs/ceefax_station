@@ -23,17 +23,35 @@ from ceefaxweb.db import connect, default_db_path
 
 
 # Mapping from old range format to new specific frequency format
+# Include case variations and spacing differences
 FREQ_MAPPING = {
+    # 2m variations
     "2m (144.0-148.0 MHz)": "144.800 MHz (2m)",
+    "2M (144.0-148.0 MHz)": "144.800 MHz (2m)",
+    "2m(144.0-148.0 MHz)": "144.800 MHz (2m)",
+    "2m (144.0-148.0MHz)": "144.800 MHz (2m)",
+    "2m(144.0-148.0MHz)": "144.800 MHz (2m)",
+    # 10m variations
     "10m (28.0-29.7 MHz)": "28.120 MHz (10m)",
+    "10M (28.0-29.7 MHz)": "28.120 MHz (10m)",
+    "10m(28.0-29.7 MHz)": "28.120 MHz (10m)",
+    # 6m
     "6m (50.0-54.0 MHz)": "50.200 MHz (6m)",
+    # 70cm
     "70cm (430.0-440.0 MHz)": "433.500 MHz (70cm)",
+    # 20m
     "20m (14.0-14.35 MHz)": "14.105 MHz (20m)",
+    # 40m
     "40m (7.0-7.2 MHz)": "7.040 MHz (40m)",
+    # 30m
     "30m (10.1-10.15 MHz)": "10.147 MHz (30m)",
+    # 17m
     "17m (18.068-18.168 MHz)": "18.105 MHz (17m)",
+    # 15m
     "15m (21.0-21.45 MHz)": "21.105 MHz (15m)",
+    # 12m
     "12m (24.89-24.99 MHz)": "24.930 MHz (12m)",
+    # 80m
     "80m (3.5-3.8 MHz)": "3.580 MHz (80m)",
 }
 
@@ -53,6 +71,23 @@ def update_frequencies(conn, dry_run: bool = False) -> dict[str, int]:
         "transmissions": 0,
         "receptions": 0,
     }
+    
+    # First, show what 2m frequencies actually exist in the database
+    print("Checking for 2m frequency patterns in database...")
+    tx_2m = conn.execute(
+        "SELECT DISTINCT freq FROM transmissions WHERE freq LIKE '%2m%' OR freq LIKE '%144%' ORDER BY freq"
+    ).fetchall()
+    rx_2m = conn.execute(
+        "SELECT DISTINCT freq FROM receptions WHERE freq LIKE '%2m%' OR freq LIKE '%144%' ORDER BY freq"
+    ).fetchall()
+    
+    if tx_2m or rx_2m:
+        print("Found 2m-related frequencies:")
+        for row in set(tx_2m + rx_2m):
+            freq = row[0] if isinstance(row, tuple) else row["freq"]
+            if freq:
+                print(f"  '{freq}'")
+    print()
     
     # Update transmissions table
     for old_freq, new_freq in FREQ_MAPPING.items():
