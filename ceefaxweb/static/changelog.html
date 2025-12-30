@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Changelog - Ceefaxstation</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { 
+        height: 100%; 
+        margin: 0; 
+        padding: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        background: #0b0b0b;
+        color: #f3f3f3;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .header {
+        margin-bottom: 32px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #2a2a2a;
+      }
+      .logo {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        white-space: pre;
+        line-height: 1.05;
+        color: #ffd34d;
+        margin: 0 0 16px 0;
+        padding: 12px 16px;
+        border: 1px solid #2a2a2a;
+        border-radius: 6px;
+        background: #0f0f0f;
+        width: fit-content;
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+        color: #ffd34d;
+      }
+      .version-info {
+        color: #888;
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
+      .back-link {
+        display: inline-block;
+        margin-top: 16px;
+        color: #ffd34d;
+        text-decoration: none;
+        font-size: 14px;
+      }
+      .back-link:hover {
+        text-decoration: underline;
+      }
+      .changelog-entry {
+        margin-bottom: 32px;
+        padding: 20px;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        background: #111;
+      }
+      .entry-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .entry-date {
+        font-size: 18px;
+        font-weight: 600;
+        color: #f3f3f3;
+      }
+      .entry-version {
+        font-size: 13px;
+        color: #888;
+        padding: 4px 10px;
+        background: #1a1a1a;
+        border-radius: 4px;
+        border: 1px solid #2a2a2a;
+      }
+      .entry-changes {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .entry-changes li {
+        padding: 8px 0;
+        padding-left: 24px;
+        position: relative;
+        line-height: 1.6;
+      }
+      .entry-changes li:before {
+        content: "•";
+        position: absolute;
+        left: 8px;
+        color: #ffd34d;
+        font-weight: bold;
+      }
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #888;
+      }
+      .error {
+        text-align: center;
+        padding: 40px;
+        color: #ff6b6b;
+      }
+      .footer {
+        margin-top: 48px;
+        padding-top: 24px;
+        border-top: 1px solid #2a2a2a;
+        text-align: center;
+        color: #888;
+        font-size: 13px;
+      }
+      .footer a {
+        color: #ffd34d;
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <pre class="logo">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
+  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
+  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
+░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
+░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
+░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
+        <pre class="logo" style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.2;">░█▀▀░█░█░█▀█░█▀█░█▀▀░█▀▀░█░░░█▀█░█▀▀
+░█░░░█▀█░█▀█░█░█░█░█░█▀▀░█░░░█░█░█░█
+░▀▀▀░▀░▀░▀░▀░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀</pre>
+        <div class="version-info">
+          Current version: <span id="currentVersion">Loading...</span>
+        </div>
+        <a href="/" class="back-link">← Back to Tracker</a>
+      </div>
+
+      <div id="changelogContent">
+        <div class="loading">Loading changelog...</div>
+      </div>
+
+      <div class="footer">
+        <div>Created by <strong>M7TJF</strong> · Ceefax Station © <span id="year"></span></div>
+        <div style="margin-top: 8px;">
+          <a href="https://github.com/thaum-labs/ceefax_station" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      async function loadChangelog() {
+        const contentEl = document.getElementById('changelogContent');
+        const versionEl = document.getElementById('currentVersion');
+
+        try {
+          // Load version
+          const versionRes = await fetch('/api/version');
+          const versionData = await versionRes.json();
+          if (versionData.version && versionData.version !== 'unknown') {
+            const version = versionData.version;
+            const stage = version.includes('-alpha') ? 'alpha' : 
+                         version.includes('-beta') ? 'beta' : 'release';
+            versionEl.textContent = `v${version}`;
+            if (stage !== 'release') {
+              versionEl.textContent += ` (${stage})`;
+            }
+          }
+
+          // Load changelog
+          const res = await fetch('/api/changelog');
+          const data = await res.json();
+
+          if (data.entries && data.entries.length > 0) {
+            let html = '';
+            // Sort entries by date (newest first)
+            const sortedEntries = [...data.entries].sort((a, b) => 
+              new Date(b.date) - new Date(a.date)
+            );
+
+            for (const entry of sortedEntries) {
+              const date = new Date(entry.date).toLocaleDateString('en-GB', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              });
+
+              html += '<div class="changelog-entry">';
+              html += '<div class="entry-header">';
+              html += `<div class="entry-date">${date}</div>`;
+              if (entry.version) {
+                html += `<div class="entry-version">v${entry.version}</div>`;
+              }
+              html += '</div>';
+
+              if (entry.changes && entry.changes.length > 0) {
+                html += '<ul class="entry-changes">';
+                for (const change of entry.changes) {
+                  html += `<li>${change}</li>`;
+                }
+                html += '</ul>';
+              }
+              html += '</div>';
+            }
+            contentEl.innerHTML = html;
+          } else {
+            contentEl.innerHTML = '<div class="loading">No changelog entries yet.</div>';
+          }
+        } catch (err) {
+          console.error('Failed to load changelog:', err);
+          contentEl.innerHTML = '<div class="error">Failed to load changelog. Please try again later.</div>';
+        }
+      }
+
+      // Footer year
+      document.getElementById('year').textContent = String(new Date().getFullYear());
+
+      // Load changelog on page load
+      loadChangelog();
+    </script>
+  </body>
+</html>
+

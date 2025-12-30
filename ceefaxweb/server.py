@@ -89,6 +89,10 @@ def create_app() -> FastAPI:
     def index() -> str:
         return (static_dir / "index.html").read_text(encoding="utf-8")
 
+    @app.get("/changelog", response_class=HTMLResponse)
+    def changelog() -> str:
+        return (static_dir / "changelog.html").read_text(encoding="utf-8")
+
     @app.get("/api/map")
     def api_map(request: Request, range: str = "24h") -> JSONResponse:  # noqa: A002
         conn = request.app.state.db_conn
@@ -98,6 +102,30 @@ def create_app() -> FastAPI:
     def api_link(request: Request, tx: str, rx: str, range: str = "24h") -> JSONResponse:  # noqa: A002
         conn = request.app.state.db_conn
         return JSONResponse(query_link_detail(conn, tx=tx, rx=rx, range_key=range))
+
+    @app.get("/api/changelog")
+    def api_changelog() -> JSONResponse:
+        """Return changelog data."""
+        changelog_path = _repo_root() / "CHANGELOG.json"
+        if changelog_path.exists():
+            try:
+                changelog_data = json.loads(changelog_path.read_text(encoding="utf-8"))
+                return JSONResponse(changelog_data)
+            except Exception:  # noqa: BLE001
+                pass
+        return JSONResponse({"current_version": "unknown", "stage": "alpha", "entries": []})
+
+    @app.get("/api/version")
+    def api_version() -> JSONResponse:
+        """Return current version."""
+        version_path = _repo_root() / "VERSION"
+        if version_path.exists():
+            try:
+                version = version_path.read_text(encoding="utf-8").strip()
+                return JSONResponse({"version": version})
+            except Exception:  # noqa: BLE001
+                pass
+        return JSONResponse({"version": "unknown"})
 
     @app.post("/api/ingest/log")
     async def api_ingest(request: Request, body: dict[str, Any]) -> JSONResponse:

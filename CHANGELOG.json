@@ -1,0 +1,21 @@
+{
+  "current_version": "0.1.0-alpha",
+  "stage": "alpha",
+  "entries": [
+    {
+      "date": "2025-12-30",
+      "version": "0.1.0-alpha",
+      "changes": [
+        "Added automatic database cleanup to prevent unbounded growth",
+        "Implemented 90-day retention for logs, transmissions, and receptions",
+        "Implemented 180-day retention for stations",
+        "Added periodic cleanup task running every 24 hours",
+        "Added database vacuuming to reclaim space after cleanup",
+        "Added changelog and versioning system",
+        "Created changelog display on website",
+        "Added API endpoints for version and changelog",
+        "Created helper script for adding changelog entries"
+      ]
+    }
+  ]
+}

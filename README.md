@@ -170,6 +170,28 @@ Pages are defined in `ceefax/pages/*.json`. Each page includes:
 
 ## Development
 
+### Versioning
+The project uses semantic versioning with alpha/beta/release stages:
+- **Alpha**: `0.x.x-alpha` (current stage)
+- **Beta**: `0.x.x-beta` (future)
+- **Release**: `x.x.x` (future, no suffix)
+
+Version is stored in `VERSION` file and changelog in `CHANGELOG.json`.
+
+### Adding Changelog Entries
+Use the helper script to add changelog entries:
+```bash
+python scripts/add_changelog_entry.py "Change description 1" "Change description 2"
+```
+
+Options:
+- `--patch` (default): Increment patch version (0.1.0 → 0.1.1)
+- `--minor`: Increment minor version (0.1.0 → 0.2.0)
+- `--major`: Increment major version (0.1.0 → 1.0.0)
+- `--no-bump`: Add to today's entry without version bump
+
+Changes made on the same day are automatically grouped together.
+
 ### Updating Pages
 Pages can be updated manually or via API update scripts in `ceefax/src/update_*.py`.
 
