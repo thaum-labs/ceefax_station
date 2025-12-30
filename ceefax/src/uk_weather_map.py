@@ -49,10 +49,24 @@ def build_uk_weather_map() -> List[str]:
     title = "UK WEATHER FOR TONIGHT"
     _put_text(buf, 0, 0, title.center(PAGE_WIDTH))
 
-    # Fetch summaries for each region
+    # Fetch summaries for each region with error handling
     summaries: Dict[str, WeatherSummary] = {}
     for name, (query, _row, _col) in REGIONS.items():
-        summaries[name] = fetch_wttr(query)
+        try:
+            summaries[name] = fetch_wttr(query)
+        except Exception as e:
+            # Create a fallback summary if fetch fails
+            from .weather_map import WeatherSummary
+            print(f"Warning: Failed to fetch weather for {name} ({query}): {e}")
+            summaries[name] = WeatherSummary(
+                location=name,
+                temp_c="?",
+                feels_like_c="?",
+                description="Data unavailable",
+                wind_kph="?",
+                wind_dir="?",
+                icon="☁",
+            )
 
     # ASCII-art UK outline used as background (from asciiart.website),
     # centred horizontally to fit PAGE_WIDTH.

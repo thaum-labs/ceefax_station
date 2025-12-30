@@ -45,20 +45,55 @@ def _pick_icon(desc: str) -> str:
     return "☁"  # default cloud
 
 
-def fetch_wttr(location: str) -> WeatherSummary:
+def fetch_wttr(location: str, max_retries: int = 3) -> WeatherSummary:
     """
     Fetch current weather and forecast for a location from wttr.in and normalise it.
 
     This uses the same JSON endpoint as the ceefax-weather Rust project:
     https://wttr.in/{location}?format=j1
+    
+    Args:
+        location: Location query string (e.g., "London,UK" or "New York,US")
+        max_retries: Maximum number of retry attempts (default: 3)
+    
+    Raises:
+        Exception: If all retry attempts fail
     """
+    # Normalize location format - wttr.in prefers "UK" over "GB"
+    if location.endswith(",GB"):
+        location = location[:-3] + ",UK"
+    
     # URL-encode the location to handle spaces, commas, and special characters
     from urllib.parse import quote
     encoded_location = quote(location)
     url = WTTR_URL.format(location=encoded_location)
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    data = resp.json()
+    
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(
+                url, 
+                timeout=10,
+                headers={"User-Agent": "CeefaxStation/1.0"},
+                allow_redirects=True
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            # Validate response has expected structure
+            if "current_condition" not in data or not data["current_condition"]:
+                raise ValueError("Invalid response from wttr.in: missing current_condition")
+            
+            break  # Success, exit retry loop
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                # Wait before retry (exponential backoff)
+                import time
+                time.sleep(0.5 * (attempt + 1))
+            else:
+                # Last attempt failed
+                raise Exception(f"Failed to fetch weather for '{location}' after {max_retries} attempts: {e}") from e
 
     current = data["current_condition"][0]
     desc = current["weatherDesc"][0]["value"]

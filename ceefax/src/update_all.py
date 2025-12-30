@@ -183,7 +183,7 @@ def auto_detect_location_silent() -> Tuple[str, str]:
             else:
                 _lat, _lon, city = location
             city_name = city.split(",")[0] if "," in city else city
-            # Default to GB for simplicity; wttr.in accepts "City,GB"
+            # Default to UK for better wttr.in compatibility
             
             # Save detected grid to config if available (only if not already set)
             if detected_grid:
@@ -202,10 +202,10 @@ def auto_detect_location_silent() -> Tuple[str, str]:
                     # Don't fail if grid saving fails, but log for debugging
                     print(f"Note: Could not save grid to config: {e}")
             
-            return (city_name, f"{city_name},GB")
+            return (city_name, f"{city_name},UK")  # Use UK instead of GB for better wttr.in compatibility
     except Exception:  # noqa: BLE001
         pass
-    return ("London", "London,GB")
+    return ("London", "London,UK")  # Use UK instead of GB for better wttr.in compatibility
 
 
 def prime_user_settings(
@@ -428,8 +428,9 @@ def get_user_callsign_and_frequency() -> Tuple[Optional[str], Optional[str]]:
 
 # ISO 3166-1 alpha-3 to alpha-2 country code mapping
 # (alpha-3 is what we store, alpha-2 is what wttr.in uses)
+# Note: wttr.in prefers "UK" over "GB" for better compatibility
 ALPHA3_TO_ALPHA2 = {
-    "GBR": "GB",
+    "GBR": "UK",  # Use UK instead of GB for better wttr.in compatibility
     "USA": "US",
     "CAN": "CA",
     "AUS": "AU",
@@ -668,9 +669,9 @@ def get_user_location() -> Optional[Tuple[str, str]]:
                     city_name = city.split(",")[0] if "," in city else city
                     # Try to detect country from the location data
                     country_part = city.split(",")[1] if "," in city else ""
-                    # Default to GB if country not detected or UK detected
+                    # Default to UK if country not detected or UK detected
                     if not country_part or "UK" in country_part.upper() or "United Kingdom" in country_part:
-                        query = f"{city_name},GB"  # Use alpha-2 for weather API
+                        query = f"{city_name},UK"  # Use UK for better wttr.in compatibility
                     else:
                         # Try to find matching country code
                         country_upper = country_part.upper().strip()

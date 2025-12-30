@@ -315,6 +315,11 @@ def build_single_location_weather_page(name: str, query: str) -> List[str]:
     lines: List[str] = []
     
     try:
+        # Normalize query - ensure UK instead of GB
+        if query.endswith(",GB"):
+            query = query[:-3] + ",UK"
+        
+        print(f"Fetching weather for {name} using query: {query}")
         summary: WeatherSummary = fetch_wttr(query)
         icon_lines = _ascii_icon(summary.description)
 
@@ -382,7 +387,12 @@ def build_local_weather_page(cities: List[Tuple[str, str]]) -> List[str]:
 
     for name, query in cities:
         try:
-            summary: WeatherSummary = fetch_wttr(query)
+            # Normalize query - ensure UK instead of GB
+            normalized_query = query
+            if query.endswith(",GB"):
+                normalized_query = query[:-3] + ",UK"
+            
+            summary: WeatherSummary = fetch_wttr(normalized_query)
             icon_lines = _ascii_icon(summary.description)
 
             lines.append(_pad(""))
@@ -482,11 +492,15 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
                 lat, lon, base_city = location
                 grid = None
             # Extract city name and create query
-            city_name = base_city.split(",")[0] if "," in base_city else base_city
+            # Clean up city name - remove extra spaces and normalize
+            city_name = base_city.split(",")[0].strip() if "," in base_city else base_city.strip()
             # Try to determine country code from location
-            country_part = base_city.split(",")[1] if "," in base_city else ""
-            if not country_part or "UK" in country_part.upper() or "United Kingdom" in country_part:
-                query = f"{city_name},GB"
+            # wttr.in prefers "UK" over "GB" and works better with it
+            country_part = base_city.split(",")[1].strip() if "," in base_city and len(base_city.split(",")) > 1 else ""
+            
+            # Normalize country codes - wttr.in prefers certain formats
+            if not country_part or "UK" in country_part.upper() or "United Kingdom" in country_part or "GB" in country_part.upper() or "Great Britain" in country_part:
+                query = f"{city_name},UK"  # Use UK instead of GB for better wttr.in compatibility
             else:
                 # Try to find matching country code
                 country_upper = country_part.upper().strip()
@@ -494,13 +508,26 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
                     query = f"{city_name},US"
                 elif "CA" in country_upper or "CAN" in country_upper or "Canada" in country_part:
                     query = f"{city_name},CA"
+                elif "AU" in country_upper or "AUS" in country_upper or "Australia" in country_part:
+                    query = f"{city_name},AU"
+                elif "NZ" in country_upper or "New Zealand" in country_part:
+                    query = f"{city_name},NZ"
+                elif "IE" in country_upper or "Ireland" in country_part:
+                    query = f"{city_name},IE"
+                elif "FR" in country_upper or "France" in country_part:
+                    query = f"{city_name},FR"
+                elif "DE" in country_upper or "Germany" in country_part:
+                    query = f"{city_name},DE"
                 else:
-                    query = f"{city_name},{country_part}" if country_part else f"{city_name},GB"
+                    # Try using the country part as-is, or default to UK
+                    query = f"{city_name},{country_part}" if country_part else f"{city_name},UK"
+            
             name = city_name
+            print(f"Using weather query: {query} for location: {name}")
         else:
             print("Could not detect location (tried IP geolocation and timezone), using default: London, UK")
             name = "London"
-            query = "London,GB"
+            query = "London,UK"  # Use UK instead of GB for better wttr.in compatibility
 
     # Save detected grid to config if available (only if not already set)
     detected_grid = None
