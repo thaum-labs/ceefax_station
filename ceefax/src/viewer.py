@@ -1616,6 +1616,189 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         stdscr.refresh()
         time.sleep(0.5)
         
+        # Step 1.5: Pre-transmission confirmation with VOX and frequency info
+        # Get frequency from config
+        frequency_info = ""
+        data_frequency = ""
+        if config_file.exists():
+            try:
+                config_data = json.loads(config_file.read_text(encoding="utf-8"))
+                freq_str = config_data.get("frequency", "")
+                if freq_str:
+                    frequency_info = freq_str
+                    # Extract band and suggest typical data frequency
+                    # Format is usually "2m (144.0-148.0 MHz)" or "144.500 MHz"
+                    import re
+                    # Try to extract band name (2m, 70cm, etc.)
+                    band_match = re.search(r'(\d+[mc]m?|6m|10m|12m|15m|17m|20m|30m|40m|80m)', freq_str, re.I)
+                    if band_match:
+                        band = band_match.group(1).lower()
+                        # Map bands to typical packet/data frequencies (UK amateur radio)
+                        data_freq_map = {
+                            "80m": "3.580 MHz",
+                            "40m": "7.040 MHz",
+                            "30m": "10.147 MHz",
+                            "20m": "14.105 MHz",
+                            "17m": "18.105 MHz",
+                            "15m": "21.105 MHz",
+                            "12m": "24.930 MHz",
+                            "10m": "28.120 MHz",
+                            "6m": "50.200 MHz",
+                            "2m": "145.500 MHz",
+                            "70cm": "433.500 MHz",
+                        }
+                        data_frequency = data_freq_map.get(band, "")
+                    else:
+                        # Try to extract MHz value for custom frequencies
+                        mhz_match = re.search(r'(\d+\.?\d*)\s*MHz', freq_str, re.I)
+                        if mhz_match:
+                            data_frequency = f"{mhz_match.group(1)} MHz"
+            except Exception:  # noqa: BLE001
+                pass
+        
+        # Show pre-transmission confirmation screen
+        stdscr.nodelay(False)  # Blocking for Enter key
+        confirmation_shown = False
+        while not confirmation_shown:
+            stdscr.clear()
+            max_y, max_x = stdscr.getmaxyx()
+            
+            # Center the frame
+            offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
+            offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
+            
+            # Header
+            now = datetime.now()
+            clock = now.strftime("%H:%M %d %b").upper()
+            header_text = f"CEEFAX TX  TRANSMIT MODE".ljust(PAGE_WIDTH)
+            
+            if curses.has_colors():
+                curses.start_color()
+                curses.use_default_colors()
+                curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+                curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+                header_attr = curses.color_pair(1) | curses.A_BOLD
+                body_attr = curses.color_pair(2)
+            else:
+                header_attr = curses.A_BOLD
+                body_attr = curses.A_NORMAL
+            
+            stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
+            clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
+            stdscr.addstr(offset_y, clock_x, clock, header_attr)
+            
+            if callsign:
+                callsign_x = clock_x - len(callsign) - 2
+                if callsign_x >= offset_x:
+                    stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
+            
+            # Border
+            border_top = offset_y + 1
+            border_bottom = offset_y + PAGE_HEIGHT - 1
+            inner_x = offset_x + 1
+            inner_width = max(PAGE_WIDTH - 2, 1)
+            border_attr = body_attr | curses.A_BOLD
+            top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
+            stdscr.addstr(border_top, offset_x, top_line, border_attr)
+            stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
+            for row in range(border_top + 1, border_bottom):
+                stdscr.addstr(row, offset_x, "|", border_attr)
+                stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
+            
+            # Content - VOX instructions and frequency info
+            row = border_top + 1
+            row += 1
+            
+            # TX logo
+            tx_logo = [
+                "░▀█▀░█░█",
+                "░░█░░▄▀▄",
+                "░░▀░░▀░▀",
+            ]
+            for logo_line in tx_logo:
+                if row >= border_bottom - 10:
+                    break
+                logo_centered = logo_line.center(inner_width)
+                stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
+                row += 1
+            row += 2
+            
+            # VOX instructions
+            vox_lines = [
+                "RADIO CONFIGURATION REQUIRED",
+                "",
+                "Ensure your radio is configured:",
+                "",
+                "1. VOX (Voice Operated Transmit) enabled",
+                "2. Set to frequency band:",
+            ]
+            for line in vox_lines:
+                if row >= border_bottom - 5:
+                    break
+                line_centered = line.center(inner_width)
+                stdscr.addstr(row, inner_x, line_centered[:inner_width], body_attr | curses.A_BOLD)
+                row += 1
+            
+            # Show frequency band
+            if frequency_info:
+                freq_display = frequency_info.center(inner_width)
+                stdscr.addstr(row, inner_x, freq_display[:inner_width], body_attr | curses.A_BOLD)
+                row += 1
+            else:
+                no_freq = "Frequency not configured".center(inner_width)
+                stdscr.addstr(row, inner_x, no_freq[:inner_width], body_attr | curses.A_BOLD)
+                row += 1
+            
+            row += 1
+            
+            # Show recommended data frequency
+            if data_frequency:
+                data_freq_line = f"3. Recommended data frequency: {data_frequency}".center(inner_width)
+                stdscr.addstr(row, inner_x, data_freq_line[:inner_width], body_attr | curses.A_BOLD)
+                row += 1
+            
+            row += 1
+            confirm_line = "Press ENTER to start transmission".center(inner_width)
+            stdscr.addstr(border_bottom - 2, inner_x, confirm_line[:inner_width], body_attr | curses.A_BOLD)
+            
+            # Controls and status
+            controls_y = max_y - 2
+            if controls_y > offset_y + PAGE_HEIGHT:
+                if curses.has_colors():
+                    labels = [
+                        (" r: RX ", curses.color_pair(3) | curses.A_BOLD),
+                        (" t: TX ", curses.color_pair(4) | curses.A_BOLD),
+                        (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD),
+                        (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),
+                    ]
+                    total_len = sum(len(text) for text, _ in labels)
+                    x = max((max_x - 1 - total_len) // 2, 0)
+                    for text, attr in labels:
+                        if x >= max_x - 1:
+                            break
+                        stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
+                        x += len(text)
+            
+            status_line_text = "TRANSMIT MODE  Press ENTER to continue, ESC to cancel"
+            status_line = status_line_text[: max_x - 1]
+            pad_width = max_x - 1
+            start_x = max((pad_width - len(status_line)) // 2, 0)
+            stdscr.attron(curses.A_REVERSE)
+            stdscr.addstr(max_y - 1, 0, " " * pad_width)
+            stdscr.addstr(max_y - 1, start_x, status_line)
+            stdscr.attroff(curses.A_REVERSE)
+            
+            stdscr.refresh()
+            
+            # Wait for Enter or ESC
+            ch = stdscr.getch()
+            if ch == 10 or ch == 13:  # Enter key
+                confirmation_shown = True
+            elif ch == 27:  # ESC
+                return  # Exit TX mode
+        
+        stdscr.nodelay(True)  # Back to non-blocking for transmission
+        
         # Step 2: Transmit 3 times
         for tx_num in range(1, 4):
             status = f"Transmitting (loop {tx_num}/3)..."
