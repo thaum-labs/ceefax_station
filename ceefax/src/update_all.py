@@ -288,25 +288,32 @@ def update_with_retry(
     return (False, last_error or "Unknown error", duration_s)
 
 
-# Valid amateur radio bands for data transmission (UK)
+# Recommended specific frequencies per band (display + config persistence).
+# We keep the *band name* inside the persisted string so the website band filter
+# (LIKE %2m%) continues to work even when the frequency is a concrete MHz value.
+#
+# Format: "<MHz> (<band>)"
+AMATEUR_BAND_RECOMMENDED_FREQ = {
+    # HF
+    "80m": "3.580 MHz (80m)",
+    "40m": "7.040 MHz (40m)",
+    "30m": "10.147 MHz (30m)",
+    "20m": "14.105 MHz (20m)",
+    "17m": "18.105 MHz (17m)",
+    "15m": "21.105 MHz (15m)",
+    "12m": "24.930 MHz (12m)",
+    "10m": "28.120 MHz (10m)",
+    # VHF/UHF
+    "6m": "50.200 MHz (6m)",
+    "2m": "144.800 MHz (2m)",
+    "70cm": "433.500 MHz (70cm)",
+}
+
+# Keep a grouped view for the CLI picker order.
 AMATEUR_BANDS = {
-    "HF": {
-        "80m": "3.5-3.8 MHz",
-        "40m": "7.0-7.2 MHz",
-        "30m": "10.1-10.15 MHz",
-        "20m": "14.0-14.35 MHz",
-        "17m": "18.068-18.168 MHz",
-        "15m": "21.0-21.45 MHz",
-        "12m": "24.89-24.99 MHz",
-        "10m": "28.0-29.7 MHz",
-    },
-    "VHF": {
-        "6m": "50.0-54.0 MHz",
-        "2m": "144.0-148.0 MHz",
-    },
-    "UHF": {
-        "70cm": "430.0-440.0 MHz",
-    }
+    "HF": ["80m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"],
+    "VHF": ["6m", "2m"],
+    "UHF": ["70cm"],
 }
 
 
@@ -359,23 +366,26 @@ def get_user_callsign_and_frequency() -> Tuple[Optional[str], Optional[str]]:
     option_num = 1
     
     print("HF Bands:")
-    for band_name, freq_range in AMATEUR_BANDS["HF"].items():
-        print(f"  {option_num}. {band_name:4s} - {freq_range}")
-        band_options.append(("HF", band_name, freq_range))
+    for band_name in AMATEUR_BANDS["HF"]:
+        freq_label = AMATEUR_BAND_RECOMMENDED_FREQ.get(band_name, band_name)
+        print(f"  {option_num}. {band_name:4s} - {freq_label}")
+        band_options.append(("HF", band_name, freq_label))
         option_num += 1
     
     print()
     print("VHF Bands:")
-    for band_name, freq_range in AMATEUR_BANDS["VHF"].items():
-        print(f"  {option_num}. {band_name:4s} - {freq_range}")
-        band_options.append(("VHF", band_name, freq_range))
+    for band_name in AMATEUR_BANDS["VHF"]:
+        freq_label = AMATEUR_BAND_RECOMMENDED_FREQ.get(band_name, band_name)
+        print(f"  {option_num}. {band_name:4s} - {freq_label}")
+        band_options.append(("VHF", band_name, freq_label))
         option_num += 1
     
     print()
     print("UHF Bands:")
-    for band_name, freq_range in AMATEUR_BANDS["UHF"].items():
-        print(f"  {option_num}. {band_name:4s} - {freq_range}")
-        band_options.append(("UHF", band_name, freq_range))
+    for band_name in AMATEUR_BANDS["UHF"]:
+        freq_label = AMATEUR_BAND_RECOMMENDED_FREQ.get(band_name, band_name)
+        print(f"  {option_num}. {band_name:4s} - {freq_label}")
+        band_options.append(("UHF", band_name, freq_label))
         option_num += 1
     
     print()
@@ -387,8 +397,9 @@ def get_user_callsign_and_frequency() -> Tuple[Optional[str], Optional[str]]:
             if choice.isdigit():
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(band_options):
-                    band_type, band_name, freq_range = band_options[choice_num - 1]
-                    _user_frequency = f"{band_name} ({freq_range})"
+                    band_type, band_name, freq_label = band_options[choice_num - 1]
+                    # Persist the concrete frequency string.
+                    _user_frequency = str(freq_label)
                     print(f"{_GLYPH_OK} Frequency: {_user_frequency}")
                     break
                 elif choice_num == option_num:

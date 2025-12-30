@@ -117,9 +117,12 @@ def main() -> int:
     # RX stations: M0XYZ, G8DEF, G9GHI, M1JKL
     # Some stations receive from both transmitters
     
-    # Frequency definitions
-    freq_10m = "10m (28.0-29.7 MHz)"
-    freq_2m = "2m (144.0-148.0 MHz)"
+    # Frequency definitions (use specific frequencies, not band ranges)
+    # Format: "<MHz> (<band>)" so:
+    # - Website band filtering (LIKE %2m%) continues to work
+    # - UI displays a concrete tuned frequency
+    freq_10m = "28.120 MHz (10m)"
+    freq_2m = "144.800 MHz (2m)"
     
     # Sample data with frequency and dB information
     # Format: (tx_callsign, tx_grid, rx_callsign, rx_grid, tx_freq, rx_freq, rx_db)
@@ -196,7 +199,9 @@ def main() -> int:
             "started_at": _iso(gen_at),
             "updated_at": _iso(gen_at + timedelta(minutes=5)),
             "frequency": freq,
-            "rx_db": None,
+            # Noise-floor-ish value so sample data always has a dB number present
+            # even when the station didn't decode any pages.
+            "rx_db": -99.0,
             "station_callsign": None,
             "tx_id": None,
             "tx_ids_seen": [],

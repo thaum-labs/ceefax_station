@@ -1628,8 +1628,11 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                 freq_str = config_data.get("frequency", "")
                 if freq_str:
                     frequency_info = freq_str
-                    # Extract band and suggest typical data frequency
-                    # Format is usually "2m (144.0-148.0 MHz)" or "144.500 MHz"
+                    # Extract band and suggest typical data frequency.
+                    # Supported formats include:
+                    # - "144.800 MHz (2m)" (preferred)
+                    # - "2m (...)" (legacy)
+                    # - "144.800 MHz"
                     import re
                     # Try to extract band name (2m, 70cm, etc.)
                     band_match = re.search(r'(\d+[mc]m?|6m|10m|12m|15m|17m|20m|30m|40m|80m)', freq_str, re.I)
@@ -1646,7 +1649,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                             "12m": "24.930 MHz",
                             "10m": "28.120 MHz",
                             "6m": "50.200 MHz",
-                            "2m": "145.500 MHz",
+                            "2m": "144.800 MHz",
                             "70cm": "433.500 MHz",
                         }
                         data_frequency = data_freq_map.get(band, "")
