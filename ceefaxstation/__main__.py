@@ -33,8 +33,49 @@ def _run_module(mod: str, argv: list[str]) -> int:
 
     We do this for the curses viewer so it owns the terminal cleanly.
     """
-    cmd = [sys.executable, "-m", mod, *argv]
-    return subprocess.call(cmd)
+    # When running as PyInstaller bundle, we can't use -m flag
+    # Instead, import and call the module directly
+    if getattr(sys, 'frozen', False):
+        # Import the module and call its main function
+        try:
+            # Import the module (e.g., "ceefax.src.viewer" -> ceefax.src.viewer)
+            module = __import__(mod, fromlist=['main'])
+            if hasattr(module, 'main'):
+                # Save original argv and set it for the module's argparse
+                old_argv = sys.argv
+                try:
+                    sys.argv = [mod.split('.')[-1]] + argv
+                    main_func = getattr(module, 'main')
+                    # Call main() - it may raise SystemExit for argparse
+                    result = main_func()
+                    return result if isinstance(result, int) else 0
+                except SystemExit as e:
+                    # argparse raises SystemExit with code 0 for --help, 2 for errors
+                    return e.code if e.code is not None else 0
+                except Exception as e:
+                    print(f"Error running {mod}: {e}", file=sys.stderr)
+                    import traceback
+                    traceback.print_exc()
+                    return 1
+                finally:
+                    sys.argv = old_argv
+            else:
+                print(f"Module {mod} has no main() function", file=sys.stderr)
+                return 1
+        except ImportError as e:
+            print(f"Failed to import {mod}: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            return 1
+        except Exception as e:
+            print(f"Error running module {mod}: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            return 1
+    else:
+        # Development mode: use subprocess
+        cmd = [sys.executable, "-m", mod, *argv]
+        return subprocess.call(cmd)
 
 
 def _refresh_pages(
