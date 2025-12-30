@@ -1032,6 +1032,310 @@ def _draw_page(
     stdscr.refresh()
 
 
+def _draw_ascii_progress_bar(stdscr: "curses._CursesWindow", row: int, col: int, width: int, percent: float, label: str = "") -> None:
+    """
+    Draw an ASCII progress bar in DOS/Ceefax style.
+    
+    Args:
+        stdscr: Curses window
+        row: Row position
+        col: Column position
+        width: Width of progress bar (excluding brackets)
+        percent: Progress percentage (0.0 to 1.0)
+        label: Optional label text to display
+    """
+    height, screen_width = stdscr.getmaxyx()
+    if row < 0 or row >= height:
+        return
+    
+    # Clamp percent
+    percent = max(0.0, min(1.0, percent))
+    
+    # Calculate filled width
+    filled = int(width * percent)
+    empty = width - filled
+    
+    # Build progress bar: [====>     ] 45%
+    bar = "[" + "=" * filled + ">" * (1 if filled < width and filled > 0 else 0) + " " * empty + "]"
+    percent_str = f" {int(percent * 100)}%"
+    
+    # Combine label, bar, and percent
+    if label:
+        full_text = f"{label} {bar}{percent_str}"
+    else:
+        full_text = f"{bar}{percent_str}"
+    
+    # Truncate to fit screen
+    max_width = screen_width - col - 1
+    if len(full_text) > max_width:
+        full_text = full_text[:max_width]
+    
+    try:
+        stdscr.addstr(row, col, full_text[:max_width])
+    except curses.error:
+        pass  # Ignore if out of bounds
+
+
+def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float = 0.0, progress_label: str = "", countdown: str = "", message: str = "") -> None:
+    """
+    Draw TX mode screen with progress bars and status.
+    """
+    stdscr.clear()
+    height, width = stdscr.getmaxyx()
+    
+    try:
+        # Title
+        title = "CEEFAX STATION - TRANSMIT MODE"
+        title_col = max(0, (width - len(title)) // 2)
+        stdscr.addstr(1, title_col, title[:width - title_col])
+        
+        # Status line
+        status_text = f"Status: {status}"
+        stdscr.addstr(3, 2, status_text[:width - 3])
+        
+        # Progress bar area
+        if progress_label:
+            _draw_ascii_progress_bar(stdscr, 5, 2, min(40, width - 15), progress, progress_label)
+        
+        # Countdown
+        if countdown:
+            countdown_text = f"Next transmission in: {countdown}"
+            stdscr.addstr(7, 2, countdown_text[:width - 3])
+        
+        # Message
+        if message:
+            # Wrap message if needed
+            msg_lines = []
+            words = message.split()
+            current_line = ""
+            for word in words:
+                if len(current_line) + len(word) + 1 <= width - 4:
+                    current_line += (" " if current_line else "") + word
+                else:
+                    if current_line:
+                        msg_lines.append(current_line)
+                    current_line = word
+            if current_line:
+                msg_lines.append(current_line)
+            
+            for i, line in enumerate(msg_lines[:5]):  # Max 5 lines
+                if 9 + i < height - 3:
+                    stdscr.addstr(9 + i, 2, line[:width - 4])
+        
+        # Instructions
+        if height > 3:
+            inst_text = "Press ESC to return to viewer"
+            stdscr.addstr(height - 3, 2, inst_text[:width - 3])
+    except curses.error:
+        pass  # Ignore out of bounds errors
+    
+    stdscr.refresh()
+
+
+def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
+    """
+    TX mode: Generate WAV, transmit 3 times, show countdown to next hour.
+    """
+    import sys
+    from datetime import datetime, timedelta
+    from ceefax.src.ax25_audio import build_ax25_audio_plan, write_ax25_audio_wav_and_or_stdout
+    from ceefax.src.config import load_config
+    from ceefax.src.playback import play_wav_file
+    from pathlib import Path
+    import json
+    
+    curses.curs_set(0)
+    stdscr.nodelay(True)  # Non-blocking for countdown updates
+    stdscr.keypad(True)
+    
+    cfg = load_config()
+    
+    # Get callsign from config or prompt
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    config_file = repo_root / "ceefax" / "radio_config.json"
+    callsign = None
+    
+    if config_file.exists():
+        try:
+            config_data = json.loads(config_file.read_text(encoding="utf-8"))
+            callsign = config_data.get("callsign", "").strip().upper()
+        except Exception:  # noqa: BLE001
+            pass
+    
+    if not callsign:
+        # Prompt for callsign (need to temporarily exit curses)
+        curses.endwin()
+        try:
+            while True:
+                try:
+                    cs = input("Enter your callsign: ").strip().upper()
+                    if cs:
+                        callsign = cs
+                        break
+                    print("Callsign cannot be empty. Try again.")
+                except (EOFError, KeyboardInterrupt):
+                    return
+        finally:
+            stdscr.refresh()
+    
+    src = callsign or cfg.ax25.callsign or "N0CALL"
+    loops_in_wav = cfg.ax25.loops_per_hour or 3
+    
+    # Step 1: Refresh pages first
+    _draw_tx_screen(stdscr, "Refreshing pages...", 0.0, "Refreshing")
+    stdscr.refresh()
+    
+    try:
+        # Refresh pages before generating
+        from ceefax.src.update_all import update_all
+        
+        # Refresh all pages (this updates weather, news, etc.)
+        update_all()
+        
+        # Reload pages after refresh
+        new_pages = load_all_pages(cfg.general.page_dir)
+        if new_pages:
+            pages[:] = new_pages
+        
+        # Step 2: Generate WAV file
+        _draw_tx_screen(stdscr, "Generating transmission file...", 0.0, "Generating")
+        stdscr.refresh()
+        
+        plan = build_ax25_audio_plan(
+            pages=pages,
+            loops=max(1, loops_in_wav),
+            dest_callsign=cfg.ax25.dest_callsign,
+            src_callsign=src,
+            max_info_bytes=cfg.ax25.max_info_bytes,
+        )
+        
+        # Simulate progress during generation (actual generation is fast)
+        for i in range(10):
+            _draw_tx_screen(stdscr, "Generating transmission file...", i / 10.0, "Generating")
+            stdscr.refresh()
+            time.sleep(0.05)
+        
+        wav = write_ax25_audio_wav_and_or_stdout(
+            plan=plan,
+            sample_rate=cfg.audio.sample_rate,
+            symbol_rate=cfg.audio.symbol_rate,
+            frequency_mark=cfg.audio.frequency_mark,
+            frequency_space=cfg.audio.frequency_space,
+            amplitude=cfg.audio.amplitude,
+            preamble_flags=cfg.ax25.preamble_flags,
+            inter_frame_flags=cfg.ax25.inter_frame_flags,
+            postamble_flags=cfg.ax25.postamble_flags,
+            output_dir=cfg.general.output_dir,
+            output_mode=cfg.audio.output,
+        )
+        
+        _draw_tx_screen(stdscr, "File generated successfully", 1.0, "Generating")
+        stdscr.refresh()
+        time.sleep(0.5)
+        
+        # Step 2: Transmit 3 times
+        for tx_num in range(1, 4):
+            status = f"Transmitting (loop {tx_num}/3)..."
+            progress = (tx_num - 1) / 3.0
+            _draw_tx_screen(stdscr, status, progress, f"Transmission {tx_num}/3")
+            stdscr.refresh()
+            
+            try:
+                # Play the WAV file (blocking call)
+                play_wav_file(wav, loops=1)
+                
+                # Show completion
+                progress = tx_num / 3.0
+                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 complete", progress, f"Transmission {tx_num}/3")
+                stdscr.refresh()
+                time.sleep(0.3)
+            except Exception as e:  # noqa: BLE001
+                progress = tx_num / 3.0
+                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 failed: {str(e)[:40]}", progress, f"Transmission {tx_num}/3")
+                stdscr.refresh()
+                time.sleep(2)
+        
+        # Step 4: Show countdown and website message
+        message = "Visit https://ceefaxstation.com to see your station on the map and view reception data"
+        
+        while True:
+            # Check for ESC key
+            ch = stdscr.getch()
+            if ch == 27:  # ESC key
+                break
+            
+            # Calculate time until next hour
+            now = datetime.now()
+            next_hour = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            remaining = next_hour - now
+            total_seconds = int(remaining.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            countdown_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
+            _draw_tx_screen(
+                stdscr,
+                "All transmissions complete",
+                1.0,
+                "Status",
+                countdown_str,
+                message
+            )
+            stdscr.refresh()
+            time.sleep(1)
+            
+    except Exception as e:  # noqa: BLE001
+        _draw_tx_screen(stdscr, f"Error: {str(e)[:50]}", 0.0, "Error")
+        stdscr.refresh()
+        time.sleep(3)
+
+
+def _rx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
+    """
+    RX mode: Auto-detect soundcard and start live reception.
+    """
+    curses.curs_set(0)
+    stdscr.nodelay(False)
+    stdscr.keypad(True)
+    
+    # Show initializing message
+    stdscr.clear()
+    stdscr.addstr(0, 0, "Initializing receive mode...")
+    stdscr.addstr(1, 0, "Auto-detecting soundcard...")
+    stdscr.refresh()
+    
+    # Find direwolf
+    dw = _find_direwolf_exe(None)
+    
+    # Auto-detect device (None = auto-detect)
+    device = None
+    
+    # Get listener callsign from config or use default
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    config_file = repo_root / "ceefax" / "radio_config.json"
+    listener = None
+    
+    if config_file.exists():
+        try:
+            config_data = json.loads(config_file.read_text(encoding="utf-8"))
+            listener = config_data.get("callsign", "").strip().upper()
+        except Exception:  # noqa: BLE001
+            pass
+    
+    # Start live RX mode (this will handle its own loop and ESC key)
+    _rx_viewer_loop_live(
+        stdscr,
+        dw,
+        dest_filter="CEEFAX",
+        listener_callsign=listener,
+        device=device,
+        config_path=None,
+        sample_rate=48000,
+        baud=1200,
+    )
+
+
 def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     curses.curs_set(0)  # hide cursor
     stdscr.nodelay(False)
@@ -1063,14 +1367,32 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         elif ch in (ord("p"), curses.KEY_LEFT, curses.KEY_PPAGE):
             if pages:
                 idx = (idx - 1) % len(pages)
-        elif ch in (ord("r"), ord("R")):
-            # Reload pages from disk
+        elif ch == curses.KEY_F5:
+            # Reload pages from disk (F5)
             cfg = load_config()
             new_pages = load_all_pages(cfg.general.page_dir)
             if new_pages:
                 pages[:] = new_pages
                 matrices[:] = compile_all()
                 idx = 0
+        elif ch in (ord("r"), ord("R")):
+            # Enter RX mode
+            _rx_mode_loop(stdscr, pages)
+            # After RX mode, reload pages in case new ones were received
+            cfg = load_config()
+            new_pages = load_all_pages(cfg.general.page_dir)
+            if new_pages:
+                pages[:] = new_pages
+                matrices[:] = compile_all()
+        elif ch in (ord("t"), ord("T")):
+            # Enter TX mode
+            _tx_mode_loop(stdscr, pages)
+            # After TX mode, reload pages in case they were refreshed
+            cfg = load_config()
+            new_pages = load_all_pages(cfg.general.page_dir)
+            if new_pages:
+                pages[:] = new_pages
+                matrices[:] = compile_all()
 
 
 def _rx_viewer_loop_from_wav(
@@ -1171,7 +1493,7 @@ def _rx_viewer_loop_from_wav(
                 stdscr.refresh()
 
             ch = stdscr.getch()
-            if ch in (ord("q"), ord("Q")):
+            if ch in (ord("q"), ord("Q")) or ch == 27:  # q or ESC
                 break
             if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
                 if pages:
