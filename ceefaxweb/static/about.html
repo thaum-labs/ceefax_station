@@ -207,7 +207,11 @@
             Teletext pages had a distinctive look: blocky 40-column text, limited color palette (typically 8 colors), and simple graphics made from text characters. Despite these limitations, Ceefax became incredibly popular, providing news, weather, sports scores, TV listings, and even simple games to millions of viewers.
           </p>
           <div class="screenshot">
-            <img src="/static/ceefax_1970s_photo.jpg" alt="1970s Ceefax/teletext system in use" style="max-width: 100%; height: auto; border: 2px solid #2a2a2a; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);">
+            <img src="/static/ceefax_1970s_photo.jpg" alt="1970s Ceefax/teletext system in use" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="max-width: 100%; height: auto; border: 2px solid #2a2a2a; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);">
+            <div style="display:none; padding: 40px; text-align: center; border: 2px solid #2a2a2a; border-radius: 6px; background: #111; color: #888;">
+              <p style="margin: 0; font-size: 16px;">Image: <code>ceefax_1970s_photo.jpg</code></p>
+              <p style="margin: 8px 0 0 0; font-size: 14px;">Please add the image file to <code>ceefaxweb/static/</code> directory</p>
+            </div>
             <div class="screenshot-caption">
               <em>Example: A 1970s teletext system in use. The large CRT monitor displays the distinctive blocky text and limited color palette characteristic of early teletext services like Ceefax.</em>
             </div>
@@ -345,6 +349,9 @@
           </ul>
           <p>
             Visit the <a href="https://github.com/thaum-labs/ceefax_station" target="_blank" rel="noopener noreferrer">GitHub repository</a> to get involved.
+          </p>
+          <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #2a2a2a; font-size: 14px; color: #888;">
+            <em>This project was built using <a href="https://cursor.sh" target="_blank" rel="noopener noreferrer" style="color: #ffd34d;">Cursor AI</a>, an AI-powered code editor that accelerates software development.</em>
           </p>
         </div>
       </div>
