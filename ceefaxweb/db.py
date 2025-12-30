@@ -296,8 +296,15 @@ def _range_to_since(range_key: str) -> datetime:
     return now - timedelta(hours=24)
 
 
-def query_map(conn: sqlite3.Connection, *, range_key: str) -> dict[str, Any]:
+def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = "") -> dict[str, Any]:
     since = _range_to_since(range_key).isoformat().replace("+00:00", "Z")
+    
+    # Build frequency filter for band
+    freq_pattern: str | None = None
+    if band_filter:
+        band_filter = band_filter.strip().lower()
+        # Match frequencies that contain the band (e.g., "10m" matches "10m (28.0-29.7 MHz)")
+        freq_pattern = f"%{band_filter}%"
 
     stations = [
         dict(r)
@@ -307,35 +314,43 @@ def query_map(conn: sqlite3.Connection, *, range_key: str) -> dict[str, Any]:
     ]
 
     # Links: join RX to TX counts over time window.
+    # Filter by band if specified (check both TX and RX frequencies)
+    link_query = """
+        SELECT
+          r.tx_callsign AS tx_callsign,
+          r.rx_callsign AS rx_callsign,
+          COUNT(*) AS rx_pages_ok,
+          COUNT(DISTINCT r.page_id) AS rx_pages_ok_unique
+        FROM receptions r
+        LEFT JOIN transmissions t ON r.tx_id = t.tx_id AND r.page_id = t.page_id
+        WHERE r.received_at_utc >= ?
+    """
+    link_params: list[Any] = [since]
+    if freq_pattern:
+        link_query += " AND (r.freq LIKE ? OR t.freq LIKE ?)"
+        link_params.extend([freq_pattern, freq_pattern])
+    link_query += " GROUP BY r.tx_callsign, r.rx_callsign"
+    
     links = [
         dict(r)
-        for r in conn.execute(
-            """
-            SELECT
-              r.tx_callsign AS tx_callsign,
-              r.rx_callsign AS rx_callsign,
-              COUNT(*) AS rx_pages_ok,
-              COUNT(DISTINCT r.page_id) AS rx_pages_ok_unique
-            FROM receptions r
-            WHERE r.received_at_utc >= ?
-            GROUP BY r.tx_callsign, r.rx_callsign
-            """,
-            (since,),
-        ).fetchall()
+        for r in conn.execute(link_query, link_params).fetchall()
     ]
 
     # TX unique page set size per callsign (for completeness checks).
+    tx_query = """
+        SELECT tx_callsign, COUNT(DISTINCT page_id) AS tx_pages_unique
+        FROM transmissions
+        WHERE generated_at_utc >= ?
+    """
+    tx_params: list[Any] = [since]
+    if freq_pattern:
+        tx_query += " AND freq LIKE ?"
+        tx_params.append(freq_pattern)
+    tx_query += " GROUP BY tx_callsign"
+    
     tx_pages_unique = {
         r["tx_callsign"]: int(r["tx_pages_unique"])
-        for r in conn.execute(
-            """
-            SELECT tx_callsign, COUNT(DISTINCT page_id) AS tx_pages_unique
-            FROM transmissions
-            WHERE generated_at_utc >= ?
-            GROUP BY tx_callsign
-            """,
-            (since,),
-        ).fetchall()
+        for r in conn.execute(tx_query, tx_params).fetchall()
     }
     for l in links:
         tx_cs = (l.get("tx_callsign") or "")
@@ -355,17 +370,20 @@ def query_map(conn: sqlite3.Connection, *, range_key: str) -> dict[str, Any]:
                 inbound_partial.add(rx)
 
     # RX activity per station: how many unique pages decoded in the window.
+    rx_query = """
+        SELECT rx_callsign, COUNT(DISTINCT page_id) AS rx_pages_unique
+        FROM receptions
+        WHERE received_at_utc >= ?
+    """
+    rx_params: list[Any] = [since]
+    if freq_pattern:
+        rx_query += " AND freq LIKE ?"
+        rx_params.append(freq_pattern)
+    rx_query += " GROUP BY rx_callsign"
+    
     rx_pages_unique = {
         r["rx_callsign"]: int(r["rx_pages_unique"])
-        for r in conn.execute(
-            """
-            SELECT rx_callsign, COUNT(DISTINCT page_id) AS rx_pages_unique
-            FROM receptions
-            WHERE received_at_utc >= ?
-            GROUP BY rx_callsign
-            """,
-            (since,),
-        ).fetchall()
+        for r in conn.execute(rx_query, rx_params).fetchall()
     }
 
     for s in stations:

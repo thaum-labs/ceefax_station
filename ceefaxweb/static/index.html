@@ -131,6 +131,16 @@
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
           </select>
+          <label for="band" style="margin-left: 12px;">Band</label>
+          <select id="band">
+            <option value="">All bands</option>
+            <option value="10m">10m (28.0-29.7 MHz)</option>
+            <option value="2m">2m (144.0-148.0 MHz)</option>
+            <option value="70cm">70cm (430.0-440.0 MHz)</option>
+            <option value="6m">6m (50.0-54.0 MHz)</option>
+            <option value="20m">20m (14.0-14.35 MHz)</option>
+            <option value="40m">40m (7.0-7.2 MHz)</option>
+          </select>
           <button id="refresh">Refresh</button>
         </div>
         <div class="muted" id="status">Connecting…</div>
@@ -197,6 +207,7 @@
       }).addTo(map);
 
       const rangeSel = document.getElementById('range');
+      const bandSel = document.getElementById('band');
       const refreshBtn = document.getElementById('refresh');
       const statusEl = document.getElementById('status');
       const detailBox = document.getElementById('detail');
@@ -208,6 +219,7 @@
       let stationMarkers = new Map(); // callsign -> {layers:[]}
       let linkLayers = [];
       let currentRange = rangeSel.value;
+      let currentBand = bandSel.value;
 
       // Palette (matches current design)
       const COLOR = {
@@ -271,11 +283,17 @@
 
       async function fetchMap() {
         currentRange = rangeSel.value;
+        currentBand = bandSel.value;
         statusEl.textContent = 'Loading…';
-        const resp = await fetch(`/api/map?range=${encodeURIComponent(currentRange)}`);
+        let url = `/api/map?range=${encodeURIComponent(currentRange)}`;
+        if (currentBand) {
+          url += `&band=${encodeURIComponent(currentBand)}`;
+        }
+        const resp = await fetch(url);
         const data = await resp.json();
         renderMap(data);
-        statusEl.textContent = `Updated. Range=${data.range} (since ${data.since_utc})`;
+        const bandText = currentBand ? `, Band=${currentBand}` : '';
+        statusEl.textContent = `Updated. Range=${data.range}${bandText} (since ${data.since_utc})`;
       }
 
       function renderMap(data) {
@@ -457,6 +475,7 @@
 
       refreshBtn.addEventListener('click', fetchMap);
       rangeSel.addEventListener('change', fetchMap);
+      bandSel.addEventListener('change', fetchMap);
 
       // Live updates via WebSocket (best-effort).
       function connectWS() {
