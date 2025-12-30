@@ -1076,9 +1076,12 @@ def _draw_ascii_progress_bar(stdscr: "curses._CursesWindow", row: int, col: int,
         pass  # Ignore if out of bounds
 
 
-def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float = 0.0, progress_label: str = "", countdown: str = "", message: str = "") -> None:
+def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float = 0.0, progress_label: str = "", countdown: str = "", message: str = "", show_logo: bool = False) -> None:
     """
     Draw TX mode screen styled like a Ceefax page (centered, with header bar).
+    
+    Args:
+        show_logo: If True, display TX logo when transmitting
     """
     stdscr.clear()
     max_y, max_x = stdscr.getmaxyx()
@@ -1159,6 +1162,22 @@ def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float
     current_row = border_top + 1
     row = current_row
     
+    # Add TX logo if transmitting
+    if show_logo:
+        tx_logo = [
+            "░▀█▀░█░█",
+            "░░█░░▄▀▄",
+            "░░▀░░▀░▀",
+        ]
+        row += 2
+        for logo_line in tx_logo:
+            if row >= border_bottom - 8:
+                break
+            logo_centered = logo_line.center(inner_width)
+            stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
+            row += 1
+        row += 2
+    
     # Add status
     if status:
         row += 1
@@ -1237,6 +1256,175 @@ def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float
     
     # Status line at bottom (same as regular pages)
     status_line_text = "TRANSMIT MODE  Press ESC to return"
+    status_line = status_line_text[: max_x - 1]
+    pad_width = max_x - 1
+    start_x = max((pad_width - len(status_line)) // 2, 0)
+    
+    stdscr.attron(curses.A_REVERSE)
+    stdscr.addstr(max_y - 1, 0, " " * pad_width)
+    stdscr.addstr(max_y - 1, start_x, status_line)
+    stdscr.attroff(curses.A_REVERSE)
+    
+    stdscr.refresh()
+
+
+def _draw_rx_screen(stdscr: "curses._CursesWindow", status: str = "", message: str = "") -> None:
+    """
+    Draw RX mode screen styled like a Ceefax page (centered, with header bar and RX logo).
+    """
+    stdscr.clear()
+    max_y, max_x = stdscr.getmaxyx()
+    
+    # Require at least PAGE_WIDTH x PAGE_HEIGHT area
+    if max_y < PAGE_HEIGHT or max_x < PAGE_WIDTH:
+        msg = f"Terminal too small. Need at least {PAGE_WIDTH}x{PAGE_HEIGHT}."
+        stdscr.addstr(0, 0, msg[: max_x - 1])
+        stdscr.refresh()
+        return
+    
+    # Center the frame (same as regular pages)
+    offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
+    offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
+    
+    # Build Ceefax-style header line
+    now = datetime.now()
+    clock = now.strftime("%H:%M %d %b").upper()
+    page_num = "RX "
+    title = "RECEIVE MODE"
+    base_header = f"CEEFAX {page_num} {title}"
+    header_text = base_header[:PAGE_WIDTH].ljust(PAGE_WIDTH)
+    
+    # Colors (same as regular pages)
+    if curses.has_colors():
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)   # header
+        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # body
+        header_attr = curses.color_pair(1) | curses.A_BOLD
+        body_attr = curses.color_pair(2)
+    else:
+        header_attr = curses.A_BOLD
+        body_attr = curses.A_NORMAL
+    
+    # Header (row 0) - yellow on blue
+    stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
+    
+    # Clock at top-right
+    clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
+    stdscr.addstr(offset_y, clock_x, clock, header_attr)
+    
+    # Get callsign for header if available
+    callsign = ""
+    try:
+        from pathlib import Path
+        import json
+        root = Path(__file__).resolve().parent.parent
+        config_file = root / "radio_config.json"
+        if config_file.exists():
+            config_data = json.loads(config_file.read_text(encoding="utf-8"))
+            callsign = config_data.get("callsign", "").strip()
+    except Exception:  # noqa: BLE001
+        pass
+    
+    if callsign:
+        callsign_x = clock_x - len(callsign) - 2
+        if callsign_x >= offset_x:
+            stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
+            stdscr.addstr(offset_y, callsign_x + len(callsign), "  ", header_attr)
+    
+    # Content area (inside a border like page 000)
+    border_top = offset_y + 1
+    border_bottom = offset_y + PAGE_HEIGHT - 1
+    inner_x = offset_x + 1
+    inner_width = max(PAGE_WIDTH - 2, 1)
+    
+    # Draw border
+    border_attr = body_attr | curses.A_BOLD
+    top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
+    stdscr.addstr(border_top, offset_x, top_line, border_attr)
+    stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
+    for row in range(border_top + 1, border_bottom):
+        stdscr.addstr(row, offset_x, "|", border_attr)
+        stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
+    
+    # Content lines (centered like page 000)
+    row = border_top + 1
+    
+    # Add RX logo
+    rx_logo = [
+        "░█▀▄░█░█",
+        "░█▀▄░▄▀▄",
+        "░▀░▀░▀░▀",
+    ]
+    row += 2
+    for logo_line in rx_logo:
+        if row >= border_bottom - 8:
+            break
+        logo_centered = logo_line.center(inner_width)
+        stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
+        row += 1
+    row += 2
+    
+    # Add status if present
+    if status:
+        status_text = status.upper().center(inner_width)
+        stdscr.addstr(row, inner_x, status_text[:inner_width], body_attr | curses.A_BOLD)
+        row += 2
+    
+    # Add message if present (word-wrapped and centered)
+    if message:
+        words = message.split()
+        msg_lines = []
+        current_line = ""
+        for word in words:
+            if not current_line:
+                current_line = word
+            elif len(current_line) + 1 + len(word) <= inner_width:
+                current_line += " " + word
+            else:
+                msg_lines.append(current_line)
+                current_line = word
+        if current_line:
+            msg_lines.append(current_line)
+        
+        for msg_line in msg_lines:
+            if row >= border_bottom - 3:
+                break
+            msg_centered = msg_line.center(inner_width)
+            stdscr.addstr(row, inner_x, msg_centered[:inner_width], body_attr | curses.A_BOLD)
+            row += 1
+        row += 1
+    
+    # Add ESC instruction at bottom
+    if row < border_bottom - 1:
+        esc_text = "PRESS ESC TO RETURN TO VIEWER"
+        esc_centered = esc_text.center(inner_width)
+        stdscr.addstr(border_bottom - 2, inner_x, esc_centered[:inner_width], body_attr | curses.A_BOLD)
+    
+    # Controls bar (same as regular pages)
+    controls_y = max_y - 2
+    if controls_y > offset_y + PAGE_HEIGHT:
+        if curses.has_colors():
+            labels = [
+                (" r: RX ", curses.color_pair(3) | curses.A_BOLD),      # RED
+                (" t: TX ", curses.color_pair(4) | curses.A_BOLD),      # GREEN
+                (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD), # YELLOW
+                (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),  # BLUE
+            ]
+            total_len = sum(len(text) for text, _ in labels)
+            x = max((max_x - 1 - total_len) // 2, 0)
+            for text, attr in labels:
+                if x >= max_x - 1:
+                    break
+                stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
+                x += len(text)
+        else:
+            line = "r: RX  t: TX  F5: Reload  ESC: Exit"
+            x = max((max_x - 1 - len(line)) // 2, 0)
+            stdscr.addstr(controls_y, x, line[: max_x - 1 - x])
+    
+    # Status line at bottom (same as regular pages)
+    status_line_text = "RECEIVE MODE  Press ESC to return"
     status_line = status_line_text[: max_x - 1]
     pad_width = max_x - 1
     start_x = max((pad_width - len(status_line)) // 2, 0)
@@ -1407,7 +1595,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         for tx_num in range(1, 4):
             status = f"Transmitting (loop {tx_num}/3)..."
             progress = (tx_num - 1) / 3.0
-            _draw_tx_screen(stdscr, status, progress, f"Transmission {tx_num}/3")
+            _draw_tx_screen(stdscr, status, progress, f"Transmission {tx_num}/3", show_logo=True)
             stdscr.refresh()
             
             # Run playback in background thread so we can check for ESC
@@ -1451,7 +1639,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             else:
                 # Show completion
                 progress = tx_num / 3.0
-                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 complete", progress, f"Transmission {tx_num}/3")
+                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 complete", progress, f"Transmission {tx_num}/3", show_logo=True)
                 stdscr.refresh()
                 time.sleep(0.3)
         
@@ -1499,11 +1687,8 @@ def _rx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     stdscr.nodelay(False)
     stdscr.keypad(True)
     
-    # Show initializing message
-    stdscr.clear()
-    stdscr.addstr(0, 0, "Initializing receive mode...")
-    stdscr.addstr(1, 0, "Auto-detecting soundcard...")
-    stdscr.refresh()
+    # Show initializing message with RX logo
+    _draw_rx_screen(stdscr, "Initializing receive mode...", "Auto-detecting soundcard...")
     
     # Find direwolf
     dw = _find_direwolf_exe(None)
@@ -1686,11 +1871,9 @@ def _rx_viewer_loop_from_wav(
                     callsign_override=listener_callsign,
                 )
             else:
-                stdscr.clear()
-                msg = rx_err["msg"] or f"Waiting for AX.25 pages from WAV: {wav_path}"
-                stdscr.addstr(0, 0, msg[: max(stdscr.getmaxyx()[1] - 1, 1)])
-                stdscr.addstr(1, 0, "Press q to quit."[: max(stdscr.getmaxyx()[1] - 1, 1)])
-                stdscr.refresh()
+                # Show RX screen with waiting message
+                msg = rx_err["msg"] or f"Waiting for AX.25 pages from WAV: {Path(wav_path).name}"
+                _draw_rx_screen(stdscr, "Waiting for pages...", msg)
 
             ch = stdscr.getch()
             if ch in (ord("q"), ord("Q")) or ch == 27:  # q or ESC
