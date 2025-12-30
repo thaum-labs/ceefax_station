@@ -314,8 +314,15 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
     ]
 
     # Links: join RX to TX counts over time window.
-    # Filter by band if specified (check both TX and RX frequencies)
-    # Important: Show link if ANY reception matches the band, even if TX frequency differs
+    #
+    # Band filtering nuance:
+    # - Many RX logs do not have per-page frequency populated (r.freq can be NULL).
+    # - TX logs do have frequency, but RX rows often don't join cleanly to TX rows via tx_id.
+    #   (Older RX logs may have missing/incorrect tx_id.)
+    #
+    # Therefore, for band filtering we:
+    # - Prefer r.freq when present
+    # - Else fall back to any TX row matching (tx_callsign, page_id) in the same time window
     link_query = """
         SELECT
           r.tx_callsign AS tx_callsign,
@@ -323,16 +330,24 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
           COUNT(*) AS rx_pages_ok,
           COUNT(DISTINCT r.page_id) AS rx_pages_ok_unique
         FROM receptions r
-        LEFT JOIN transmissions t ON r.tx_id = t.tx_id AND r.page_id = t.page_id
         WHERE r.received_at_utc >= ?
     """
     link_params: list[Any] = [since]
     if freq_pattern:
-        # Show link if reception frequency OR transmission frequency matches the selected band
-        # Prioritize r.freq (reception frequency) as it's more reliable for filtering
-        # If r.freq is NULL, fall back to t.freq
-        link_query += " AND (r.freq LIKE ? OR (r.freq IS NULL AND t.freq LIKE ?) OR t.freq LIKE ?)"
-        link_params.extend([freq_pattern, freq_pattern, freq_pattern])
+        link_query += """
+          AND (
+            r.freq LIKE ?
+            OR EXISTS (
+              SELECT 1
+              FROM transmissions t
+              WHERE t.tx_callsign = r.tx_callsign
+                AND t.page_id = r.page_id
+                AND t.generated_at_utc >= ?
+                AND t.freq LIKE ?
+            )
+          )
+        """
+        link_params.extend([freq_pattern, since, freq_pattern])
     link_query += " GROUP BY r.tx_callsign, r.rx_callsign"
     
     links = [
