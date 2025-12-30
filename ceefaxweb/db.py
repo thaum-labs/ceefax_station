@@ -386,18 +386,28 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
         for r in conn.execute(rx_query, rx_params).fetchall()
     }
 
+    # Filter stations to only those with activity on the selected band (if filtering)
+    filtered_stations = []
     for s in stations:
+        cs = (s.get("callsign") or "").strip().upper()
+        tx_count = int(tx_pages_unique.get(cs, 0))
+        rx_count = int(rx_pages_unique.get(cs, 0))
+        
+        # If band filter is active, only include stations with activity on that band
+        if freq_pattern and tx_count == 0 and rx_count == 0:
+            continue
+        
         grid = (s.get("grid") or "").strip().upper()
         if grid:
             bb = maidenhead_bbox(grid)
             if bb:
                 (sw, ne) = bb
                 s["bbox"] = {"sw": {"lat": sw[0], "lon": sw[1]}, "ne": {"lat": ne[0], "lon": ne[1]}}
-        cs = (s.get("callsign") or "").strip().upper()
-        s["tx_pages_unique"] = int(tx_pages_unique.get(cs, 0))
-        s["is_tx"] = bool(s["tx_pages_unique"] > 0)
-        s["rx_pages_ok_unique"] = int(rx_pages_unique.get(cs, 0))
-        s["is_rx"] = bool(s["rx_pages_ok_unique"] > 0)
+        
+        s["tx_pages_unique"] = tx_count
+        s["is_tx"] = bool(tx_count > 0)
+        s["rx_pages_ok_unique"] = rx_count
+        s["is_rx"] = bool(rx_count > 0)
 
         # Status rules:
         # - "none": receiver with no decoded pages in this window (and not a TX station)
@@ -407,8 +417,10 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
             s["status"] = "none"
         else:
             s["status"] = "partial" if cs in inbound_partial else "ok"
+        
+        filtered_stations.append(s)
 
-    return {"range": range_key, "since_utc": since, "stations": stations, "links": links}
+    return {"range": range_key, "since_utc": since, "stations": filtered_stations, "links": links}
 
 
 def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: str) -> dict[str, Any]:
