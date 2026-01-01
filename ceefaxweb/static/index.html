@@ -792,12 +792,15 @@
           hit.on('click', onClick);
           poly.on('click', onClick);
 
-          const total = (l.tx_pages_unique || 0);
-          const txGrid = tx && tx.grid ? ` (${tx.grid})` : '';
-          const rxGrid = rx && rx.grid ? ` (${rx.grid})` : '';
-          const tip = `${l.tx_callsign}${txGrid} → ${l.rx_callsign}${rxGrid} (${l.rx_pages_ok_unique || 0}/${total} pages ok)`;
-          hit.bindTooltip(tip, { sticky: true });
-          poly.bindTooltip(tip, { sticky: true });
+          // Desktop: show hover tooltips for link lines. Mobile: suppress to avoid popups.
+          if (window.innerWidth > 768) {
+            const total = (l.tx_pages_unique || 0);
+            const txGrid = tx && tx.grid ? ` (${tx.grid})` : '';
+            const rxGrid = rx && rx.grid ? ` (${rx.grid})` : '';
+            const tip = `${l.tx_callsign}${txGrid} → ${l.rx_callsign}${rxGrid} (${l.rx_pages_ok_unique || 0}/${total} pages ok)`;
+            hit.bindTooltip(tip, { sticky: true });
+            poly.bindTooltip(tip, { sticky: true });
+          }
 
           hit.addTo(map);
           poly.addTo(map);
@@ -825,10 +828,11 @@
         if (window.innerWidth <= 768 && sidebarEl && sidebarEl.classList.contains('expanded')) {
           sidebarEl.classList.add('has-detail');
         }
-        // Show mobile notification if on mobile
+        // Show mobile notification if on mobile (include TX -> RX only)
         if (window.innerWidth <= 768) {
           const notification = document.getElementById('mobileLinkNotification');
           if (notification) {
+            notification.textContent = `${tx} → ${rx} — reception table updated`;
             notification.classList.add('show');
             // Auto-hide after 4 seconds
             setTimeout(() => {
