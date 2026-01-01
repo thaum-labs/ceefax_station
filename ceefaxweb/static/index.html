@@ -212,6 +212,37 @@
           cursor: pointer;
           text-align: center;
         }
+        .mobile-link-notification {
+          display: none;
+          position: fixed;
+          top: calc(env(safe-area-inset-top) + 10px);
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(255, 211, 77, 0.95);
+          color: #0b0b0b;
+          padding: 10px 16px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          z-index: 1002;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          max-width: calc(100% - 32px);
+          text-align: center;
+          animation: slideDown 0.3s ease-out;
+        }
+        .mobile-link-notification.show {
+          display: block;
+        }
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
         .sidebar-toggle {
           position: fixed;
           bottom: 0;
@@ -413,6 +444,9 @@
     <div id="app">
       <div id="map"></div>
       <div id="side">
+        <div class="mobile-link-notification" id="mobileLinkNotification">
+          Reception table updated — view in panel below
+        </div>
         <div class="side-inner">
         <div class="mobile-side-header">
           <div class="mobile-side-handle"></div>
@@ -786,6 +820,17 @@
         // Enable scrolling on mobile when detail is shown
         if (window.innerWidth <= 768 && sidebarEl && sidebarEl.classList.contains('expanded')) {
           sidebarEl.classList.add('has-detail');
+        }
+        // Show mobile notification if on mobile
+        if (window.innerWidth <= 768) {
+          const notification = document.getElementById('mobileLinkNotification');
+          if (notification) {
+            notification.classList.add('show');
+            // Auto-hide after 4 seconds
+            setTimeout(() => {
+              notification.classList.remove('show');
+            }, 4000);
+          }
         }
         const txGrid = d.tx_grid ? ` (${d.tx_grid})` : '';
         const rxGrid = d.rx_grid ? ` (${d.rx_grid})` : '';
