@@ -1,13 +1,11 @@
-<div align="center">
-
-<pre style="color: #ffd34d; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre; line-height: 1.05; margin: 0; padding: 0;">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
+<p align="center">
+<span style="color: #ffd34d; font-family: monospace; white-space: pre; display: block; line-height: 1.2;">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
   ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
   ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
 ░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
 ░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
-
-</div>
+░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</span>
+</p>
 
 # Ceefax Station
 
