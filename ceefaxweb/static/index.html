@@ -135,7 +135,10 @@
           background: #0b0b0b;
         }
         #map {
+          /* Prefer stable/dynamic viewport units on mobile browsers (esp. iOS Safari URL bar) */
           height: 100vh;
+          height: 100svh;
+          height: 100dvh;
           width: 100%;
           background: #0b0b0b;
         }
@@ -144,8 +147,12 @@
           bottom: 0;
           left: 0;
           right: 0;
-          height: 100vh;
-          max-height: 100vh;
+          /* Content-sized bottom sheet (avoid lots of blank space on phones) */
+          height: auto;
+          /* Fallback for browsers without svh/dvh */
+          max-height: calc(100vh - env(safe-area-inset-top));
+          max-height: calc(100svh - env(safe-area-inset-top));
+          max-height: calc(100dvh - env(safe-area-inset-top));
           transform: translateY(calc(100% - var(--tab-h)));
           transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           border-left: none;
@@ -176,8 +183,9 @@
         }
         #side.expanded .mobile-side-header {
           display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-start;
           gap: 10px;
           padding: 6px 0 8px 0;
           margin-bottom: 6px;
@@ -191,6 +199,8 @@
           flex: 0 0 auto;
         }
         .mobile-side-close {
+          width: 100%;
+          max-width: 520px;
           appearance: none;
           border: 1px solid rgba(255, 211, 77, 0.35);
           background: rgba(255, 211, 77, 0.10);
@@ -200,6 +210,7 @@
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
+          text-align: center;
         }
         .sidebar-toggle {
           position: fixed;
