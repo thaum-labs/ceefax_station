@@ -163,6 +163,43 @@
           transform: translateY(0);
           /* Expanded panel should not require scrolling on mobile */
           overflow-y: hidden;
+          /* Bottom tab is hidden when expanded, so don't reserve its height */
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+        /* Hide the bottom tab when expanded (it was covering content) */
+        #side.expanded ~ .sidebar-toggle {
+          display: none;
+        }
+
+        .mobile-side-header {
+          display: none;
+        }
+        #side.expanded .mobile-side-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 6px 0 8px 0;
+          margin-bottom: 6px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .mobile-side-handle {
+          width: 44px;
+          height: 5px;
+          background: #555;
+          border-radius: 3px;
+          flex: 0 0 auto;
+        }
+        .mobile-side-close {
+          appearance: none;
+          border: 1px solid rgba(255, 211, 77, 0.35);
+          background: rgba(255, 211, 77, 0.10);
+          color: #ffd34d;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
         }
         .sidebar-toggle {
           position: fixed;
@@ -356,6 +393,10 @@
       <div id="map"></div>
       <div id="side">
         <div class="side-inner">
+        <div class="mobile-side-header">
+          <div class="mobile-side-handle"></div>
+          <button type="button" class="mobile-side-close" id="sidebarClose">Back to map</button>
+        </div>
         <div class="logo-wrap">
           <pre class="logo">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
   ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
@@ -465,6 +506,7 @@
       const linkDistance = document.getElementById('linkDistance');
       const sidebarEl = document.getElementById('side');
       const sidebarToggle = document.getElementById('sidebarToggle');
+      const sidebarClose = document.getElementById('sidebarClose');
 
       // Mobile sidebar toggle
       if (sidebarToggle && sidebarEl) {
@@ -484,6 +526,15 @@
         };
         
         sidebarToggle.addEventListener('click', toggleSidebar);
+        if (sidebarClose) {
+          sidebarClose.addEventListener('click', () => {
+            sidebarEl.classList.remove('expanded');
+            document.body.style.overflow = '';
+            setTimeout(() => {
+              map.invalidateSize();
+            }, 300);
+          });
+        }
         
         // Close sidebar when clicking outside on mobile
         if (window.innerWidth <= 768) {
