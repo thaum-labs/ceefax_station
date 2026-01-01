@@ -165,6 +165,22 @@ The web tracker is a public website that visualizes:
 - Page transmission statistics
 - Reception quality (dB, frequency, age)
 
+### Screenshots
+
+#### Desktop View
+![Desktop Main View](screenshots/desktop-main.png)
+
+The desktop interface features a split layout with an interactive map on the left showing station locations and transmission links, and a control panel on the right with filters, settings, and station information.
+
+#### Mobile View
+![Mobile Map View](screenshots/mobile-map.png)
+
+On mobile devices, the map takes up the full screen with a collapsible bottom panel for filters and settings. The Ceefax Station ASCII logo appears in the top-right corner.
+
+![Mobile Panel Expanded](screenshots/mobile-panel-expanded.png)
+
+The mobile panel can be expanded to show all controls and station details. The panel is optimized for touch interaction with safe-area insets for modern mobile devices.
+
 ### Web Tracker
 
 The public web tracker is hosted at [ceefaxstation.com](https://ceefaxstation.com). Users should upload their logs to this central tracker rather than running their own servers.
