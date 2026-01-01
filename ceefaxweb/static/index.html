@@ -263,18 +263,22 @@
           background: #666;
         }
         .sidebar-toggle-text {
-          background: linear-gradient(135deg, rgba(255, 100, 0, 0.2), rgba(255, 150, 0, 0.15));
-          border: 2px solid rgba(255, 150, 0, 0.6);
-          border-radius: 6px;
-          padding: 8px 12px;
-          color: #ffaa44;
-          font-size: 13px;
+          width: 100%;
+          max-width: 520px;
+          appearance: none;
+          border: 1px solid rgba(255, 211, 77, 0.35);
+          background: rgba(255, 211, 77, 0.10);
+          color: #ffd34d;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 12px;
           font-weight: 600;
           pointer-events: none;
           margin-top: 28px;
           transition: opacity 0.2s ease;
-          box-shadow: 0 0 12px rgba(255, 150, 0, 0.2);
           display: inline-block;
+          text-align: center;
+          box-sizing: border-box;
         }
         #side.expanded ~ .sidebar-toggle .sidebar-toggle-text {
           opacity: 0.8;
@@ -406,7 +410,7 @@
         <div class="side-inner">
         <div class="mobile-side-header">
           <div class="mobile-side-handle"></div>
-          <button type="button" class="mobile-side-close" id="sidebarClose">Back to map</button>
+          <button type="button" class="mobile-side-close" id="sidebarClose">back to map</button>
         </div>
         <div class="logo-wrap">
           <pre class="logo">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
@@ -491,7 +495,7 @@
         </div>
       </div>
       <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-        <span class="sidebar-toggle-text">Filters & Settings</span>
+        <span class="sidebar-toggle-text">filters &amp; settings</span>
       </button>
     </div>
 
