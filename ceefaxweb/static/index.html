@@ -354,9 +354,15 @@
           /* Hide the long legend explanation paragraph */
           display: none;
         }
+        /* Allow detail table to show - panel will scroll if needed */
         #detail {
-          /* Link detail table is too tall for mobile without scrolling */
-          display: none !important;
+          margin-top: 6px;
+        }
+        /* When detail is visible, allow scrolling on mobile */
+        #side.expanded.has-detail {
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
         }
         table {
           font-size: 10px;
@@ -533,6 +539,8 @@
             document.body.style.overflow = 'hidden';
           } else {
             document.body.style.overflow = '';
+            // Remove has-detail class when closing
+            sidebarEl.classList.remove('has-detail');
           }
           // Resize map after transition
           setTimeout(() => {
@@ -544,6 +552,7 @@
         if (sidebarClose) {
           sidebarClose.addEventListener('click', () => {
             sidebarEl.classList.remove('expanded');
+            sidebarEl.classList.remove('has-detail');
             document.body.style.overflow = '';
             setTimeout(() => {
               map.invalidateSize();
@@ -556,6 +565,7 @@
           sidebarEl.addEventListener('click', (e) => {
             if (e.target === sidebarEl) {
               sidebarEl.classList.remove('expanded');
+              sidebarEl.classList.remove('has-detail');
               document.body.style.overflow = '';
               setTimeout(() => {
                 map.invalidateSize();
@@ -568,6 +578,7 @@
         window.addEventListener('resize', () => {
           if (window.innerWidth > 768) {
             sidebarEl.classList.remove('expanded');
+            sidebarEl.classList.remove('has-detail');
             document.body.style.overflow = '';
             map.invalidateSize();
           }
@@ -772,6 +783,10 @@
         const resp = await fetch(`/api/link?tx=${encodeURIComponent(tx)}&rx=${encodeURIComponent(rx)}&range=${encodeURIComponent(currentRange)}`);
         const d = await resp.json();
         detailBox.style.display = '';
+        // Enable scrolling on mobile when detail is shown
+        if (window.innerWidth <= 768 && sidebarEl && sidebarEl.classList.contains('expanded')) {
+          sidebarEl.classList.add('has-detail');
+        }
         const txGrid = d.tx_grid ? ` (${d.tx_grid})` : '';
         const rxGrid = d.rx_grid ? ` (${d.rx_grid})` : '';
         linkTitle.textContent = `${d.tx_callsign}${txGrid} → ${d.rx_callsign}${rxGrid}`;
