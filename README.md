@@ -1,17 +1,15 @@
-# Ceefax Station
-
 <div align="center">
 
-```
-  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
+<pre style="color: #ffd34d; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre; line-height: 1.05; margin: 0; padding: 0;">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
   ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
   ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
 ░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
 ░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀
-```
+░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
 
 </div>
+
+# Ceefax Station
 
 A modern recreation of the classic Ceefax teletext service, running on Windows with live data feeds, AX.25 packet radio transmission, and a public web tracker.
 
