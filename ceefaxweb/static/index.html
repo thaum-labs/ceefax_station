@@ -120,6 +120,9 @@
 
       /* Mobile responsive styles */
       @media (max-width: 768px) {
+        :root {
+          --tab-h: calc(70px + env(safe-area-inset-bottom));
+        }
         html, body {
           background: #0b0b0b;
           overflow-x: hidden;
@@ -143,17 +146,18 @@
           right: 0;
           height: 100vh;
           max-height: 100vh;
-          transform: translateY(calc(100% - 70px));
+          transform: translateY(calc(100% - var(--tab-h)));
           transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           border-left: none;
           border-top: none;
-          padding: 6px 8px;
-          padding-bottom: 70px;
+          padding: calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 0 calc(8px + env(safe-area-inset-left));
+          padding-bottom: var(--tab-h);
           overflow-y: hidden;
           overflow-x: hidden;
           z-index: 1000;
           box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
           border-radius: 20px 20px 0 0;
+          box-sizing: border-box;
         }
         #side.expanded {
           transform: translateY(0);
@@ -167,7 +171,7 @@
           bottom: 0;
           left: 0;
           right: 0;
-          height: 70px;
+          height: var(--tab-h);
           background: #0b0b0b;
           border: none;
           border-top: 2px solid #333;
@@ -180,8 +184,9 @@
           cursor: pointer;
           user-select: none;
           -webkit-tap-highlight-color: transparent;
-          padding: 0;
+          padding: 0 0 env(safe-area-inset-bottom) 0;
           box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+          box-sizing: border-box;
         }
         .sidebar-toggle:hover {
           background: #111;
@@ -228,6 +233,12 @@
         #side.expanded ~ .sidebar-toggle .sidebar-toggle-text {
           opacity: 0.8;
         }
+        .side-inner {
+          width: 100%;
+          max-width: 520px;
+          margin: 0 auto;
+        }
+
         .logo-wrap {
           display: none;
         }
@@ -297,9 +308,12 @@
       }
 
       @media (max-width: 480px) {
+        :root {
+          --tab-h: calc(70px + env(safe-area-inset-bottom));
+        }
         #side {
-          padding: 5px 6px;
-          padding-bottom: 70px;
+          padding: calc(5px + env(safe-area-inset-top)) calc(6px + env(safe-area-inset-right)) 0 calc(6px + env(safe-area-inset-left));
+          padding-bottom: var(--tab-h);
         }
         .row {
           margin-bottom: 5px;
@@ -333,6 +347,7 @@
     <div id="app">
       <div id="map"></div>
       <div id="side">
+        <div class="side-inner">
         <div class="logo-wrap">
           <pre class="logo">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
   ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
@@ -412,6 +427,7 @@
           <div class="line"><a href="https://github.com/thaum-labs/ceefax_station" target="_blank" rel="noopener noreferrer">Download Ceefax Station</a></div>
           <div class="line"><a href="/about" style="text-decoration:underline;">About</a> · <a href="/changelog" style="text-decoration:underline;">Changelog</a> · <span id="versionDisplay"></span></div>
           <div class="line">Created by <strong>M7TJF</strong> · Ceefax Station © <span id="year"></span></div>
+        </div>
         </div>
       </div>
       <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
