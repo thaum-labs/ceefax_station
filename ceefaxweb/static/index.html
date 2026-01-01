@@ -142,18 +142,21 @@
           left: 0;
           right: 0;
           height: 100vh;
+          max-height: 100vh;
           transform: translateY(calc(100% - 70px));
           transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           border-left: none;
           border-top: none;
           padding: 10px;
           padding-bottom: 70px;
-          max-height: 100vh;
           overflow-y: auto;
+          overflow-x: hidden;
           z-index: 1000;
           -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
           box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
           border-radius: 20px 20px 0 0;
+          overscroll-behavior: contain;
         }
         #side.expanded {
           transform: translateY(0);
@@ -395,8 +398,9 @@
       if (sidebarToggle && sidebarEl) {
         const toggleSidebar = () => {
           sidebarEl.classList.toggle('expanded');
-          // Prevent body scroll when sidebar is expanded
+          // Prevent body scroll when sidebar is expanded, but sidebar itself can scroll
           if (sidebarEl.classList.contains('expanded')) {
+            // Only prevent body scroll, sidebar will handle its own scrolling
             document.body.style.overflow = 'hidden';
           } else {
             document.body.style.overflow = '';
