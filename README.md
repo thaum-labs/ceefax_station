@@ -1,10 +1,5 @@
 <p align="center">
-<span style="color: #ffd34d; font-family: monospace; white-space: pre; display: block; line-height: 1.2;">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
-  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
-  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
-░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
-░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</span>
+  <img src="screenshots/readme-logo.png" alt="Ceefax Station" width="520" />
 </p>
 
 # Ceefax Station
