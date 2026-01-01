@@ -171,6 +171,20 @@ The web tracker is a public website that visualizes:
 
 The desktop interface features a split layout with an interactive map on the left showing station locations and transmission links, and a control panel on the right with filters, settings, and station information.
 
+## Ceefax Terminal Viewer
+
+### Screenshots
+
+![Page 000 (Start)](screenshots/ceefax-terminal/page-000.png)
+
+![TV Guide](screenshots/ceefax-terminal/page-503.png)
+
+![Football Fixtures](screenshots/ceefax-terminal/page-304.png)
+
+![London Weather](screenshots/ceefax-terminal/page-101.png)
+
+![UK Weather Map](screenshots/ceefax-terminal/page-103.png)
+
 ### Web Tracker
 
 The public web tracker is hosted at [ceefaxstation.com](https://ceefaxstation.com). Users should upload their logs to this central tracker rather than running their own servers.
