@@ -175,15 +175,43 @@ The desktop interface features a split layout with an interactive map on the lef
 
 ### Screenshots
 
-![Page 000 (Start)](screenshots/ceefax-terminal/page-000.png)
-
-![TV Guide](screenshots/ceefax-terminal/page-503.png)
-
-![Football Fixtures](screenshots/ceefax-terminal/page-304.png)
-
-![London Weather](screenshots/ceefax-terminal/page-101.png)
-
-![UK Weather Map](screenshots/ceefax-terminal/page-103.png)
+<table>
+  <tr>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-000.png">
+        <img src="screenshots/ceefax-terminal/page-000.png" width="260" alt="Page 000 (Start)" />
+      </a>
+      <br/><sub><b>Page 000</b> (Start)</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-503.png">
+        <img src="screenshots/ceefax-terminal/page-503.png" width="260" alt="TV Guide (Page 503)" />
+      </a>
+      <br/><sub><b>TV Guide</b> (Page 503)</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-304.png">
+        <img src="screenshots/ceefax-terminal/page-304.png" width="260" alt="Football Fixtures (Page 304)" />
+      </a>
+      <br/><sub><b>Football</b> (Fixtures, Page 304)</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-101.png">
+        <img src="screenshots/ceefax-terminal/page-101.png" width="260" alt="London Weather (Page 101)" />
+      </a>
+      <br/><sub><b>London</b> (Weather, Page 101)</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-103.png">
+        <img src="screenshots/ceefax-terminal/page-103.png" width="260" alt="UK Weather Map (Page 103)" />
+      </a>
+      <br/><sub><b>UK</b> (Weather map, Page 103)</sub>
+    </td>
+    <td></td>
+  </tr>
+</table>
 
 ### Web Tracker
 
