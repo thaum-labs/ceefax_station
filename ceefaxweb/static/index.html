@@ -155,14 +155,17 @@
           top: calc(env(safe-area-inset-top) + 10px);
           right: 10px;
           color: #ffd34d;
-          font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-          font-size: 14px;
-          font-weight: 700;
-          letter-spacing: 1px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0;
           opacity: 0.6;
           z-index: 1000;
           pointer-events: none;
           text-transform: uppercase;
+          white-space: pre;
+          line-height: 1.05;
+          margin: 0;
         }
         #side {
           position: fixed;
@@ -466,7 +469,12 @@
   <body>
     <div id="app">
       <div id="map">
-        <div class="mobile-map-title">CEEFAX STATION</div>
+        <pre class="mobile-map-title">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
+  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
+  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
+░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
+░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
+░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
       </div>
       <div class="mobile-link-notification" id="mobileLinkNotification">
         Reception table updated — view in panel below
