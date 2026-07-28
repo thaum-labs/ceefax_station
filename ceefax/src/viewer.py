@@ -274,6 +274,158 @@ def _load_radio_config() -> dict:
 
 
 _AUDIO_LEVEL_RE = re.compile(r"audio level[^0-9\-]*(-?\d+(?:\.\d+)?)", re.I)
+_UI_COLORS_READY = False
+
+
+def _init_ui_colors() -> tuple[int, int]:
+    """Initialize the shared Ceefax palette once per curses session."""
+    global _UI_COLORS_READY
+    if curses.has_colors():
+        if not _UI_COLORS_READY:
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)
+            curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+            curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
+            curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
+            curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+            curses.init_pair(6, curses.COLOR_BLUE, curses.COLOR_BLACK)
+            curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)
+            _UI_COLORS_READY = True
+        return (curses.color_pair(1) | curses.A_BOLD, curses.color_pair(2))
+    return (curses.A_BOLD, curses.A_NORMAL)
+
+
+def _ui_layout(stdscr: "curses._CursesWindow") -> tuple[int, int, int, int] | None:
+    """
+    Return (frame_y, frame_x, frame_height, frame_width).
+
+    Two bottom rows are always reserved for controls and status. The frame uses
+    all remaining height on 80x24 and remains centered in larger terminals.
+    """
+    max_y, max_x = stdscr.getmaxyx()
+    if max_y < 14 or max_x < PAGE_WIDTH:
+        return None
+    available_height = max_y - 2
+    frame_height = min(PAGE_HEIGHT, available_height)
+    frame_y = max((available_height - frame_height) // 2, 0)
+    frame_x = max((max_x - PAGE_WIDTH) // 2, 0)
+    return (frame_y, frame_x, frame_height, PAGE_WIDTH)
+
+
+def _safe_addstr(stdscr: "curses._CursesWindow", row: int, col: int, text: str, attr: int = 0) -> None:
+    """Draw without allowing a terminal resize race to crash the viewer."""
+    max_y, max_x = stdscr.getmaxyx()
+    if row < 0 or row >= max_y or col < 0 or col >= max_x:
+        return
+    try:
+        stdscr.addstr(row, col, text[: max(0, max_x - col - 1)], attr)
+    except curses.error:
+        pass
+
+
+def _draw_too_small(stdscr: "curses._CursesWindow") -> None:
+    stdscr.clear()
+    max_y, max_x = stdscr.getmaxyx()
+    lines = [
+        "CEEFAX STATION",
+        f"Terminal too small: {max_x}x{max_y}",
+        f"Resize to at least {PAGE_WIDTH}x14 (80x24 recommended).",
+    ]
+    start = max((max_y - len(lines)) // 2, 0)
+    for i, line in enumerate(lines):
+        _safe_addstr(stdscr, start + i, max((max_x - len(line)) // 2, 0), line, curses.A_BOLD)
+    stdscr.refresh()
+
+
+def _draw_footer(
+    stdscr: "curses._CursesWindow",
+    *,
+    status: str,
+    mode: str = "viewer",
+    page_entry: str = "",
+    notice: str = "",
+) -> None:
+    """Draw a persistent responsive controls row and reversed status row."""
+    max_y, max_x = stdscr.getmaxyx()
+    if max_y < 2:
+        return
+    _init_ui_colors()
+
+    if mode == "viewer":
+        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  F5: RELOAD  ESC: EXIT"
+    elif mode == "rx":
+        controls = "LEFT/RIGHT: RECEIVED PAGES  3 DIGITS: PAGE  ESC: RETURN"
+    else:
+        controls = "ESC: CANCEL / RETURN"
+    if max_x < len(controls) + 2 and mode in ("viewer", "rx"):
+        controls = (
+            "3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  ESC: EXIT"
+            if mode == "viewer"
+            else "LEFT/RIGHT: PAGES  3 DIGITS: PAGE  ESC: RETURN"
+        )
+
+    controls_attr = curses.color_pair(7) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+    _safe_addstr(stdscr, max_y - 2, 0, " " * max(max_x - 1, 0))
+    _safe_addstr(stdscr, max_y - 2, max((max_x - 1 - len(controls)) // 2, 0), controls, controls_attr)
+
+    detail = notice
+    if page_entry:
+        detail = f"PAGE {page_entry.ljust(3, '_')}  Type three digits"
+    status_text = detail or status
+    status_text = status_text[: max(max_x - 1, 0)]
+    _safe_addstr(stdscr, max_y - 1, 0, " " * max(max_x - 1, 0), curses.A_REVERSE)
+    _safe_addstr(
+        stdscr,
+        max_y - 1,
+        max((max_x - 1 - len(status_text)) // 2, 0),
+        status_text,
+        curses.A_REVERSE,
+    )
+
+
+def _find_page_index(pages: List[Page], number: str) -> int | None:
+    """Return the first subpage matching a three-digit page number."""
+    normalized = (number or "").strip().zfill(3)
+    for index, page in enumerate(pages):
+        if page.page == normalized:
+            return index
+    return None
+
+
+def _page_entry_result(pages: List[Page], digits: str) -> tuple[int | None, str]:
+    """Resolve a three-digit page entry into an index and user-facing notice."""
+    if len(digits) != 3 or not digits.isdigit():
+        return (None, "Enter a three-digit page number")
+    index = _find_page_index(pages, digits)
+    if index is None:
+        return (None, f"PAGE {digits} NOT FOUND")
+    return (index, f"PAGE {digits}")
+
+
+def _handle_page_key(
+    ch: int,
+    pages: List[Page],
+    current_index: int,
+    digits: str,
+) -> tuple[int, str, str, bool]:
+    """
+    Handle one numeric page-entry key.
+
+    Returns (index, digits, notice, handled). Entry resolves immediately after
+    three digits, matching classic teletext behavior.
+    """
+    if ord("0") <= ch <= ord("9"):
+        if len(digits) >= 3:
+            digits = ""
+        digits += chr(ch)
+        if len(digits) == 3:
+            result, notice = _page_entry_result(pages, digits)
+            return (result if result is not None else current_index, "", notice, True)
+        return (current_index, digits, "", True)
+    if ch in (curses.KEY_BACKSPACE, 8, 127) and digits:
+        return (current_index, digits[:-1], "", True)
+    return (current_index, digits, "", False)
 
 
 def _format_progress_bar(width: int, percent: float) -> str:
@@ -810,239 +962,99 @@ def _draw_page(
     index: int,
     total: int,
     callsign_override: str | None = None,
+    *,
+    page_entry: str = "",
+    notice: str = "",
+    footer_mode: str = "viewer",
 ) -> None:
+    """Render a responsive Ceefax page with persistent navigation chrome."""
     stdscr.clear()
-    max_y, max_x = stdscr.getmaxyx()
-
-    # Require at least PAGE_WIDTH x PAGE_HEIGHT area
-    if max_y < PAGE_HEIGHT or max_x < PAGE_WIDTH:
-        msg = f"Terminal too small. Need at least {PAGE_WIDTH}x{PAGE_HEIGHT}."
-        stdscr.addstr(0, 0, msg[: max_x - 1])
-        stdscr.refresh()
+    layout = _ui_layout(stdscr)
+    if layout is None:
+        _draw_too_small(stdscr)
         return
 
-    # Center the frame
-    offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
-    offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
-
-    # Build Ceefax-style header line (ignore matrix[0], construct our own)
-    # Example: "CEEFAX 100 NEWS HEADLINES     12:34 06 DEC"
+    offset_y, offset_x, frame_height, frame_width = layout
+    frame_bottom = offset_y + frame_height - 1
+    header_attr, body_attr = _init_ui_colors()
     now = datetime.now()
-    clock = now.strftime("%H:%M %d %b").upper()  # e.g. "12:34 06 DEC"
-    title = (page.title or "").upper()[:20]
-    page_num = (page.page or "").rjust(3)
-
-    # Base header text without the clock; we'll overlay the time at the
-    # far right so it stays aligned to the edge of the blue bar.
-    base_header = f"CEEFAX {page_num} {title}"
-    header_text = base_header[:PAGE_WIDTH].ljust(PAGE_WIDTH)
-
-    # Colours
-    if curses.has_colors():
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)   # header
-        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # body (classic Ceefax yellow text)
-        curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)     # RED
-        curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)   # GREEN
-        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # YELLOW
-        curses.init_pair(6, curses.COLOR_BLUE, curses.COLOR_BLACK)    # BLUE
-
-        header_attr = curses.color_pair(1) | curses.A_BOLD
-        body_attr = curses.color_pair(2)
-    else:
-        header_attr = curses.A_BOLD
-        body_attr = curses.A_NORMAL
-
-    # Header (row 0)
-    stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
-
-    # "P<page>" indicator at absolute top-left (outside centred frame),
-    # similar to classic Ceefax layout.
-    p_code = f"P{page.page}".ljust(4)
-    stdscr.addstr(offset_y, 0, p_code, header_attr)
-
-    # Get call sign first to calculate positions
+    clock = now.strftime("%H:%M %d %b").upper()
     callsign = (callsign_override or "").strip()
     if not callsign:
-        try:
-            from pathlib import Path
-            import json
+        callsign = str(_load_radio_config().get("callsign") or "").strip().upper()
 
-            root = Path(__file__).resolve().parent.parent
-            config_file = root / "radio_config.json"
-            if config_file.exists():
-                config_data = json.loads(config_file.read_text(encoding="utf-8"))
-                callsign = config_data.get("callsign", "")
-        except Exception:  # noqa: BLE001
-            pass
-    
-    # Calculate positions: call sign (if present) then clock, both right-aligned
-    clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
-    
-    if callsign:
-        # Place call sign to the left of the clock on the same header row
-        # Format: "CALLSIGN  12:34 06 DEC"
-        callsign_x = clock_x - len(callsign) - 2  # 2 spaces between callsign and clock
-        if callsign_x >= offset_x:
-            stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
-            stdscr.addstr(offset_y, callsign_x + len(callsign), "  ", header_attr)  # Add spacing
-        else:
-            # If callsign is too long, place it before clock with minimal spacing
-            callsign_x = max(offset_x, clock_x - len(callsign) - 1)
-            stdscr.addstr(offset_y, callsign_x, callsign[:clock_x - callsign_x - 1], header_attr)
-    
-    # Overlay clock at top-right corner of the blue header bar
-    stdscr.addstr(offset_y, clock_x, clock, header_attr)
+    title = (page.title or "").upper()[:18]
+    header_left = f"CEEFAX {page.page.rjust(3)} {title}"
+    header_right = f"{callsign}  {clock}" if callsign else clock
+    header = header_left[:frame_width].ljust(frame_width)
+    if len(header_right) < frame_width:
+        start = frame_width - len(header_right)
+        header = header[:start] + header_right
+    _safe_addstr(stdscr, offset_y, offset_x, header[:frame_width], header_attr)
 
-    is_start_page = (page.page == "000")
+    is_start_page = page.page == "000"
+    content_lines = matrix[2:PAGE_HEIGHT]
+    start_row = offset_y + 1
 
-    # ASCII-art "CEEFAX STATION" logo area below header.
-    if curses.has_colors():
-        art_attr = header_attr  # yellow on blue, bold
+    if is_start_page:
+        border_attr = body_attr | curses.A_BOLD
+        top_line = "+" + ("-" * (frame_width - 2)) + "+"
+        _safe_addstr(stdscr, start_row, offset_x, top_line, border_attr)
+        _safe_addstr(stdscr, frame_bottom, offset_x, top_line, border_attr)
+        for row in range(start_row + 1, frame_bottom):
+            _safe_addstr(stdscr, row, offset_x, "|", border_attr)
+            _safe_addstr(stdscr, row, offset_x + frame_width - 1, "|", border_attr)
+
+        inner_width = frame_width - 2
+        row = start_row + 1
+        for line in content_lines:
+            if row >= frame_bottom:
+                break
+            raw = line or ""
+            if "{{users callsign}}" in raw:
+                raw = f"{callsign} TELETEX SERVICE".strip() if callsign else "TELETEX SERVICE"
+            text = raw.strip()
+            rendered = text[:inner_width].center(inner_width) if text else " " * inner_width
+            _safe_addstr(stdscr, row, offset_x + 1, rendered, body_attr | curses.A_BOLD)
+            row += 1
     else:
-        art_attr = curses.A_BOLD
-
-    # Keep the header area compact to maximize content space.
-    # For the start page, skip the extra logo so the splash sits in the middle.
-    ceefax_art = [] if is_start_page else ["CEEFAX STATION".center(PAGE_WIDTH)]
-
-    # ASCII art starts on row 1 (below header)
-    art_row = offset_y + 1
-    for i, line in enumerate(ceefax_art):
-        row = art_row + i
-        if row >= offset_y + PAGE_HEIGHT:
-            break
-        stdscr.addstr(
+        row = start_row
+        _safe_addstr(
+            stdscr,
             row,
             offset_x,
-            line[:PAGE_WIDTH].ljust(PAGE_WIDTH),
-            art_attr,
+            "CEEFAX STATION".center(frame_width),
+            header_attr,
         )
+        row += 1
+        if content_lines:
+            heading = (content_lines[0] or "")[:frame_width]
+            _safe_addstr(stdscr, row, offset_x, heading, body_attr | curses.A_BOLD)
+            row += 1
 
-    # Remaining lines: show from matrix[1:] (timestamp + content),
-    # formatted with a bold heading and a yellow rule beneath it.
-    start_row = art_row + len(ceefax_art)
+            def _is_sep(line: str) -> bool:
+                stripped = line.strip()
+                return bool(stripped) and all(ch == "-" for ch in stripped)
 
-    # Treat matrix[2:] (compiled content rows) as on-screen content.
-    # We deliberately skip the timestamp row (matrix[1]) so that the
-    # first content line appears directly under the logo area.
-    content_lines = matrix[2:PAGE_HEIGHT]
-
-    current_row = start_row
-
-    if content_lines:
-        # Special-case start page: render content as-is (no injected rule/heading),
-        # and substitute the callsign placeholder.
-        if is_start_page:
-            # Draw a border around the start page body (below the blue header).
-            # We keep the header untouched and render the page content inside the box.
-            border_attr = body_attr | curses.A_BOLD
-            border_top = start_row
-            border_bottom = offset_y + PAGE_HEIGHT - 1
-            inner_x = offset_x + 1
-            inner_width = max(PAGE_WIDTH - 2, 1)
-
-            if border_bottom > border_top:
-                top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
-                stdscr.addstr(border_top, offset_x, top_line, border_attr)
-                stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
-
-                for row in range(border_top + 1, border_bottom):
-                    stdscr.addstr(row, offset_x, "|", border_attr)
-                    stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
-
-            # Start rendering on the first row inside the border.
-            current_row = border_top + 1
-
-            for line in content_lines:
-                if current_row >= offset_y + PAGE_HEIGHT:
+            if not any(_is_sep(line) for line in content_lines[:3]) and row <= frame_bottom:
+                _safe_addstr(stdscr, row, offset_x, "-" * frame_width, body_attr)
+                row += 1
+            for line in content_lines[1:]:
+                if row > frame_bottom:
                     break
-                if current_row >= border_bottom:
-                    break
+                _safe_addstr(stdscr, row, offset_x, (line or "")[:frame_width], body_attr)
+                row += 1
 
-                raw = (line or "")
-                if "{{users callsign}}" in raw:
-                    cs = (callsign or "").strip()
-                    repl = f"{cs} TELETEX SERVICE".strip() if cs else "TELETEX SERVICE"
-                    raw = repl
-
-                # Center everything on the start page (including instructions).
-                txt = raw.strip()
-                rendered = ("" if not txt else txt[:inner_width].center(inner_width))
-
-                stdscr.addstr(current_row, inner_x, rendered, body_attr | curses.A_BOLD)
-                current_row += 1
-            stdscr.refresh()
-            return
-
-        # If the page already draws its own separator near the top (e.g. ASCII art
-        # panels), don't inject an extra rule line in the viewer.
-        def _is_sep(line: str) -> bool:
-            s = line.strip()
-            return bool(s) and all(ch == "-" for ch in s)
-
-        has_own_rule = any(_is_sep(l) for l in content_lines[:3])
-
-        # First content line as a bold heading.
-        heading = content_lines[0]
-        stdscr.addstr(current_row, offset_x, heading[:PAGE_WIDTH], body_attr | curses.A_BOLD)
-        current_row += 1
-
-        # Optional injected rule (only if the page doesn't already have one).
-        if not has_own_rule and current_row < offset_y + PAGE_HEIGHT:
-            rule_text = "-" * PAGE_WIDTH
-            if curses.has_colors():
-                # Keep separators uniform: always yellow (same as body text).
-                rule_attr = body_attr
-            else:
-                rule_attr = curses.A_UNDERLINE
-            stdscr.addstr(current_row, offset_x, rule_text[:PAGE_WIDTH], rule_attr)
-            current_row += 1
-
-        # Remaining content
-        for line in content_lines[1:]:
-            if current_row >= offset_y + PAGE_HEIGHT:
-                break
-            stdscr.addstr(current_row, offset_x, line[:PAGE_WIDTH], body_attr)
-            current_row += 1
-
-    # Controls bar one line above bottom (replaces Fastext)
-    controls_y = max_y - 2
-    if controls_y > offset_y + PAGE_HEIGHT:
-        # Center the control labels instead of left-aligning.
-        if curses.has_colors():
-            labels = [
-                (" r: RX ", curses.color_pair(3) | curses.A_BOLD),      # RED
-                (" t: TX ", curses.color_pair(4) | curses.A_BOLD),      # GREEN
-                (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD), # YELLOW
-                (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),  # BLUE
-            ]
-            total_len = sum(len(text) for text, _ in labels)
-            x = max((max_x - 1 - total_len) // 2, 0)
-            for text, attr in labels:
-                if x >= max_x - 1:
-                    break
-                stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
-                x += len(text)
-        else:
-            line = "r: RX  t: TX  F5: Reload  ESC: Exit"
-            x = max((max_x - 1 - len(line)) // 2, 0)
-            stdscr.addstr(controls_y, x, line[: max_x - 1 - x])
-
-    # Status line at bottom, centred horizontally to match header
-    status = f"Page {page.page_id}  ({index + 1}/{total})  n/p: next/prev  q: quit"
-    status_line = status[: max_x - 1]
-    pad_width = max_x - 1
-    start_x = max((pad_width - len(status_line)) // 2, 0)
-
-    stdscr.attron(curses.A_REVERSE)
-    # Clear the whole status row
-    stdscr.addstr(max_y - 1, 0, " " * pad_width)
-    # Draw centred status text
-    stdscr.addstr(max_y - 1, start_x, status_line)
-    stdscr.attroff(curses.A_REVERSE)
-
+    status = f"PAGE {page.page_id}  {index + 1}/{total}"
+    if footer_mode == "rx":
+        status = f"RECEIVE MODE  PAGE {page.page_id}  {index + 1}/{total}"
+    _draw_footer(
+        stdscr,
+        status=status,
+        mode=footer_mode,
+        page_entry=page_entry,
+        notice=notice,
+    )
     stdscr.refresh()
 
 
@@ -1089,385 +1101,262 @@ def _draw_ascii_progress_bar(stdscr: "curses._CursesWindow", row: int, col: int,
         pass  # Ignore if out of bounds
 
 
-def _draw_tx_screen(stdscr: "curses._CursesWindow", status: str, progress: float = 0.0, progress_label: str = "", countdown: str = "", message: str = "", show_logo: bool = False) -> None:
-    """
-    Draw TX mode screen styled like a Ceefax page (centered, with header bar).
-    
-    Args:
-        show_logo: If True, display TX logo when transmitting
-    """
+def _draw_mode_screen(
+    stdscr: "curses._CursesWindow",
+    *,
+    mode: str,
+    title: str,
+    status: str,
+    fields: list[tuple[str, str]] | None = None,
+    progress: float | None = None,
+    progress_label: str = "",
+    countdown: str = "",
+    message: str = "",
+    footer_status: str = "",
+    footer_mode: str | None = None,
+) -> None:
+    """Shared responsive status panel for TX and RX workflows."""
     stdscr.clear()
-    max_y, max_x = stdscr.getmaxyx()
-    
-    # Require at least PAGE_WIDTH x PAGE_HEIGHT area
-    if max_y < PAGE_HEIGHT or max_x < PAGE_WIDTH:
-        msg = f"Terminal too small. Need at least {PAGE_WIDTH}x{PAGE_HEIGHT}."
-        stdscr.addstr(0, 0, msg[: max_x - 1])
-        stdscr.refresh()
+    layout = _ui_layout(stdscr)
+    if layout is None:
+        _draw_too_small(stdscr)
         return
-    
-    # Center the frame (same as regular pages)
-    offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
-    offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
-    
-    # Build Ceefax-style header line
-    now = datetime.now()
-    clock = now.strftime("%H:%M %d %b").upper()
-    page_num = "TX "
-    title = "TRANSMIT MODE"
-    base_header = f"CEEFAX {page_num} {title}"
-    header_text = base_header[:PAGE_WIDTH].ljust(PAGE_WIDTH)
-    
-    # Colors (same as regular pages)
-    if curses.has_colors():
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)   # header
-        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # body
-        header_attr = curses.color_pair(1) | curses.A_BOLD
-        body_attr = curses.color_pair(2)
-    else:
-        header_attr = curses.A_BOLD
-        body_attr = curses.A_NORMAL
-    
-    # Header (row 0) - yellow on blue
-    stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
-    
-    # Clock at top-right
-    clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
-    stdscr.addstr(offset_y, clock_x, clock, header_attr)
-    
-    # Get callsign for header if available
-    callsign = ""
-    try:
-        from pathlib import Path
-        import json
-        root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
-        if config_file.exists():
-            config_data = json.loads(config_file.read_text(encoding="utf-8"))
-            callsign = config_data.get("callsign", "").strip()
-    except Exception:  # noqa: BLE001
-        pass
-    
-    if callsign:
-        callsign_x = clock_x - len(callsign) - 2
-        if callsign_x >= offset_x:
-            stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
-            stdscr.addstr(offset_y, callsign_x + len(callsign), "  ", header_attr)
-    
-    # Content area (inside a border like page 000)
-    border_top = offset_y + 1
-    border_bottom = offset_y + PAGE_HEIGHT - 1
-    inner_x = offset_x + 1
-    inner_width = max(PAGE_WIDTH - 2, 1)
-    
-    # Draw border
-    border_attr = body_attr | curses.A_BOLD
-    top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
-    stdscr.addstr(border_top, offset_x, top_line, border_attr)
-    stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
-    for row in range(border_top + 1, border_bottom):
-        stdscr.addstr(row, offset_x, "|", border_attr)
-        stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
-    
-    # Content lines (centered like page 000)
-    current_row = border_top + 1
-    row = current_row
-    
-    # Add TX logo if transmitting
-    if show_logo:
-        tx_logo = [
-            "░▀█▀░█░█",
-            "░░█░░▄▀▄",
-            "░░▀░░▀░▀",
-        ]
-        row += 2
-        for logo_line in tx_logo:
-            if row >= border_bottom - 8:
-                break
-            logo_centered = logo_line.center(inner_width)
-            stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
-            row += 1
-        row += 2
-    
-    # Add status
-    if status:
-        row += 1
-        status_text = status.upper().center(inner_width)
-        stdscr.addstr(row, inner_x, status_text[:inner_width], body_attr | curses.A_BOLD)
-        row += 2
-    
-    # Add progress bar (centered, ensure it fits within inner_width)
-    if progress_label:
-        row += 1
-        # Calculate the full progress bar text to determine actual width
-        # Progress bar format: "Label [====>     ] XX%"
-        label_len = len(progress_label)
-        # Try different bar widths to find one that fits
-        bar_width = min(40, inner_width - label_len - 10)  # Reserve space for label + brackets + % + spacing
-        bar_width = max(10, bar_width)  # Minimum bar width
-        
-        # Build a sample to get exact length
-        sample_bar = "[" + "=" * bar_width + "]"
-        sample_text = f"{progress_label} {sample_bar} 100%"
-        
-        # If it's too long, reduce bar width
-        while len(sample_text) > inner_width and bar_width > 10:
-            bar_width -= 1
-            sample_bar = "[" + "=" * bar_width + "]"
-            sample_text = f"{progress_label} {sample_bar} 100%"
-        
-        # Center the entire progress bar text within inner_width
-        full_text_len = len(sample_text)
-        bar_x = inner_x + (inner_width - full_text_len) // 2
-        # Ensure bar_x doesn't go outside inner area
-        bar_x = max(inner_x, min(bar_x, inner_x + inner_width - full_text_len))
-        _draw_ascii_progress_bar(stdscr, row, bar_x, bar_width, progress, progress_label)
-        row += 2
-    
-    # Add countdown if present
-    if countdown:
-        countdown_text = f"NEXT TRANSMISSION IN: {countdown}"
-        countdown_centered = countdown_text.center(inner_width)
-        stdscr.addstr(row, inner_x, countdown_centered[:inner_width], body_attr | curses.A_BOLD)
-        row += 2
-    
-    # Add message if present (word-wrapped and centered)
-    if message:
-        row += 1
-        # Word wrap message to fit inner width
-        words = message.split()
-        msg_lines = []
-        current_line = ""
-        for word in words:
-            if not current_line:
-                current_line = word
-            elif len(current_line) + 1 + len(word) <= inner_width:
-                current_line += " " + word
-            else:
-                msg_lines.append(current_line)
-                current_line = word
-        if current_line:
-            msg_lines.append(current_line)
-        
-        for msg_line in msg_lines:
-            if row >= border_bottom - 3:
-                break
-            msg_centered = msg_line.center(inner_width)
-            stdscr.addstr(row, inner_x, msg_centered[:inner_width], body_attr | curses.A_BOLD)
-            row += 1
-        row += 1
-    
-    # Add ESC instruction at bottom
-    if row < border_bottom - 1:
-        esc_text = "PRESS ESC TO RETURN TO VIEWER"
-        esc_centered = esc_text.center(inner_width)
-        stdscr.addstr(border_bottom - 2, inner_x, esc_centered[:inner_width], body_attr | curses.A_BOLD)
-    
-    # Controls bar (same as regular pages)
-    controls_y = max_y - 2
-    if controls_y > offset_y + PAGE_HEIGHT:
-        if curses.has_colors():
-            labels = [
-                (" r: RX ", curses.color_pair(3) | curses.A_BOLD),      # RED
-                (" t: TX ", curses.color_pair(4) | curses.A_BOLD),      # GREEN
-                (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD), # YELLOW
-                (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),  # BLUE
-            ]
-            total_len = sum(len(text) for text, _ in labels)
-            x = max((max_x - 1 - total_len) // 2, 0)
-            for text, attr in labels:
-                if x >= max_x - 1:
-                    break
-                stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
-                x += len(text)
-        else:
-            line = "r: RX  t: TX  F5: Reload  ESC: Exit"
-            x = max((max_x - 1 - len(line)) // 2, 0)
-            stdscr.addstr(controls_y, x, line[: max_x - 1 - x])
-    
-    # Status line at bottom (same as regular pages)
-    status_line_text = "TRANSMIT MODE  Press ESC to return"
-    status_line = status_line_text[: max_x - 1]
-    pad_width = max_x - 1
-    start_x = max((pad_width - len(status_line)) // 2, 0)
-    
-    stdscr.attron(curses.A_REVERSE)
-    stdscr.addstr(max_y - 1, 0, " " * pad_width)
-    stdscr.addstr(max_y - 1, start_x, status_line)
-    stdscr.attroff(curses.A_REVERSE)
-    
-    stdscr.refresh()
+    offset_y, offset_x, frame_height, frame_width = layout
+    frame_bottom = offset_y + frame_height - 1
+    header_attr, body_attr = _init_ui_colors()
+    clock = datetime.now().strftime("%H:%M %d %b").upper()
+    callsign = str(_load_radio_config().get("callsign") or "").strip().upper()
+    header_left = f"CEEFAX {mode}  {title.upper()}"
+    header_right = f"{callsign}  {clock}" if callsign else clock
+    header = header_left[:frame_width].ljust(frame_width)
+    if len(header_right) < frame_width:
+        start = frame_width - len(header_right)
+        header = header[:start] + header_right
+    _safe_addstr(stdscr, offset_y, offset_x, header[:frame_width], header_attr)
 
-
-def _draw_rx_screen(stdscr: "curses._CursesWindow", status: str = "", message: str = "") -> None:
-    """
-    Draw RX mode screen styled like a Ceefax page (centered, with header bar and RX logo).
-    """
-    stdscr.clear()
-    max_y, max_x = stdscr.getmaxyx()
-    
-    # Require at least PAGE_WIDTH x PAGE_HEIGHT area
-    if max_y < PAGE_HEIGHT or max_x < PAGE_WIDTH:
-        msg = f"Terminal too small. Need at least {PAGE_WIDTH}x{PAGE_HEIGHT}."
-        stdscr.addstr(0, 0, msg[: max_x - 1])
-        stdscr.refresh()
-        return
-    
-    # Center the frame (same as regular pages)
-    offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
-    offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
-    
-    # Build Ceefax-style header line
-    now = datetime.now()
-    clock = now.strftime("%H:%M %d %b").upper()
-    page_num = "RX "
-    title = "RECEIVE MODE"
-    base_header = f"CEEFAX {page_num} {title}"
-    header_text = base_header[:PAGE_WIDTH].ljust(PAGE_WIDTH)
-    
-    # Colors (same as regular pages)
-    if curses.has_colors():
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)   # header
-        curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # body
-        header_attr = curses.color_pair(1) | curses.A_BOLD
-        body_attr = curses.color_pair(2)
-    else:
-        header_attr = curses.A_BOLD
-        body_attr = curses.A_NORMAL
-    
-    # Header (row 0) - yellow on blue
-    stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
-    
-    # Clock at top-right
-    clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
-    stdscr.addstr(offset_y, clock_x, clock, header_attr)
-    
-    # Get callsign for header if available
-    callsign = ""
-    try:
-        from pathlib import Path
-        import json
-        root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
-        if config_file.exists():
-            config_data = json.loads(config_file.read_text(encoding="utf-8"))
-            callsign = config_data.get("callsign", "").strip()
-    except Exception:  # noqa: BLE001
-        pass
-    
-    if callsign:
-        callsign_x = clock_x - len(callsign) - 2
-        if callsign_x >= offset_x:
-            stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
-            stdscr.addstr(offset_y, callsign_x + len(callsign), "  ", header_attr)
-    
-    # Content area (inside a border like page 000)
     border_top = offset_y + 1
-    border_bottom = offset_y + PAGE_HEIGHT - 1
-    inner_x = offset_x + 1
-    inner_width = max(PAGE_WIDTH - 2, 1)
-    
-    # Draw border
+    top_line = "+" + "-" * (frame_width - 2) + "+"
     border_attr = body_attr | curses.A_BOLD
-    top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
-    stdscr.addstr(border_top, offset_x, top_line, border_attr)
-    stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
-    for row in range(border_top + 1, border_bottom):
-        stdscr.addstr(row, offset_x, "|", border_attr)
-        stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
-    
-    # Content lines (centered like page 000)
-    row = border_top + 1
-    
-    # Add RX logo
-    rx_logo = [
-        "░█▀▄░█░█",
-        "░█▀▄░▄▀▄",
-        "░▀░▀░▀░▀",
-    ]
+    _safe_addstr(stdscr, border_top, offset_x, top_line, border_attr)
+    _safe_addstr(stdscr, frame_bottom, offset_x, top_line, border_attr)
+    for row in range(border_top + 1, frame_bottom):
+        _safe_addstr(stdscr, row, offset_x, "|", border_attr)
+        _safe_addstr(stdscr, row, offset_x + frame_width - 1, "|", border_attr)
+
+    inner_x = offset_x + 2
+    inner_width = frame_width - 4
+    row = border_top + 2
+    # ASCII-only logo renders reliably in Windows PowerShell and Terminal.
+    logo = f"[ {mode} ]"
+    _safe_addstr(stdscr, row, inner_x, logo.center(inner_width), body_attr | curses.A_BOLD)
     row += 2
-    for logo_line in rx_logo:
-        if row >= border_bottom - 8:
+    _safe_addstr(stdscr, row, inner_x, status.upper().center(inner_width), body_attr | curses.A_BOLD)
+    row += 2
+
+    for label, value in fields or []:
+        if row >= frame_bottom - 3:
             break
-        logo_centered = logo_line.center(inner_width)
-        stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
+        field = f"{label[:14].ljust(14)} {value}"
+        _safe_addstr(stdscr, row, inner_x, field[:inner_width], body_attr)
         row += 1
-    row += 2
-    
-    # Add status if present
-    if status:
-        status_text = status.upper().center(inner_width)
-        stdscr.addstr(row, inner_x, status_text[:inner_width], body_attr | curses.A_BOLD)
-        row += 2
-    
-    # Add message if present (word-wrapped and centered)
-    if message:
+
+    if progress is not None and row < frame_bottom - 3:
+        row += 1
+        width = max(10, min(28, inner_width - len(progress_label) - 7))
+        text = f"{progress_label} {_format_progress_bar(width, progress)} {int(max(0, min(1, progress)) * 100)}%"
+        _safe_addstr(stdscr, row, inner_x, text[:inner_width], body_attr | curses.A_BOLD)
+        row += 1
+
+    if countdown and row < frame_bottom - 2:
+        _safe_addstr(stdscr, row, inner_x, f"Next transmission  {countdown}"[:inner_width], body_attr)
+        row += 1
+    if message and row < frame_bottom - 1:
         words = message.split()
-        msg_lines = []
-        current_line = ""
+        line = ""
         for word in words:
-            if not current_line:
-                current_line = word
-            elif len(current_line) + 1 + len(word) <= inner_width:
-                current_line += " " + word
+            candidate = word if not line else f"{line} {word}"
+            if len(candidate) <= inner_width:
+                line = candidate
             else:
-                msg_lines.append(current_line)
-                current_line = word
-        if current_line:
-            msg_lines.append(current_line)
-        
-        for msg_line in msg_lines:
-            if row >= border_bottom - 3:
-                break
-            msg_centered = msg_line.center(inner_width)
-            stdscr.addstr(row, inner_x, msg_centered[:inner_width], body_attr | curses.A_BOLD)
-            row += 1
-        row += 1
-    
-    # Add ESC instruction at bottom
-    if row < border_bottom - 1:
-        esc_text = "PRESS ESC TO RETURN TO VIEWER"
-        esc_centered = esc_text.center(inner_width)
-        stdscr.addstr(border_bottom - 2, inner_x, esc_centered[:inner_width], body_attr | curses.A_BOLD)
-    
-    # Controls bar (same as regular pages)
-    controls_y = max_y - 2
-    if controls_y > offset_y + PAGE_HEIGHT:
-        if curses.has_colors():
-            labels = [
-                (" r: RX ", curses.color_pair(3) | curses.A_BOLD),      # RED
-                (" t: TX ", curses.color_pair(4) | curses.A_BOLD),      # GREEN
-                (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD), # YELLOW
-                (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),  # BLUE
-            ]
-            total_len = sum(len(text) for text, _ in labels)
-            x = max((max_x - 1 - total_len) // 2, 0)
-            for text, attr in labels:
-                if x >= max_x - 1:
+                _safe_addstr(stdscr, row, inner_x, line.center(inner_width), body_attr)
+                row += 1
+                if row >= frame_bottom:
                     break
-                stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
-                x += len(text)
-        else:
-            line = "r: RX  t: TX  F5: Reload  ESC: Exit"
-            x = max((max_x - 1 - len(line)) // 2, 0)
-            stdscr.addstr(controls_y, x, line[: max_x - 1 - x])
-    
-    # Status line at bottom (same as regular pages)
-    status_line_text = "RECEIVE MODE  Press ESC to return"
-    status_line = status_line_text[: max_x - 1]
-    pad_width = max_x - 1
-    start_x = max((pad_width - len(status_line)) // 2, 0)
-    
-    stdscr.attron(curses.A_REVERSE)
-    stdscr.addstr(max_y - 1, 0, " " * pad_width)
-    stdscr.addstr(max_y - 1, start_x, status_line)
-    stdscr.attroff(curses.A_REVERSE)
-    
+                line = word
+        if line and row < frame_bottom:
+            _safe_addstr(stdscr, row, inner_x, line.center(inner_width), body_attr)
+
+    _draw_footer(
+        stdscr,
+        status=footer_status or f"{title.upper()}  ESC: RETURN",
+        mode=footer_mode or ("rx" if mode == "RX" else "tx"),
+    )
     stdscr.refresh()
+
+
+def _draw_tx_screen(
+    stdscr: "curses._CursesWindow",
+    status: str,
+    progress: float = 0.0,
+    progress_label: str = "",
+    countdown: str = "",
+    message: str = "",
+    show_logo: bool = False,
+    *,
+    fields: list[tuple[str, str]] | None = None,
+) -> None:
+    if fields is None:
+        radio = _load_radio_config()
+        fields = [
+            ("Callsign", str(radio.get("callsign") or "Not configured")),
+            ("Frequency", str(radio.get("frequency") or "Not configured")),
+        ]
+    _draw_mode_screen(
+        stdscr,
+        mode="TX",
+        title="Transmit mode",
+        status=status,
+        fields=fields,
+        progress=progress if progress_label else None,
+        progress_label=progress_label,
+        countdown=countdown,
+        message=message,
+        footer_status="TRANSMIT MODE  ENTER: START  ESC: RETURN",
+    )
+
+
+def _rx_status_fields(stats: dict | None, *, source: str = "", device: str = "") -> list[tuple[str, str]]:
+    """Summarize live decoder state for the RX dashboard."""
+    stats = stats or {}
+    pages = stats.get("pages_decoded") or {}
+    progress = stats.get("page_progress") or {}
+    partial = 0
+    for value in progress.values() if isinstance(progress, dict) else []:
+        try:
+            total = int(value.get("total") or 0)
+            got = len(set(value.get("got") or []))
+            if total > got > 0:
+                partial += 1
+        except Exception:  # noqa: BLE001
+            continue
+    signal = stats.get("rx_db")
+    signal_text = f"{float(signal):.1f} dB" if signal is not None else "Waiting"
+    station = str(stats.get("station_callsign") or "-")
+    return [
+        ("Source", source or "Live audio"),
+        ("Audio", device or "Default device"),
+        ("Signal", signal_text),
+        ("Frames", str(stats.get("cfx_frames") or 0)),
+        ("Pages", f"{len(pages)} complete / {partial} partial"),
+        ("Last station", station),
+    ]
+
+
+def _rx_footer_status(stats: dict | None) -> str:
+    """Compact decoder telemetry for the footer shown under received pages."""
+    stats = stats or {}
+    signal = stats.get("rx_db")
+    signal_text = f"{float(signal):.1f} dB" if signal is not None else "-- dB"
+    pages = len(stats.get("pages_decoded") or {})
+    frames = int(stats.get("cfx_frames") or 0)
+    station = str(stats.get("station_callsign") or "-")
+    return f"RX {signal_text}  {frames} FRAMES  {pages} PAGES  LAST {station}"
+
+
+def _draw_rx_screen(
+    stdscr: "curses._CursesWindow",
+    status: str = "",
+    message: str = "",
+    *,
+    stats: dict | None = None,
+    source: str = "Live audio",
+    device: str = "",
+) -> None:
+    _draw_mode_screen(
+        stdscr,
+        mode="RX",
+        title="Receive mode",
+        status=status or "Listening",
+        fields=_rx_status_fields(stats, source=source, device=device),
+        message=message,
+        footer_status="RECEIVE MODE  ESC: RETURN",
+    )
+
+
+def _edit_text_value(value: str, ch: int, *, max_length: int = 12) -> tuple[str, bool, bool]:
+    """Apply one curses key to a short text value; returns value, submit, cancel."""
+    if ch == 27:
+        return (value, False, True)
+    if ch in (10, 13, curses.KEY_ENTER):
+        return (value, True, False)
+    if ch in (curses.KEY_BACKSPACE, 8, 127):
+        return (value[:-1], False, False)
+    if 0 <= ch <= 255:
+        char = chr(ch).upper()
+        if (char.isalnum() or char in "-/") and len(value) < max_length:
+            return (value + char, False, False)
+    return (value, False, False)
+
+
+def _prompt_callsign_in_tui(stdscr: "curses._CursesWindow") -> str | None:
+    """Prompt for a callsign without tearing down curses / flashing PowerShell."""
+    value = ""
+    stdscr.nodelay(False)
+    while True:
+        _draw_mode_screen(
+            stdscr,
+            mode="TX",
+            title="Station setup",
+            status="Callsign required",
+            fields=[("Callsign", (value + "_") or "_")],
+            message="Enter your amateur radio callsign.",
+            footer_status="TYPE CALLSIGN  ENTER: SAVE  ESC: CANCEL",
+        )
+        ch = stdscr.getch()
+        value, submit, cancel = _edit_text_value(value, ch)
+        if cancel:
+            return None
+        if submit and value:
+            from .update_all import persist_radio_config
+
+            persist_radio_config(value)
+            return value
+
+
+def _confirm_tx(
+    stdscr: "curses._CursesWindow",
+    *,
+    callsign: str,
+    frequency: str,
+    data_frequency: str,
+    page_count: int,
+    repetitions: int,
+) -> bool:
+    """Show the final TX safety summary; return True on Enter."""
+    stdscr.nodelay(False)
+    fields = [
+        ("Callsign", callsign),
+        ("Frequency", frequency or "Not configured"),
+        ("Data freq", data_frequency or "Use configured frequency"),
+        ("Pages", str(page_count)),
+        ("Repetitions", str(repetitions)),
+        ("Radio", "Enable VOX before starting"),
+    ]
+    while True:
+        _draw_mode_screen(
+            stdscr,
+            mode="TX",
+            title="Transmission ready",
+            status="Check radio configuration",
+            fields=fields,
+            message="ENTER starts audio transmission. ESC cancels.",
+            footer_status="TRANSMISSION READY  ENTER: START  ESC: CANCEL",
+        )
+        ch = stdscr.getch()
+        if ch in (10, 13, curses.KEY_ENTER):
+            return True
+        if ch == 27:
+            return False
 
 
 def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
@@ -1501,20 +1390,9 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             pass
     
     if not callsign:
-        # Prompt for callsign (need to temporarily exit curses)
-        curses.endwin()
-        try:
-            while True:
-                try:
-                    cs = input("Enter your callsign: ").strip().upper()
-                    if cs:
-                        callsign = cs
-                        break
-                    print("Callsign cannot be empty. Try again.")
-                except (EOFError, KeyboardInterrupt):
-                    return
-        finally:
-            stdscr.refresh()
+        callsign = _prompt_callsign_in_tui(stdscr)
+        if not callsign:
+            return
     
     src = callsign or cfg.ax25.callsign or "N0CALL"
     # Note: We generate WAV with loops=1, then play it 3 times in the transmission loop
@@ -1522,7 +1400,11 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     loops_in_wav = 1  # Generate single loop, we'll play it multiple times
     
     # Step 1: Refresh pages first (run in background so ESC is responsive)
-    _draw_tx_screen(stdscr, "Refreshing pages...", 0.0, "Refreshing")
+    _draw_tx_screen(
+        stdscr,
+        "Refreshing page feeds",
+        fields=[("Stage", "1 of 3"), ("Callsign", src), ("Pages loaded", str(len(pages)))],
+    )
     stdscr.refresh()
 
     try:
@@ -1545,8 +1427,6 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         t_refresh = threading.Thread(target=_refresh_worker, daemon=True)
         t_refresh.start()
 
-        # Indeterminate progress animation while refresh runs
-        tick = 0
         while not refresh_done.is_set():
             ch = stdscr.getch()
             if ch == 27:  # ESC
@@ -1561,11 +1441,12 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                 time.sleep(1.0)
                 return
 
-            # animate bar 0..100% repeating
-            progress = (tick % 100) / 100.0
-            _draw_tx_screen(stdscr, "Refreshing pages...", progress, "Refreshing")
+            _draw_tx_screen(
+                stdscr,
+                "Refreshing page feeds",
+                fields=[("Stage", "1 of 3"), ("Callsign", src), ("Pages loaded", str(len(pages)))],
+            )
             stdscr.refresh()
-            tick += 3
             time.sleep(0.1)
 
         if refresh_err["err"] is not None:
@@ -1577,7 +1458,11 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             pages[:] = new_pages
         
         # Step 2: Generate WAV file
-        _draw_tx_screen(stdscr, "Generating transmission file...", 0.0, "Generating")
+        _draw_tx_screen(
+            stdscr,
+            "Generating transmission file",
+            fields=[("Stage", "2 of 3"), ("Callsign", src), ("Pages", str(len(pages)))],
+        )
         stdscr.refresh()
         
         plan = build_ax25_audio_plan(
@@ -1587,26 +1472,6 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             src_callsign=src,
             max_info_bytes=cfg.ax25.max_info_bytes,
         )
-        
-        # Simulate progress during generation (actual generation is fast)
-        for i in range(10):
-            ch = stdscr.getch()
-            if ch == 27:  # ESC
-                _draw_tx_screen(
-                    stdscr,
-                    "Generation cancelled",
-                    0.0,
-                    "Generating",
-                    "",
-                    "Returning to viewer.",
-                )
-                stdscr.refresh()
-                time.sleep(1.0)
-                return  # Exit TX mode immediately
-            
-            _draw_tx_screen(stdscr, "Generating transmission file...", i / 10.0, "Generating")
-            stdscr.refresh()
-            time.sleep(0.05)
         
         wav = write_ax25_audio_wav_and_or_stdout(
             plan=plan,
@@ -1622,7 +1487,16 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             output_mode=cfg.audio.output,
         )
         
-        _draw_tx_screen(stdscr, "File generated successfully", 1.0, "Generating")
+        _draw_tx_screen(
+            stdscr,
+            "Transmission file ready",
+            fields=[
+                ("Stage", "2 of 3"),
+                ("Callsign", src),
+                ("Pages", str(len(pages))),
+                ("Fragments", str(plan.fragments)),
+            ],
+        )
         stdscr.refresh()
         time.sleep(0.5)
         
@@ -1669,149 +1543,20 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             except Exception:  # noqa: BLE001
                 pass
         
-        # Show pre-transmission confirmation screen
-        stdscr.nodelay(False)  # Blocking for Enter key
-        confirmation_shown = False
-        while not confirmation_shown:
-            stdscr.clear()
-            max_y, max_x = stdscr.getmaxyx()
-            
-            # Center the frame
-            offset_y = max((max_y - PAGE_HEIGHT) // 2, 0)
-            offset_x = max((max_x - PAGE_WIDTH) // 2, 0)
-            
-            # Header
-            now = datetime.now()
-            clock = now.strftime("%H:%M %d %b").upper()
-            header_text = f"CEEFAX TX  TRANSMIT MODE".ljust(PAGE_WIDTH)
-            
-            if curses.has_colors():
-                curses.start_color()
-                curses.use_default_colors()
-                curses.init_pair(1, curses.COLOR_YELLOW, curses.COLOR_BLUE)
-                curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-                header_attr = curses.color_pair(1) | curses.A_BOLD
-                body_attr = curses.color_pair(2)
-            else:
-                header_attr = curses.A_BOLD
-                body_attr = curses.A_NORMAL
-            
-            stdscr.addstr(offset_y, offset_x, header_text[:PAGE_WIDTH], header_attr)
-            clock_x = offset_x + max(PAGE_WIDTH - len(clock) - 1, 0)
-            stdscr.addstr(offset_y, clock_x, clock, header_attr)
-            
-            if callsign:
-                callsign_x = clock_x - len(callsign) - 2
-                if callsign_x >= offset_x:
-                    stdscr.addstr(offset_y, callsign_x, callsign, header_attr)
-            
-            # Border
-            border_top = offset_y + 1
-            border_bottom = offset_y + PAGE_HEIGHT - 1
-            inner_x = offset_x + 1
-            inner_width = max(PAGE_WIDTH - 2, 1)
-            border_attr = body_attr | curses.A_BOLD
-            top_line = ("+" + ("-" * (PAGE_WIDTH - 2)) + "+")[:PAGE_WIDTH]
-            stdscr.addstr(border_top, offset_x, top_line, border_attr)
-            stdscr.addstr(border_bottom, offset_x, top_line, border_attr)
-            for row in range(border_top + 1, border_bottom):
-                stdscr.addstr(row, offset_x, "|", border_attr)
-                stdscr.addstr(row, offset_x + PAGE_WIDTH - 1, "|", border_attr)
-            
-            # Content - VOX instructions and frequency info
-            row = border_top + 1
-            row += 1
-            
-            # TX logo
-            tx_logo = [
-                "░▀█▀░█░█",
-                "░░█░░▄▀▄",
-                "░░▀░░▀░▀",
-            ]
-            for logo_line in tx_logo:
-                if row >= border_bottom - 10:
-                    break
-                logo_centered = logo_line.center(inner_width)
-                stdscr.addstr(row, inner_x, logo_centered[:inner_width], body_attr | curses.A_BOLD)
-                row += 1
-            row += 2
-            
-            # VOX instructions
-            vox_lines = [
-                "RADIO CONFIGURATION REQUIRED",
-                "",
-                "Ensure your radio is configured:",
-                "",
-                "1. VOX (Voice Operated Transmit) enabled",
-                "2. Set to frequency band:",
-            ]
-            for line in vox_lines:
-                if row >= border_bottom - 5:
-                    break
-                line_centered = line.center(inner_width)
-                stdscr.addstr(row, inner_x, line_centered[:inner_width], body_attr | curses.A_BOLD)
-                row += 1
-            
-            # Show frequency band
-            if frequency_info:
-                freq_display = frequency_info.center(inner_width)
-                stdscr.addstr(row, inner_x, freq_display[:inner_width], body_attr | curses.A_BOLD)
-                row += 1
-            else:
-                no_freq = "Frequency not configured".center(inner_width)
-                stdscr.addstr(row, inner_x, no_freq[:inner_width], body_attr | curses.A_BOLD)
-                row += 1
-            
-            row += 1
-            
-            # Show recommended data frequency
-            if data_frequency:
-                data_freq_line = f"3. Recommended data frequency: {data_frequency}".center(inner_width)
-                stdscr.addstr(row, inner_x, data_freq_line[:inner_width], body_attr | curses.A_BOLD)
-                row += 1
-            
-            row += 1
-            confirm_line = "Press ENTER to start transmission".center(inner_width)
-            stdscr.addstr(border_bottom - 2, inner_x, confirm_line[:inner_width], body_attr | curses.A_BOLD)
-            
-            # Controls and status
-            controls_y = max_y - 2
-            if controls_y > offset_y + PAGE_HEIGHT:
-                if curses.has_colors():
-                    labels = [
-                        (" r: RX ", curses.color_pair(3) | curses.A_BOLD),
-                        (" t: TX ", curses.color_pair(4) | curses.A_BOLD),
-                        (" F5: Reload ", curses.color_pair(5) | curses.A_BOLD),
-                        (" ESC: Exit ", curses.color_pair(6) | curses.A_BOLD),
-                    ]
-                    total_len = sum(len(text) for text, _ in labels)
-                    x = max((max_x - 1 - total_len) // 2, 0)
-                    for text, attr in labels:
-                        if x >= max_x - 1:
-                            break
-                        stdscr.addstr(controls_y, x, text[: max_x - 1 - x], attr)
-                        x += len(text)
-            
-            status_line_text = "TRANSMIT MODE  Press ENTER to continue, ESC to cancel"
-            status_line = status_line_text[: max_x - 1]
-            pad_width = max_x - 1
-            start_x = max((pad_width - len(status_line)) // 2, 0)
-            stdscr.attron(curses.A_REVERSE)
-            stdscr.addstr(max_y - 1, 0, " " * pad_width)
-            stdscr.addstr(max_y - 1, start_x, status_line)
-            stdscr.attroff(curses.A_REVERSE)
-            
-            stdscr.refresh()
-            
-            # Wait for Enter or ESC
-            ch = stdscr.getch()
-            if ch == 10 or ch == 13:  # Enter key
-                confirmation_shown = True
-            elif ch == 27:  # ESC
-                return  # Exit TX mode
-        
+        # Show the responsive pre-transmission safety summary.
+        confirmation_shown = _confirm_tx(
+            stdscr,
+            callsign=src,
+            frequency=frequency_info,
+            data_frequency=data_frequency,
+            page_count=len(pages),
+            repetitions=3,
+        )
+        if not confirmation_shown:
+            return
+
         stdscr.nodelay(True)  # Back to non-blocking for transmission
-        
+
         # Step 2: Transmit 3 times
         for tx_num in range(1, 4):
             status = f"Transmitting (loop {tx_num}/3)..."
@@ -2002,19 +1747,42 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         return [compile_page_to_matrix(p) for p in pages]
 
     matrices = compile_all()
+    page_entry = ""
+    notice = ""
 
     while True:
         if not pages:
-            stdscr.clear()
-            stdscr.addstr(0, 0, "No pages loaded. Press q to quit.")
-            stdscr.refresh()
+            _draw_mode_screen(
+                stdscr,
+                mode="--",
+                title="Page viewer",
+                status="No pages loaded",
+                fields=[("Action", "Press F5 to reload")],
+                message="Generate or receive pages, then reload the viewer.",
+                footer_status="NO PAGES  F5: RELOAD  ESC: EXIT",
+                footer_mode="viewer",
+            )
         else:
             page = pages[idx]
             matrix = matrices[idx]
-            _draw_page(stdscr, page, matrix, idx, len(pages))
+            _draw_page(
+                stdscr,
+                page,
+                matrix,
+                idx,
+                len(pages),
+                page_entry=page_entry,
+                notice=notice,
+            )
 
         ch = stdscr.getch()
-        if ch in (ord("q"), ord("Q")):
+        idx, page_entry, key_notice, handled = _handle_page_key(ch, pages, idx, page_entry)
+        if handled:
+            notice = key_notice
+            continue
+        page_entry = ""
+        notice = ""
+        if ch in (ord("q"), ord("Q")) or ch == 27:
             break
         if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
             if pages:
@@ -2030,6 +1798,7 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                 pages[:] = new_pages
                 matrices[:] = compile_all()
                 idx = 0
+                notice = f"RELOADED {len(pages)} PAGES"
         elif ch in (ord("r"), ord("R")):
             # Enter RX mode
             _rx_mode_loop(stdscr, pages)
@@ -2064,6 +1833,8 @@ def _rx_viewer_loop_from_wav(
     pages: List[Page] = []
     matrices: List[List[str]] = []
     idx = 0
+    page_entry = ""
+    notice = ""
 
     q: "queue.Queue[tuple[Page, List[str]]]" = queue.Queue()
     stop_event = threading.Event()
@@ -2134,6 +1905,8 @@ def _rx_viewer_loop_from_wav(
 
             if pages:
                 idx = max(0, min(idx, len(pages) - 1))
+                with stats_lock:
+                    snapshot = dict(stats)
                 _draw_page(
                     stdscr,
                     pages[idx],
@@ -2141,13 +1914,30 @@ def _rx_viewer_loop_from_wav(
                     idx,
                     len(pages),
                     callsign_override=listener_callsign,
+                    page_entry=page_entry,
+                    notice=notice or _rx_footer_status(snapshot),
+                    footer_mode="rx",
                 )
             else:
                 # Show RX screen with waiting message
                 msg = rx_err["msg"] or f"Waiting for AX.25 pages from WAV: {Path(wav_path).name}"
-                _draw_rx_screen(stdscr, "Waiting for pages...", msg)
+                with stats_lock:
+                    snapshot = dict(stats)
+                _draw_rx_screen(
+                    stdscr,
+                    "Listening",
+                    msg,
+                    stats=snapshot,
+                    source=Path(wav_path).name,
+                )
 
             ch = stdscr.getch()
+            idx, page_entry, key_notice, handled = _handle_page_key(ch, pages, idx, page_entry)
+            if handled:
+                notice = key_notice
+                continue
+            page_entry = ""
+            notice = ""
             if ch in (ord("q"), ord("Q")) or ch == 27:  # q or ESC
                 break
             if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
@@ -2192,6 +1982,8 @@ def _rx_viewer_loop_live(
     pages: List[Page] = []
     matrices: List[List[str]] = []
     idx = 0
+    page_entry = ""
+    notice = ""
 
     q: "queue.Queue[tuple[Page, List[str]]]" = queue.Queue()
     stop_event = threading.Event()
@@ -2267,6 +2059,8 @@ def _rx_viewer_loop_live(
 
             if pages:
                 idx = max(0, min(idx, len(pages) - 1))
+                with stats_lock:
+                    snapshot = dict(stats)
                 _draw_page(
                     stdscr,
                     pages[idx],
@@ -2274,13 +2068,31 @@ def _rx_viewer_loop_live(
                     idx,
                     len(pages),
                     callsign_override=listener_callsign,
+                    page_entry=page_entry,
+                    notice=notice or _rx_footer_status(snapshot),
+                    footer_mode="rx",
                 )
             else:
                 # Show RX screen with waiting message
                 msg = rx_err["msg"] or "Waiting for AX.25 pages from live audio..."
-                _draw_rx_screen(stdscr, "Waiting for pages...", msg)
+                with stats_lock:
+                    snapshot = dict(stats)
+                _draw_rx_screen(
+                    stdscr,
+                    "Listening",
+                    msg,
+                    stats=snapshot,
+                    source="Live audio",
+                    device=device or "Default device",
+                )
 
             ch = stdscr.getch()
+            idx, page_entry, key_notice, handled = _handle_page_key(ch, pages, idx, page_entry)
+            if handled:
+                notice = key_notice
+                continue
+            page_entry = ""
+            notice = ""
             if ch in (ord("q"), ord("Q")) or ch == 27:  # q or ESC
                 break
             if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
