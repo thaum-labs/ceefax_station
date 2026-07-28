@@ -65,6 +65,23 @@ jobs:
             python3 -m ceefaxweb.sample_data --ingest http://127.0.0.1:8088 2>&1 || echo "Sample data upload completed"
 
             echo ""
+            echo "=== Install / refresh hub page pack timer ==="
+            cd "${REPO_DIR}"
+            mkdir -p "${REPO_DIR}/ceefaxweb/data/page_pack"
+            if [ -f "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.service" ]; then
+              cp "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.service" /etc/systemd/system/
+              cp "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.timer" /etc/systemd/system/
+              systemctl daemon-reload
+              systemctl enable --now ceefax-hub-pages.timer || true
+              # Best-effort first publish (needs API keys in /root/ceefax_station/.env)
+              if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+                "${REPO_DIR}/venv/bin/python" -m ceefaxweb.refresh_hub_pages || echo "Hub page refresh skipped/failed (check API keys in .env)"
+              else
+                python3 -m ceefaxweb.refresh_hub_pages || echo "Hub page refresh skipped/failed (check API keys in .env)"
+              fi
+            fi
+
+            echo ""
             echo "=== Restart ceefaxweb ==="
             systemctl restart ceefaxweb
             sleep 2
@@ -78,4 +95,6 @@ jobs:
             curl -sS -i http://127.0.0.1:8088/changelog || true
             echo ""
             curl -sS -i http://127.0.0.1:8088/api/changelog || true
+            echo ""
+            curl -sS -i http://127.0.0.1:8088/api/pages/manifest || true
 

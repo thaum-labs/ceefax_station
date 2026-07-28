@@ -1,0 +1,18 @@
+[Unit]
+Description=Ceefax Station hub page refresh + publish
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/ceefax_station
+Environment=PATH=/root/ceefax_station/venv/bin:/usr/bin
+EnvironmentFile=-/root/ceefax_station/.env
+# Hub must build pages locally with server-side API keys (never pull from itself).
+Environment=CEEFAX_PAGES_SOURCE=local
+ExecStart=/root/ceefax_station/venv/bin/python -m ceefaxweb.refresh_hub_pages
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
