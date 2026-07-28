@@ -1,7 +1,7 @@
-"""Non-interactive hub refresh + page-pack publish for the DigitalOcean server.
+"""Non-interactive hub refresh + page-pack publish for the official site.
 
 Reads provider API keys from the environment, refreshes shared pages locally,
-then publishes the pack served by /api/pages/*.
+then publishes the pack served by the public page-pack API.
 """
 
 from __future__ import annotations
