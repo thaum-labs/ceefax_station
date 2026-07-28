@@ -1,7 +1,6 @@
 """
 Update page 900 with system information including detected platform.
 """
-import json
 import platform
 import sys
 from datetime import datetime
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import List
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import atomic_write_json
 
 
 def _pad(text: str) -> str:
@@ -135,7 +135,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     
     platform_name = detect_platform()
     print(f"Updated {page_file} with system info (Platform: {platform_name})")

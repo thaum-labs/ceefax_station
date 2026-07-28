@@ -4,15 +4,15 @@ Update page 700 with callsign information from PSK Reporter.
 Fetches recent spots and statistics for the user's callsign from PSK Reporter.
 """
 import json
-import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 def _pad(text: str) -> str:
@@ -65,8 +65,10 @@ def fetch_psk_reporter_data(callsign: str) -> Optional[ET.Element]:
         # First try: spots where this callsign was the sender (transmitter)
         params = {
             "senderCallsign": callsign,
-            "rxtime": "1",  # Last 24 hours
-            "limit": "50"  # Limit results
+            "flowStartSeconds": "-86400",
+            "rptlimit": "50",
+            "rronly": "1",
+            "noactive": "1",
         }
         
         headers = {
@@ -120,50 +122,11 @@ def fetch_psk_reporter_data(callsign: str) -> Optional[ET.Element]:
 
 def fetch_last_report_days(callsign: str) -> Optional[int]:
     """
-    If a callsign has no spots in the last 24h, PSK Reporter's site often still shows
-    a "Monitoring CALL (last report XXX days ago)" message. This helper scrapes that
-    value so we can show a correct "Last seen" without inventing data.
+    Retained for API compatibility.
+
+    HTML scraping is deliberately disabled; PSK Reporter's structured XML query API
+    is the only remote source used by this updater.
     """
-    try:
-        url = "https://pskreporter.info/pskmap.html"
-        headers = {"User-Agent": "Ceefax Station/1.0 (Amateur Radio)"}
-
-        # PSK Reporter has changed querystring keys over time; try a small set.
-        param_sets = [
-            {"callsign": callsign},
-            {"senderCallsign": callsign},
-            {"call": callsign},
-            {"watch": callsign},
-            # Some variants require an extra flag to render the "Monitoring ..." banner
-            {"callsign": callsign, "mode": "FT8"},
-        ]
-
-        # Prefer an exact match for THIS callsign.
-        exact_re = re.compile(
-            rf"Monitoring\s+{re.escape(callsign)}\s*\(last\s+report\s+(\d+)\s+days?\s+ago\)",
-            re.I,
-        )
-        generic_re = re.compile(r"last\s+report\s+(\d+)\s+days?\s+ago", re.I)
-
-        for params in param_sets:
-            try:
-                resp = requests.get(url, params=params, timeout=10, headers=headers)
-                resp.raise_for_status()
-                text = resp.text
-
-                m = exact_re.search(text)
-                if m:
-                    return int(m.group(1))
-
-                # Fallback: if the page doesn't echo the callsign in the monitoring string,
-                # still look for "last report X days ago".
-                m2 = generic_re.search(text)
-                if m2:
-                    return int(m2.group(1))
-            except Exception:  # noqa: BLE001
-                continue
-    except Exception:  # noqa: BLE001
-        return None
     return None
 
 
@@ -331,7 +294,31 @@ def parse_psk_data(root: ET.Element, callsign: str) -> Dict:
     return stats
 
 
-def build_callsign_page(callsign: str) -> List[str]:
+def _fetch_normalized_psk_data(callsign: str) -> Dict:
+    root = fetch_psk_reporter_data(callsign)
+    if root is None:
+        raise RuntimeError("PSK Reporter XML API unavailable")
+    return parse_psk_data(root, callsign)
+
+
+def resolve_callsign_data(callsign: str) -> ProviderResult[Dict]:
+    """Resolve normalized XML API data, isolated by configured callsign."""
+    normalized = callsign.strip().upper()
+    cache_key = "".join(ch if ch.isalnum() else "-" for ch in normalized)
+    return resolve_provider(
+        f"callsign-700-{cache_key}",
+        [("PSK Reporter XML API", lambda: _fetch_normalized_psk_data(normalized))],
+        is_valid=lambda data: isinstance(data, dict)
+        and str(data.get("callsign", "")).upper() == normalized
+        and isinstance(data.get("recent_contacts"), list),
+        fresh_for_seconds=5 * 60,
+    )
+
+
+def build_callsign_page(
+    callsign: str,
+    result: ProviderResult[Dict] | None = None,
+) -> List[str]:
     """Build callsign information page."""
     lines: List[str] = []
     lines.append(_pad("CALLSIGN INFORMATION"))
@@ -343,103 +330,72 @@ def build_callsign_page(callsign: str) -> List[str]:
     grid = get_grid_from_config()
     if grid:
         lines.append(_pad(f"GRID: {grid}"))
-    
+
+    result = result or resolve_callsign_data(callsign)
+    lines.append(_pad(f"Source: {result.source}"))
+    stale = " | STALE" if result.stale else ""
+    lines.append(_pad(f"As-of: {result.fetched_at}{stale}"))
     lines.append(sep)
-    
-    # Fetch data from PSK Reporter
-    psk_xml = fetch_psk_reporter_data(callsign)
-    
-    if psk_xml is not None:
-        stats = parse_psk_data(psk_xml, callsign)
 
-        def _format_age(seconds_ago: int) -> str:
-            if seconds_ago < 0:
-                seconds_ago = 0
-            if seconds_ago < 60:
-                return f"{seconds_ago}s ago"
-            if seconds_ago < 3600:
-                return f"{seconds_ago // 60}m ago"
-            if seconds_ago < 86400:
-                return f"{seconds_ago // 3600}h ago"
-            return f"{seconds_ago // 86400} days ago"
+    stats = result.data
 
-        # Summary statistics
-        lines.append(_pad("RECENT ACTIVITY"))
-        lines.append(sep)
-        lines.append(_pad(f"Total Spots (24h): {stats['total_spots']}"))
+    def _format_age(seconds_ago: int) -> str:
+        if seconds_ago < 0:
+            seconds_ago = 0
+        if seconds_ago < 60:
+            return f"{seconds_ago}s ago"
+        if seconds_ago < 3600:
+            return f"{seconds_ago // 60}m ago"
+        if seconds_ago < 86400:
+            return f"{seconds_ago // 3600}h ago"
+        return f"{seconds_ago // 86400} days ago"
 
-        # Last seen (based on newest valid report time, even if older than 24h)
-        last_ts = stats.get("last_spot_time")
+    lines.append(_pad("RECENT ACTIVITY"))
+    lines.append(sep)
+    lines.append(_pad(f"Total Spots (24h): {stats['total_spots']}"))
+
+    last_ts = stats.get("last_spot_time")
+    if isinstance(last_ts, int) and last_ts > 0:
+        age_s = int(datetime.utcnow().timestamp() - last_ts)
+        lines.append(_pad(f"Last seen: {_format_age(age_s)}"))
+
+    if stats["total_spots"] == 0:
         if isinstance(last_ts, int) and last_ts > 0:
-            age_s = int(datetime.utcnow().timestamp() - last_ts)
-            lines.append(_pad(f"Last seen: {_format_age(age_s)}"))
+            days_ago = int((datetime.utcnow().timestamp() - last_ts) / 86400)
+            lines.append(_pad(f"Monitoring {callsign.upper()} (last report {days_ago} days ago)"))
         else:
-            # If XML doesn't contain older timestamps (common when 24h query is empty),
-            # scrape PSK Reporter "last report X days ago" text.
-            days = fetch_last_report_days(callsign)
-            if isinstance(days, int) and days >= 0:
-                lines.append(_pad(f"Last seen: {days} days ago"))
-
-        if stats["total_spots"] == 0:
-            if isinstance(last_ts, int) and last_ts > 0:
-                days_ago = int((datetime.utcnow().timestamp() - last_ts) / 86400)
-                lines.append(_pad(f"Monitoring {callsign.upper()} (last report {days_ago} days ago)"))
-            else:
-                days = fetch_last_report_days(callsign)
-                if isinstance(days, int) and days >= 0:
-                    lines.append(_pad(f"Monitoring {callsign.upper()} (last report {days} days ago)"))
-                else:
-                    lines.append(_pad(f"Monitoring {callsign.upper()} (no recent reports)"))
-            lines.append(_pad(""))
-        else:
-            if stats["bands_used"]:
-                bands_str = ", ".join(stats["bands_used"][:5])
-                lines.append(_pad(f"Bands Used: {bands_str[:PAGE_WIDTH-13]}"))
-
-            if stats["modes_used"]:
-                modes_str = ", ".join(stats["modes_used"][:5])
-                lines.append(_pad(f"Modes: {modes_str[:PAGE_WIDTH-7]}"))
-
-            if stats["countries"]:
-                countries_str = ", ".join(stats["countries"])
-                lines.append(_pad(f"Countries: {countries_str[:PAGE_WIDTH-11]}"))
-
-            lines.append(_pad(""))
-
-            # Recent contacts
-            if stats["recent_contacts"]:
-                lines.append(_pad("RECENT SPOTS"))
-                lines.append(sep)
-
-                for contact in stats["recent_contacts"][:6]:  # Show top 6
-                    receiver = str(contact.get("receiver", "?"))[:10]
-                    band = str(contact.get("band", "?"))[:6]
-                    mode = str(contact.get("mode", "?"))[:5]
-                    country = str(contact.get("country", ""))[:12]
-
-                    # Format: "Receiver   Band   Mode  Country"
-                    if country:
-                        line = f"{receiver:<10} {band:<6} {mode:<5} {country}"
-                    else:
-                        line = f"{receiver:<10} {band:<6} {mode:<5}"
-                    lines.append(_pad(line[:PAGE_WIDTH]))
+            lines.append(_pad(f"Monitoring {callsign.upper()} (no recent reports)"))
+        lines.append(_pad(""))
     else:
-        lines.append(_pad("PSK REPORTER DATA"))
-        lines.append(sep)
-        lines.append(_pad("Unable to fetch data from"))
-        lines.append(_pad("PSK Reporter at this time."))
+        if stats["bands_used"]:
+            bands_str = ", ".join(stats["bands_used"][:5])
+            lines.append(_pad(f"Bands Used: {bands_str[:PAGE_WIDTH-13]}"))
+
+        if stats["modes_used"]:
+            modes_str = ", ".join(stats["modes_used"][:5])
+            lines.append(_pad(f"Modes: {modes_str[:PAGE_WIDTH-7]}"))
+
+        if stats["countries"]:
+            countries_str = ", ".join(stats["countries"])
+            lines.append(_pad(f"Countries: {countries_str[:PAGE_WIDTH-11]}"))
+
         lines.append(_pad(""))
-        lines.append(_pad("Possible reasons:"))
-        lines.append(_pad("- API rate limit exceeded"))
-        lines.append(_pad("- Callsign has no recent"))
-        lines.append(_pad("  activity (last 24h)"))
-        lines.append(_pad("- Temporary API issue"))
-        lines.append(_pad(""))
-        lines.append(_pad("Check pskreporter.info"))
-        lines.append(_pad("for live data"))
-    
+        if stats["recent_contacts"]:
+            lines.append(_pad("RECENT SPOTS"))
+            lines.append(sep)
+            for contact in stats["recent_contacts"][:6]:
+                receiver = str(contact.get("receiver", "?"))[:10]
+                band = str(contact.get("band", "?"))[:6]
+                mode = str(contact.get("mode", "?"))[:5]
+                country = str(contact.get("country", ""))[:12]
+                line = (
+                    f"{receiver:<10} {band:<6} {mode:<5} {country}"
+                    if country
+                    else f"{receiver:<10} {band:<6} {mode:<5}"
+                )
+                lines.append(_pad(line[:PAGE_WIDTH]))
+
     lines.append(_pad(""))
-    lines.append(_pad("Source: PSK Reporter"))
     lines.append(_pad("(pskreporter.info)"))
     
     return lines[:PAGE_HEIGHT]
@@ -475,7 +431,8 @@ def main() -> None:
         ])
         print(f"Updated {page_file} with callsign placeholder (no callsign set)")
     else:
-        content = build_callsign_page(callsign)
+        result = resolve_callsign_data(callsign)
+        content = build_callsign_page(callsign, result)
         print(f"Updated {page_file} with callsign data for {callsign}")
     
     page = {
@@ -486,7 +443,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
 
 
 if __name__ == "__main__":
