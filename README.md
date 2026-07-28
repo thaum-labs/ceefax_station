@@ -237,6 +237,8 @@ installers/       Windows setup .exe (may lag main)
 python -m pytest
 ```
 
+**Hub page pack note:** the official site refreshes shared teletext pages about every **2 hours**. That cadence (plus provider cache TTLs and request pacing) is sized for free API rate limits used by the hub — notably football-data.org (10 req/min), Guardian developer (500/day), Lottery Results Feed free (100/month), and Open-Meteo (10k/day). Stations still pull the published pack; they do not need those API keys.
+
 </details>
 
 ---
