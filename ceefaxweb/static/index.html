@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Ceefaxstation</title>
+    <title>Ceefax Station</title>
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -17,11 +17,33 @@
       #side { border-left: 1px solid #222; padding: 12px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background: #0b0b0b; color: #f3f3f3; display: flex; flex-direction: column; }
       .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
       .row label { min-width: 90px; }
-      select, button, input { padding: 6px 8px; }
+      select, button, input { padding: 6px 8px; background: #151515; color: #f3f3f3; border: 1px solid #444; border-radius: 4px; }
+      button { cursor: pointer; background: #1a1a1a; color: #ffd34d; border-color: #665522; }
+      button:hover { background: #222; }
+      button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #ffd34d; outline-offset: 2px; }
+      button:disabled { opacity: 0.55; cursor: wait; }
       .muted { opacity: 0.75; font-size: 12px; }
       .box { border: 1px solid #333; padding: 8px; border-radius: 6px; margin-top: 10px; background: #111; }
       .tag { display: inline-block; padding: 2px 6px; border: 1px solid #444; border-radius: 999px; margin: 2px 4px 2px 0; font-size: 12px; }
       a { color: #ffd34d; }
+      .visually-hidden {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+      }
+      .map-hint {
+        display: none;
+      }
+      .map-hint[hidden] { display: none !important; }
+      .howto-tap { display: none; }
+      .sw-link-ok { background: linear-gradient(90deg, rgba(255,211,77,0.85), rgba(255,211,77,0.35)); }
+      .sw-link-partial { background: linear-gradient(90deg, rgba(74,163,255,0.85), rgba(74,163,255,0.35)); }
+      @media (prefers-reduced-motion: reduce) {
+        #side, .sidebar-toggle::before, .sidebar-toggle::after,
+        .sidebar-toggle-text, .mobile-link-notification {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
 
       /* Sidebar logo (matches page 000 text-art) */
       .logo-wrap {
@@ -88,29 +110,12 @@
       }
       .footer .line { margin-top: 4px; }
 
-      /* Alpha/Development notice */
-      .alpha-banner {
-        background: linear-gradient(135deg, rgba(255, 100, 0, 0.2), rgba(255, 150, 0, 0.15));
-        border: 2px solid rgba(255, 150, 0, 0.6);
-        border-radius: 6px;
-        padding: 10px 12px;
-        margin: 0 0 12px 0;
+      /* Compact alpha note (less visual noise than a large banner) */
+      .alpha-note {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        color: #c9a35a;
         text-align: center;
-        font-size: 13px;
-        font-weight: 600;
-        color: #ffaa44;
-        box-shadow: 0 0 12px rgba(255, 150, 0, 0.2);
-      }
-      .alpha-banner .alpha-label {
-        display: inline-block;
-        background: rgba(255, 150, 0, 0.25);
-        padding: 2px 8px;
-        border-radius: 4px;
-        margin-right: 6px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
       }
 
       /* Mobile collapsible sidebar */
@@ -127,7 +132,7 @@
       /* Mobile responsive styles */
       @media (max-width: 768px) {
         :root {
-          --tab-h: calc(110px + env(safe-area-inset-bottom));
+          --tab-h: calc(64px + env(safe-area-inset-bottom));
         }
         html, body {
           background: #0b0b0b;
@@ -149,30 +154,25 @@
           background: #0b0b0b;
           position: relative;
         }
-        .mobile-map-title {
+        .mobile-map-title { display: none; }
+        .map-hint {
           display: block;
           position: absolute;
           top: calc(env(safe-area-inset-top) + 10px);
-          right: 10px;
-          color: #ffd34d;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-          /* 50% smaller than before */
-          font-size: 5px;
-          font-weight: 800;
-          letter-spacing: 0;
-          opacity: 0.6;
+          left: 10px;
+          right: 58px;
           z-index: 1000;
           pointer-events: none;
-          white-space: pre;
-          line-height: 1.05;
-          margin: 0;
-          /* Dot-matrix "screen" pattern behind letters (no solid background) */
-          background-image:
-            radial-gradient(circle, rgba(255, 211, 77, 0.22) 0.6px, rgba(255, 211, 77, 0) 0.7px);
-          background-size: 4px 4px;
-          background-position: 0 0;
-          padding: 2px 2px;
+          background: rgba(11, 11, 11, 0.82);
+          border: 1px solid #333;
+          border-radius: 8px;
+          color: #f3f3f3;
+          font-size: 12px;
+          line-height: 1.35;
+          padding: 8px 10px;
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
         }
+        .map-hint strong { color: #ffd34d; }
         #side {
           position: fixed;
           bottom: 0;
@@ -333,11 +333,11 @@
           background: rgba(255, 211, 77, 0.10);
           color: #ffd34d;
           border-radius: 999px;
-          padding: 6px 10px;
-          font-size: 12px;
+          padding: 8px 12px;
+          font-size: 13px;
           font-weight: 600;
           pointer-events: none;
-          margin-top: 28px;
+          margin-top: 22px;
           transition: opacity 0.2s ease;
           display: inline-block;
           text-align: center;
@@ -347,28 +347,6 @@
           opacity: 0.8;
         }
         .sidebar-toggle-footer {
-          width: 100%;
-          max-width: 520px;
-          margin: 8px auto 0;
-          padding: 0 12px;
-          font-size: 10px;
-          opacity: 0.75;
-          text-align: center;
-          pointer-events: auto;
-          transition: opacity 0.2s ease;
-        }
-        .sidebar-toggle-footer a {
-          color: #ffd34d;
-          text-decoration: underline;
-        }
-        .sidebar-toggle-links {
-          margin-bottom: 4px;
-        }
-        .sidebar-toggle-credit {
-          font-size: 9px;
-          opacity: 0.7;
-        }
-        #side.expanded ~ .sidebar-toggle .sidebar-toggle-footer {
           display: none;
         }
         .side-inner {
@@ -385,9 +363,11 @@
         .logo-wrap {
           display: none;
         }
-        .alpha-banner {
+        .alpha-note {
           display: none;
         }
+        .howto-click { display: none; }
+        .howto-tap { display: inline; }
         .row {
           flex-wrap: nowrap;
           margin-bottom: 6px;
@@ -436,15 +416,15 @@
           margin-top: 4px;
         }
         .footer {
-          display: none;
+          display: block;
+          padding-top: 10px;
+          font-size: 11px;
         }
-        /* Hide mobile elements that would require scrolling */
+        /* Keep a short how-to + full legend on mobile */
         #status + .box {
-          /* Hide the large instruction box ("Click a line...") on mobile */
-          display: none;
+          display: block;
         }
         .legend-note {
-          /* Hide the long legend explanation paragraph */
           display: none;
         }
         /* Allow detail table to show - panel will scroll if needed */
@@ -468,7 +448,7 @@
 
       @media (max-width: 480px) {
         :root {
-          --tab-h: calc(110px + env(safe-area-inset-bottom));
+          --tab-h: calc(64px + env(safe-area-inset-bottom));
         }
         #side {
           padding: calc(5px + env(safe-area-inset-top)) calc(6px + env(safe-area-inset-right)) 0 calc(6px + env(safe-area-inset-left));
@@ -504,35 +484,30 @@
   </head>
   <body>
     <div id="app">
-      <div id="map">
-        <pre class="mobile-map-title">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
-  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
-  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
-░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
-░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
+      <div id="map" role="region" aria-label="Station map">
+        <div class="map-hint" id="mapHint">
+          <strong>Tip:</strong> tap a yellow/blue line for TX→RX pages. Green = transmitting.
+        </div>
       </div>
-      <div class="mobile-link-notification" id="mobileLinkNotification">
+      <div class="mobile-link-notification" id="mobileLinkNotification" role="status" aria-live="polite">
         Reception table updated — view in panel below
       </div>
-      <div id="side">
+      <div id="side" aria-label="Station filters and details">
         <div class="side-inner">
         <div class="mobile-side-header">
           <div class="mobile-side-handle"></div>
           <button type="button" class="mobile-side-close" id="sidebarClose">back to map</button>
         </div>
         <div class="logo-wrap">
-          <pre class="logo">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
+          <pre class="logo" role="img" aria-label="Ceefax Station">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
   ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
   ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
 ░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
 ░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
 ░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
         </div>
-        <div class="alpha-banner">
-          <span class="alpha-label">Alpha</span>
-          Site in active development — features may change
-        </div>
+        <p class="alpha-note">Alpha — features may change</p>
+        <h1 class="visually-hidden">Ceefax Station tracker</h1>
         <div class="row">
           <label for="range">Time Frame</label>
           <select id="range">
@@ -540,7 +515,7 @@
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
           </select>
-          <button id="refresh">Refresh</button>
+          <button type="button" id="refresh">Refresh</button>
         </div>
         <div class="row">
           <label for="band">Band</label>
@@ -554,29 +529,34 @@
             <option value="70cm">70cm (433.500 MHz)</option>
           </select>
         </div>
-        <div class="muted" id="status">Connecting…</div>
+        <div class="muted" id="status" role="status" aria-live="polite">Connecting…</div>
 
         <div class="box">
-          <div><strong>Click a line</strong> to see pages TX and RX status.</div>
-          <div class="muted">Stations require Maidenhead (grid) to appear on the map.</div>
+          <div>
+            <strong class="howto-click">Click a line</strong><strong class="howto-tap">Tap a line</strong>
+            to see pages TX and RX status.
+          </div>
+          <div class="muted">Stations need a Maidenhead grid to appear on the map.</div>
         </div>
 
         <div class="box">
           <div><strong>Legend</strong></div>
           <div class="legend">
-            <div class="legend-item"><span>Transmitting station (TX)</span><span class="swatch sw-green"></span></div>
-            <div class="legend-item"><span>Receiving OK (all pages)</span><span class="swatch sw-yellow"></span></div>
-            <div class="legend-item"><span>Receiving partial (missing pages)</span><span class="swatch sw-blue"></span></div>
+            <div class="legend-item"><span>Transmitting station (TX)</span><span class="swatch sw-green" aria-hidden="true"></span></div>
+            <div class="legend-item"><span>Receiving OK (all pages)</span><span class="swatch sw-yellow" aria-hidden="true"></span></div>
+            <div class="legend-item"><span>Receiving partial</span><span class="swatch sw-blue" aria-hidden="true"></span></div>
+            <div class="legend-item"><span>Complete link</span><span class="swatch sw-link-ok" aria-hidden="true"></span></div>
+            <div class="legend-item"><span>Incomplete link</span><span class="swatch sw-link-partial" aria-hidden="true"></span></div>
           </div>
           <div class="muted legend-note" style="margin-top:8px;">
-            Partial stations render as a diagonal split (top-left = station color, bottom-right = blue).
-            Links are yellow when complete and blue when incomplete.
+            Partial stations use a diagonal split. Links animate from TX toward RX.
           </div>
         </div>
 
-        <div class="box" id="detail" style="display:none;">
-          <div class="row">
+        <div class="box" id="detail" style="display:none;" aria-live="polite">
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
             <strong id="linkTitle"></strong>
+            <button type="button" id="detailClose" aria-label="Close link details" style="flex:0 0 auto; min-width:auto; padding:4px 10px; font-size:12px;">Close</button>
           </div>
           <div class="muted" id="linkMeta"></div>
           <div class="muted" id="linkDistance" style="margin-top:6px;"></div>
@@ -598,19 +578,18 @@
         </div>
 
         <div class="footer">
-          <div class="line"><a href="https://github.com/thaum-labs/ceefax_station" target="_blank" rel="noopener noreferrer">Download Ceefax Station</a></div>
-          <div class="line"><a href="/about" style="text-decoration:underline;">About</a> · <a href="/changelog" style="text-decoration:underline;">Changelog</a> · <span id="versionDisplay"></span></div>
+          <div class="line">
+            <a href="https://github.com/thaum-labs/ceefax_station/releases" target="_blank" rel="noopener noreferrer">Download app</a>
+            ·
+            <a href="/api/pages/pack" id="pagePackLink">Download page pack</a>
+          </div>
+          <div class="muted" id="pagePackMeta" style="margin-top:4px;">Shared teletext pages for TX stations (no API keys needed).</div>
+          <div class="line" style="margin-top:8px;"><a href="/about">About</a> · <a href="/changelog">Changelog</a> · <a href="/changelog" id="versionDisplay">…</a></div>
           <div class="line">Created by <strong>M7TJF</strong> · Ceefax Station © <span id="year"></span></div>
         </div>
       </div>
-      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+      <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Open filters and settings" aria-expanded="false" aria-controls="side">
         <span class="sidebar-toggle-text">filters &amp; settings</span>
-        <div class="sidebar-toggle-footer">
-          <div class="sidebar-toggle-links">
-            <a href="/about" style="text-decoration:underline;">About</a> · <a href="/changelog" style="text-decoration:underline;">Changelog</a> · <span id="versionDisplayMobile"></span>
-          </div>
-          <div class="sidebar-toggle-credit">Created by <strong>M7TJF</strong> · Ceefax Station © <span id="yearMobile"></span></div>
-        </div>
       </button>
     </div>
 
@@ -621,9 +600,9 @@
     ></script>
     <script>
       const map = L.map('map', { worldCopyJump: true }).setView([54.5, -2.5], 6);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 18,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
       }).addTo(map);
 
       const rangeSel = document.getElementById('range');
@@ -637,62 +616,83 @@
       const sidebarEl = document.getElementById('side');
       const sidebarToggle = document.getElementById('sidebarToggle');
       const sidebarClose = document.getElementById('sidebarClose');
+      const pagePackMeta = document.getElementById('pagePackMeta');
+      const mapHint = document.getElementById('mapHint');
+      const detailClose = document.getElementById('detailClose');
+      const preferReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function isMobile() {
+        return window.innerWidth <= 768;
+      }
+
+      function dismissMapHint() {
+        if (mapHint) mapHint.hidden = true;
+      }
+
+      function clearLinkDetail() {
+        if (!detailBox) return;
+        detailBox.style.display = 'none';
+        if (sidebarEl) sidebarEl.classList.remove('has-detail');
+      }
+
+      function setSidebarExpanded(expanded) {
+        if (!sidebarEl) return;
+        sidebarEl.classList.toggle('expanded', expanded);
+        if (sidebarToggle) {
+          sidebarToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          sidebarToggle.setAttribute(
+            'aria-label',
+            expanded ? 'Close filters and settings' : 'Open filters and settings'
+          );
+          const label = sidebarToggle.querySelector('.sidebar-toggle-text');
+          if (label) label.textContent = expanded ? 'close panel' : 'filters & settings';
+        }
+        if (expanded) {
+          document.body.style.overflow = 'hidden';
+          dismissMapHint();
+        } else {
+          document.body.style.overflow = '';
+          sidebarEl.classList.remove('has-detail');
+        }
+        setTimeout(() => map.invalidateSize(), 300);
+      }
 
       // Mobile sidebar toggle
       if (sidebarToggle && sidebarEl) {
-        const toggleSidebar = () => {
-          sidebarEl.classList.toggle('expanded');
-          // Prevent body scroll when sidebar is expanded, but sidebar itself can scroll
-          if (sidebarEl.classList.contains('expanded')) {
-            // Only prevent body scroll, sidebar will handle its own scrolling
-            document.body.style.overflow = 'hidden';
-          } else {
-            document.body.style.overflow = '';
-            // Remove has-detail class when closing
-            sidebarEl.classList.remove('has-detail');
-          }
-          // Resize map after transition
-          setTimeout(() => {
-            map.invalidateSize();
-          }, 300);
-        };
-        
-        sidebarToggle.addEventListener('click', toggleSidebar);
+        sidebarToggle.addEventListener('click', () => {
+          setSidebarExpanded(!sidebarEl.classList.contains('expanded'));
+        });
         if (sidebarClose) {
-          sidebarClose.addEventListener('click', () => {
-            sidebarEl.classList.remove('expanded');
-            sidebarEl.classList.remove('has-detail');
-            document.body.style.overflow = '';
-            setTimeout(() => {
-              map.invalidateSize();
-            }, 300);
-          });
+          sidebarClose.addEventListener('click', () => setSidebarExpanded(false));
         }
-        
-        // Close sidebar when clicking outside on mobile
-        if (window.innerWidth <= 768) {
-          sidebarEl.addEventListener('click', (e) => {
-            if (e.target === sidebarEl) {
-              sidebarEl.classList.remove('expanded');
-              sidebarEl.classList.remove('has-detail');
-              document.body.style.overflow = '';
-              setTimeout(() => {
-                map.invalidateSize();
-              }, 300);
-            }
-          });
-        }
-        
-        // Handle window resize
+
+        // Close when tapping the dimmed sheet chrome (not its content)
+        sidebarEl.addEventListener('click', (e) => {
+          if (!isMobile()) return;
+          if (e.target === sidebarEl) setSidebarExpanded(false);
+        });
+
         window.addEventListener('resize', () => {
-          if (window.innerWidth > 768) {
-            sidebarEl.classList.remove('expanded');
-            sidebarEl.classList.remove('has-detail');
-            document.body.style.overflow = '';
+          if (!isMobile()) {
+            setSidebarExpanded(false);
             map.invalidateSize();
           }
         });
+
+        document.addEventListener('keydown', (e) => {
+          if (e.key !== 'Escape') return;
+          if (sidebarEl.classList.contains('expanded')) {
+            setSidebarExpanded(false);
+          }
+          clearLinkDetail();
+        });
       }
+
+      if (detailClose) {
+        detailClose.addEventListener('click', () => clearLinkDetail());
+      }
+
+      map.on('click dragstart zoomstart', dismissMapHint);
 
       let stationMarkers = new Map(); // callsign -> {layers:[]}
       let linkLayers = [];
@@ -726,6 +726,7 @@
       }
 
       function startFlowLoop() {
+        if (preferReducedMotion) return;
         if (flowRaf) return;
         const tick = () => {
           for (const f of flowLinks) {
@@ -768,19 +769,36 @@
         }
       }
 
-      async function fetchMap() {
+      async function fetchMap(opts = {}) {
+        const keepDetail = !!opts.keepDetail;
         currentRange = rangeSel.value;
         currentBand = bandSel.value;
-        statusEl.textContent = 'Loading…';
+        if (!keepDetail) clearLinkDetail();
+        statusEl.textContent = 'Loading map…';
+        refreshBtn.disabled = true;
         let url = `/api/map?range=${encodeURIComponent(currentRange)}`;
         if (currentBand) {
           url += `&band=${encodeURIComponent(currentBand)}`;
         }
-        const resp = await fetch(url);
-        const data = await resp.json();
-        renderMap(data);
-        const bandText = currentBand ? `, Band=${currentBand}` : '';
-        statusEl.textContent = `Updated. Range=${data.range}${bandText} (since ${data.since_utc})`;
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          renderMap(data);
+          const stations = Array.isArray(data.stations) ? data.stations.length : 0;
+          const links = Array.isArray(data.links) ? data.links.length : 0;
+          const bandText = currentBand ? `, Band=${currentBand}` : '';
+          if (stations === 0) {
+            statusEl.textContent = `No stations in this window${bandText}. Stations need a Maidenhead grid to appear.`;
+          } else {
+            statusEl.textContent = `Updated · ${stations} station${stations === 1 ? '' : 's'} · ${links} link${links === 1 ? '' : 's'} · Range=${data.range}${bandText}`;
+          }
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = 'Could not load map data. Check your connection and tap Refresh.';
+        } finally {
+          refreshBtn.disabled = false;
+        }
       }
 
       function renderMap(data) {
@@ -887,7 +905,7 @@
           poly.on('click', onClick);
 
           // Desktop: show hover tooltips for link lines. Mobile: suppress to avoid popups.
-          if (window.innerWidth > 768) {
+          if (!isMobile()) {
             const total = (l.tx_pages_unique || 0);
             const txGrid = tx && tx.grid ? ` (${tx.grid})` : '';
             const rxGrid = rx && rx.grid ? ` (${rx.grid})` : '';
@@ -901,144 +919,148 @@
           linkLayers.push(hit, poly);
 
           // Enable animated flow (TX -> RX) once Leaflet has created the SVG path.
-          setTimeout(() => {
-            const el = _getPathElement(poly);
-            if (!el) return;
-            el.style.strokeLinecap = 'round';
-            // Speed scales slightly with link weight so "stronger" links look more lively.
-            // Slow down animation by 50% (compared to initial implementation).
-            const spd = Math.max(0.3, Math.min(1.2, (weight / 3) * 0.5));
-            flowLinks.push({ el, offset: 0, speed: spd });
-            startFlowLoop();
-          }, 0);
+          if (!preferReducedMotion) {
+            setTimeout(() => {
+              const el = _getPathElement(poly);
+              if (!el) return;
+              el.style.strokeLinecap = 'round';
+              const spd = Math.max(0.3, Math.min(1.2, (weight / 3) * 0.5));
+              flowLinks.push({ el, offset: 0, speed: spd });
+              startFlowLoop();
+            }, 0);
+          }
         }
       }
 
       async function showLinkDetail(tx, rx) {
-        const resp = await fetch(`/api/link?tx=${encodeURIComponent(tx)}&rx=${encodeURIComponent(rx)}&range=${encodeURIComponent(currentRange)}`);
-        const d = await resp.json();
         detailBox.style.display = '';
-        // Enable scrolling on mobile when detail is shown
-        if (window.innerWidth <= 768 && sidebarEl && sidebarEl.classList.contains('expanded')) {
+        linkTitle.textContent = `${tx} → ${rx}`;
+        linkMeta.textContent = 'Loading reception table…';
+        linkDistance.textContent = '';
+        const container = document.getElementById('linkTableContainer');
+        container.innerHTML = '<div class="muted">Loading…</div>';
+
+        // On mobile, open the sheet so the table is actually visible.
+        if (isMobile() && sidebarEl) {
+          setSidebarExpanded(true);
           sidebarEl.classList.add('has-detail');
-        }
-        // Show mobile notification if on mobile (include TX -> RX only)
-        if (window.innerWidth <= 768) {
           const notification = document.getElementById('mobileLinkNotification');
           if (notification) {
-            notification.textContent = `${tx} → ${rx} reception table updated`;
+            notification.textContent = `${tx} → ${rx}`;
             notification.classList.add('show');
-            // Auto-hide after 4 seconds
-            setTimeout(() => {
-              notification.classList.remove('show');
-            }, 4000);
+            setTimeout(() => notification.classList.remove('show'), 2800);
           }
-        }
-        const txGrid = d.tx_grid ? ` (${d.tx_grid})` : '';
-        const rxGrid = d.rx_grid ? ` (${d.rx_grid})` : '';
-        linkTitle.textContent = `${d.tx_callsign}${txGrid} → ${d.rx_callsign}${rxGrid}`;
-        linkMeta.textContent = `Range=${d.range} (since ${d.since_utc})`;
-
-        // Distance
-        if (d.distance_km != null && d.distance_mi != null) {
-          const km = Number(d.distance_km);
-          const mi = Number(d.distance_mi);
-          linkDistance.textContent = `Distance: ${km.toFixed(1)} km / ${mi.toFixed(1)} mi`;
-        } else {
-          linkDistance.textContent = '';
+          setTimeout(() => {
+            try { detailBox.scrollIntoView({ behavior: preferReducedMotion ? 'auto' : 'smooth', block: 'start' }); } catch {}
+          }, 320);
         }
 
-        const rows = Array.isArray(d.rows) ? d.rows : [];
-        const container = document.getElementById('linkTableContainer');
-        container.innerHTML = '';
-        
-        if (rows.length === 0) {
-          const table = document.createElement('table');
-          const tbody = document.createElement('tbody');
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td colspan="5" class="muted">No pages in this window.</td>`;
-          tbody.appendChild(tr);
-          table.appendChild(tbody);
-          container.appendChild(table);
-          return;
-        }
+        try {
+          const resp = await fetch(`/api/link?tx=${encodeURIComponent(tx)}&rx=${encodeURIComponent(rx)}&range=${encodeURIComponent(currentRange)}`);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const d = await resp.json();
+          const txGrid = d.tx_grid ? ` (${d.tx_grid})` : '';
+          const rxGrid = d.rx_grid ? ` (${d.rx_grid})` : '';
+          linkTitle.textContent = `${d.tx_callsign}${txGrid} → ${d.rx_callsign}${rxGrid}`;
+          linkMeta.textContent = `Range=${d.range} (since ${d.since_utc})`;
 
-        function fmtAge(sec) {
-          const s = Math.max(0, Math.floor(sec || 0));
-          if (s < 60) return `${s}s`;
-          const m = Math.floor(s / 60);
-          if (m < 60) return `${m}m`;
-          const h = Math.floor(m / 60);
-          if (h < 48) return `${h}h`;
-          const d = Math.floor(h / 24);
-          return `${d}d`;
-        }
-
-        function box(ok) {
-          if (ok) return `<span class="boxmark box-ok">✓</span>`;
-          return `<span class="boxmark box-bad">✗</span>`;
-        }
-
-        // Group rows by frequency
-        const rowsByFreq = new Map();
-        for (const r of rows) {
-          const freq = r.frequency || 'Unknown';
-          if (!rowsByFreq.has(freq)) {
-            rowsByFreq.set(freq, []);
+          if (d.distance_km != null && d.distance_mi != null) {
+            const km = Number(d.distance_km);
+            const mi = Number(d.distance_mi);
+            linkDistance.textContent = `Distance: ${km.toFixed(1)} km / ${mi.toFixed(1)} mi`;
+          } else {
+            linkDistance.textContent = '';
           }
-          rowsByFreq.get(freq).push(r);
-        }
 
-        // Create a table for each frequency
-        const frequencies = Array.from(rowsByFreq.keys()).sort();
-        for (let i = 0; i < frequencies.length; i++) {
-          const freq = frequencies[i];
-          const freqRows = rowsByFreq.get(freq);
-          
-          // Frequency header
-          const freqHeader = document.createElement('div');
-          freqHeader.style.marginTop = i > 0 ? '20px' : '0';
-          freqHeader.style.marginBottom = '8px';
-          freqHeader.style.fontWeight = '600';
-          freqHeader.style.color = '#ffd34d';
-          freqHeader.style.fontSize = '14px';
-          freqHeader.textContent = freq;
-          container.appendChild(freqHeader);
+          const rows = Array.isArray(d.rows) ? d.rows : [];
+          container.innerHTML = '';
 
-          // Table for this frequency
-          const table = document.createElement('table');
-          const thead = document.createElement('thead');
-          const headerRow = document.createElement('tr');
-          headerRow.innerHTML = `
-            <th>Page</th>
-            <th class="cell-center">TX</th>
-            <th class="cell-center">RX</th>
-            <th>dB</th>
-            <th>Age</th>
-          `;
-          thead.appendChild(headerRow);
-          table.appendChild(thead);
-
-          // Table body
-          const tbody = document.createElement('tbody');
-          for (const r of freqRows) {
-            const page = escapeHtml(r.page_id || '-');
-            const txOk = !!r.tx;
-            const rxOk = !!r.rx_ok;
-            const db = escapeHtml(r.rx_db == null ? '-' : `${Number(r.rx_db).toFixed(1)}`);
-            const age = escapeHtml(fmtAge(r.age_s));
+          if (rows.length === 0) {
+            const table = document.createElement('table');
+            const tbody = document.createElement('tbody');
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${page}</td>
-              <td class="cell-center">${box(txOk)}</td>
-              <td class="cell-center">${box(rxOk)}</td>
-              <td>${db}</td>
-              <td>${age}</td>
-            `;
+            tr.innerHTML = `<td colspan="5" class="muted">No pages in this window.</td>`;
             tbody.appendChild(tr);
+            table.appendChild(tbody);
+            container.appendChild(table);
+            return;
           }
-          table.appendChild(tbody);
-          container.appendChild(table);
+
+          function fmtAge(sec) {
+            const s = Math.max(0, Math.floor(sec || 0));
+            if (s < 60) return `${s}s`;
+            const m = Math.floor(s / 60);
+            if (m < 60) return `${m}m`;
+            const h = Math.floor(m / 60);
+            if (h < 48) return `${h}h`;
+            const d = Math.floor(h / 24);
+            return `${d}d`;
+          }
+
+          function box(ok, label) {
+            const cls = ok ? 'box-ok' : 'box-bad';
+            const mark = ok ? '✓' : '✗';
+            return `<span class="boxmark ${cls}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${mark}</span>`;
+          }
+
+          const rowsByFreq = new Map();
+          for (const r of rows) {
+            const freq = r.frequency || 'Unknown';
+            if (!rowsByFreq.has(freq)) rowsByFreq.set(freq, []);
+            rowsByFreq.get(freq).push(r);
+          }
+
+          const frequencies = Array.from(rowsByFreq.keys()).sort();
+          for (let i = 0; i < frequencies.length; i++) {
+            const freq = frequencies[i];
+            const freqRows = rowsByFreq.get(freq);
+
+            const freqHeader = document.createElement('div');
+            freqHeader.style.marginTop = i > 0 ? '20px' : '0';
+            freqHeader.style.marginBottom = '8px';
+            freqHeader.style.fontWeight = '600';
+            freqHeader.style.color = '#ffd34d';
+            freqHeader.style.fontSize = '14px';
+            freqHeader.textContent = freq;
+            container.appendChild(freqHeader);
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `
+              <th>Page</th>
+              <th class="cell-center">TX</th>
+              <th class="cell-center">RX</th>
+              <th>dB</th>
+              <th>Age</th>
+            `;
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            for (const r of freqRows) {
+              const page = escapeHtml(r.page_id || '-');
+              const txOk = !!r.tx;
+              const rxOk = !!r.rx_ok;
+              const db = escapeHtml(r.rx_db == null ? '-' : `${Number(r.rx_db).toFixed(1)}`);
+              const age = escapeHtml(fmtAge(r.age_s));
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${page}</td>
+                <td class="cell-center">${box(txOk, txOk ? 'TX present' : 'TX missing')}</td>
+                <td class="cell-center">${box(rxOk, rxOk ? 'RX ok' : 'RX missing')}</td>
+                <td>${db}</td>
+                <td>${age}</td>
+              `;
+              tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            container.appendChild(table);
+          }
+        } catch (err) {
+          console.error(err);
+          linkMeta.textContent = 'Could not load this link.';
+          container.innerHTML = '<div class="muted">Try Refresh, then tap the line again.</div>';
         }
       }
 
@@ -1054,7 +1076,7 @@
         ws.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data);
-            if (msg.type === 'ingested') fetchMap();
+            if (msg.type === 'ingested') fetchMap({ keepDetail: true });
           } catch {}
         };
         ws.onclose = () => {
@@ -1069,30 +1091,35 @@
       // Footer year
       const currentYear = String(new Date().getFullYear());
       document.getElementById('year').textContent = currentYear;
-      const yearMobileEl = document.getElementById('yearMobile');
-      if (yearMobileEl) {
-        yearMobileEl.textContent = currentYear;
-      }
 
-      // Load version on page load
+      // Load version + hub pack status
       const versionDisplay = document.getElementById('versionDisplay');
-      const versionDisplayMobile = document.getElementById('versionDisplayMobile');
       (async () => {
         try {
           const res = await fetch('/api/version');
           const data = await res.json();
           if (data.version && data.version !== 'unknown') {
             const version = data.version;
-            const stage = version.includes('-alpha') ? 'alpha' : 
+            const stage = version.includes('-alpha') ? 'alpha' :
                          version.includes('-beta') ? 'beta' : 'release';
-            const versionText = `v${version}${stage !== 'release' ? ` (${stage})` : ''}`;
-            versionDisplay.textContent = versionText;
-            if (versionDisplayMobile) {
-              versionDisplayMobile.textContent = versionText;
-            }
+            versionDisplay.textContent = `v${version}${stage !== 'release' ? ` (${stage})` : ''}`;
           }
         } catch (err) {
           console.error('Failed to load version:', err);
+          versionDisplay.textContent = 'Changelog';
+        }
+      })();
+
+      (async () => {
+        if (!pagePackMeta) return;
+        try {
+          const res = await fetch('/api/pages/manifest');
+          if (!res.ok) throw new Error('no pack');
+          const data = await res.json();
+          const when = (data.generated_at || '').replace('T', ' ').slice(0, 16);
+          pagePackMeta.textContent = `Hub pack ready · ${data.page_count || 0} pages · updated ${when || 'recently'} UTC`;
+        } catch {
+          pagePackMeta.textContent = 'Hub page pack not published yet.';
         }
       })();
     </script>
