@@ -4,6 +4,20 @@
 
 # Ceefax Station
 
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
+  <img src="https://img.shields.io/badge/version-0.1.0--alpha-orange" alt="Version 0.1.0-alpha" />
+  <img src="https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
+  <br/>
+  <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
+  <img src="https://img.shields.io/badge/Dire%20Wolf-packet%20radio-2E8B57" alt="Dire Wolf" />
+  <img src="https://img.shields.io/badge/curses-TUI-111111" alt="curses TUI" />
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-tracker%20API-009688?logo=fastapi&logoColor=white" alt="FastAPI" /></a>
+  <a href="https://leafletjs.com/"><img src="https://img.shields.io/badge/Leaflet-map-199900?logo=leaflet&logoColor=white" alt="Leaflet" /></a>
+  <a href="https://docs.pytest.org/"><img src="https://img.shields.io/badge/pytest-tested-0A9EDC?logo=pytest&logoColor=white" alt="pytest" /></a>
+</p>
+
 A modern recreation of the classic Ceefax teletext service for Windows amateur radio stations: live data pages, AX.25 packet radio TX/RX, a responsive terminal viewer, and a public web tracker.
 
 ## Features
