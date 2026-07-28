@@ -6,10 +6,11 @@
       "date": "2026-07-28",
       "version": "0.1.1-alpha",
       "changes": [
+        "Improved the map legend: stations vs links, listening-only (blue), partial as diagonal split, dashed TX→RX link swatches",
         "Added map style picker: Street (light), CARTO light, CARTO dark, and topographic (choice is remembered)",
         "Default map style is Street (light); dark map is optional",
         "Refreshed the public map mock dataset with a new UK demo network (HF/VHF/UHF)",
-        "Improved tracker UI/UX: clearer controls, legend, loading/error states, and accessibility",
+        "Improved tracker UI/UX: clearer controls, loading/error states, and accessibility",
         "Mobile: tapping a radio link opens the side panel with the reception table",
         "Added Download page pack on the tracker (shared teletext pages from the hub)",
         "Stations can pull a shared hub page pack so TX does not need API keys",
