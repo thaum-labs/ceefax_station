@@ -50,6 +50,7 @@ from . import (
     update_system_logs_page,
     update_system_status_page,
 )
+from .providers import clear_provider_activity, provider_activity_snapshot
 
 
 MAX_RETRIES = 2
@@ -719,6 +720,7 @@ def get_user_location() -> Optional[Tuple[str, str]]:
 def update_all() -> None:
     """Update all live data pages with retry logic."""
     global _user_location
+    clear_provider_activity()
     
     print("=" * 60)
     print("CEEFAX - Updating All Live Data Pages")
@@ -813,30 +815,51 @@ def update_all() -> None:
     )
 
     # Update System Status page (901) with data-source health derived from the run.
-    def _all_ok(keys: List[str]) -> Tuple[bool, str]:
+    provider_activity = provider_activity_snapshot()
+
+    def _feed_health(keys: List[str], cache_prefixes: Tuple[str, ...]) -> Tuple[bool, str]:
         ok = all(update_ok.get(k, False) for k in keys)
-        return (ok, "OK" if ok else "FAIL")
+        if not ok:
+            return (False, "FAIL")
+        matching = [
+            result
+            for cache_key, result in provider_activity.items()
+            if cache_key.startswith(cache_prefixes)
+        ]
+        if not matching:
+            return (True, "SKIPPED")
+        if any(result.stale for result in matching):
+            return (True, "STALE")
+        return (True, "OK")
 
     feed_status = {
-        "Weather (wttr.in)": _all_ok(["UK Weather (101)", "Local Weather (102)", "Weather Map (103)"]),
-        "News (BBC RSS)": _all_ok(["News Headlines (200)", "World News (201)", "UK News (202)"]),
-        "Sport (BBC)": _all_ok(
+        "Weather (Open-Meteo)": _feed_health(
+            ["UK Weather (101)", "Local Weather (102)", "Weather Map (103)"],
+            ("weather-",),
+        ),
+        "News (Guardian/BBC)": _feed_health(
+            ["News Headlines (200)", "World News (201)", "UK News (202)"],
+            ("news-",),
+        ),
+        "Sport (API/RSS)": _feed_health(
             [
                 "Sports Headlines (300) & League Tables (302, 303)",
                 "Football Live Scores (301)",
                 "Fixtures & Results (304)",
                 "Other Sports (305)",
-            ]
+            ],
+            ("football-", "other-sports-"),
         ),
-        "Exchange Rates": _all_ok(["Exchange Rates (400)"]),
-        "Travel (TFL)": _all_ok(["Travel Info (401)"]),
-        "TV (TV Guide)": _all_ok(["TV Highlights (503.1/503.2)"]),
-        "Film Picks": _all_ok(["Film Picks (504)"]),
-        "Lottery": _all_ok(["Lottery Results (402)"]),
-        "Entertainment APIs": _all_ok(
-            ["Fact of the Day (500)", "Quote of the Day (501)", "On This Day (502)", "Joke of the Day (600)", "Daily Quiz (602)"]
+        "Exchange Rates": _feed_health(["Exchange Rates (400)"], ("exchange-",)),
+        "Travel (TFL)": _feed_health(["Travel Info (401)"], ("travel-",)),
+        "TV (TVMaze)": _feed_health(["TV Highlights (503.1/503.2)"], ("tv-",)),
+        "Film (TMDB)": _feed_health(["Film Picks (504)"], ("films-",)),
+        "Lottery": _feed_health(["Lottery Results (402)"], ("lottery-",)),
+        "Entertainment APIs": _feed_health(
+            ["Fact of the Day (500)", "Quote of the Day (501)", "On This Day (502)", "Joke of the Day (600)", "Daily Quiz (602)"],
+            ("fact-", "on-this-day-", "joke-", "quiz-"),
         ),
-        "PSK Reporter": _all_ok(["Callsign Info (700)"]),
+        "PSK Reporter": _feed_health(["Callsign Info (700)"], ("callsign-",)),
     }
     update_system_status_page.write_system_status_page(feed_status=feed_status, last_update_iso=run_ts)
 
