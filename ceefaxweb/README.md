@@ -58,7 +58,31 @@ You can provide it via:
 
 - `GET /api/map?range=24h|7d|30d`
 - `GET /api/link?tx=CALL&rx=CALL&range=24h|7d|30d`
+- `GET /api/pages/manifest` — shared teletext page-pack metadata (public, rate-limited)
+- `GET /api/pages/pack` — zip of shared pages (public, rate-limited; excludes local-only 102/700)
 - `POST /api/ingest/log`
 - `WS /ws` (pushes `{type:"ingested"}` on new log ingestion)
+
+### Publishing a page pack (hub operator)
+
+On the server that holds the API keys:
+
+```bash
+# 1) Refresh pages locally with keys configured in the environment
+python -m ceefaxstation debug --refresh --no-view --pages-source local
+
+# 2) Publish shared pages into the pack directory
+python -m ceefaxweb.publish_pages
+# or: ceefaxstation pages publish
+```
+
+Pack directory defaults to `ceefaxweb/data/page_pack/` (override with `CEEFAXWEB_PAGE_PACK_DIR`).
+
+Stations then run:
+
+```bash
+ceefaxstation pages pull
+# or rely on CEEFAX_PAGES_SOURCE=auto during debug/tx refresh
+```
 
 

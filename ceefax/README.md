@@ -110,6 +110,25 @@ Controls:
 
 Designed for authentic classic Ceefax look on **80×24** and larger terminals.
 
+## Hub page packs
+
+By default stations use `CEEFAX_PAGES_SOURCE=auto`:
+
+1. Download shared pages from `CEEFAX_PAGES_HUB_URL` (default `https://ceefaxstation.com`)
+2. Refresh local-only pages **102** and **700** on the station
+3. If the hub is unreachable, fall back to a full local `update_all()`
+
+```bash
+ceefaxstation pages pull
+ceefaxstation debug --refresh --view --pages-source auto
+```
+
+Hub operators publish with:
+
+```bash
+python -m ceefaxweb.publish_pages
+```
+
 ## Live data pages
 
 Providers write pages atomically and keep a last-known-good cache under `cache/providers/` (override with `CEEFAX_PROVIDER_CACHE`).

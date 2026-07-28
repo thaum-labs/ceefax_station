@@ -69,11 +69,15 @@ def run_hourly_ax25_audio(
         # persist_radio_config merges and will not wipe an existing frequency.
         prime_user_settings(callsign=ax.callsign, frequency="", auto_location=True)
 
-        # Refresh feeds/pages (writes JSON pages on disk).
+        # Refresh feeds/pages (hub pack by default, with local 102/700 overlay).
         try:
-            from .update_all import update_all
+            from .hub_pages import refresh_station_pages
 
-            update_all()
+            refresh_station_pages(
+                callsign=ax.callsign,
+                frequency="",
+                auto_location=True,
+            )
         except Exception as exc:  # noqa: BLE001
             logging.exception("Refresh failed: %s", exc)
 

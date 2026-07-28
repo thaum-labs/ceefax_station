@@ -134,9 +134,25 @@ What that means:
 
 ## Optional: make pages richer with free API keys
 
-Most pages work with **no keys**.
+Most stations **don’t need their own API keys**.
 
-A few pages are better (or only fully live) if you add free keys:
+By default (`CEEFAX_PAGES_SOURCE=auto`), Ceefax Station tries to download a shared **page pack** from [ceefaxstation.com](https://ceefaxstation.com) first. Your local weather (page 102) and callsign page (700) still update on your PC.
+
+```bash
+# Download shared pages from the hub now
+ceefaxstation pages pull
+
+# Or refresh as usual (hub first, then local fallback)
+ceefaxstation debug --refresh --view
+```
+
+| Mode (`CEEFAX_PAGES_SOURCE`) | Behaviour |
+| --- | --- |
+| `auto` (default) | Try hub pack, fall back to local refresh |
+| `hub` | Hub pack only (error if hub is down) |
+| `local` | Always refresh on this PC (needs keys for some pages) |
+
+If you run your **own** local refresh instead of the hub, a few pages are better with free keys:
 
 | What it’s for | Env variable name | Free? | Sign up |
 | --- | --- | --- | --- |
@@ -145,7 +161,7 @@ A few pages are better (or only fully live) if you add free keys:
 | Lottery | `LOTTERY_RESULTS_API_KEY` | Yes (100 calls/month) | [Lottery Results Feed](https://www.lotteryresultsfeed.com/) |
 | Film picks | `TMDB_API_KEY` | Yes | [TMDB](https://www.themoviedb.org/settings/api) |
 
-### How to add keys on Windows
+### How to add keys on Windows (only if using local refresh)
 
 1. Open **PowerShell**
 2. Paste these (put your real keys between the quotes):
