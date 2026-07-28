@@ -42,6 +42,30 @@ Edit `config.toml`:
     - `"stdout"` – stream raw PCM to stdout for piping to `aplay`/VOX
 - `carousel.*` – how long each page is displayed / transmitted (set `page_duration_ms = 0` for continuous streaming without extra gaps)
 
+Optional provider credentials are read from environment variables and must not
+be committed to the repository:
+
+| Variable | Pages | Provider |
+|---|---:|---|
+| `GUARDIAN_API_KEY` | 200–202 | Guardian Open Platform (BBC RSS fallback) |
+| `FOOTBALL_DATA_API_KEY` | 301–304 | football-data.org |
+| `LOTTERY_RESULTS_API_KEY` | 402 | Lottery Results Feed |
+| `TMDB_API_KEY` | 504 | The Movie Database |
+| `CEEFAX_PROVIDER_CACHE` | all live pages | Optional cache directory override |
+
+Page 402 uses the Lottery Results Feed structured API. Set its bearer token in
+the environment before refreshing pages:
+
+```bash
+export LOTTERY_RESULTS_API_KEY="your-lottery-results-feed-token"
+```
+
+The free tier allows 100 calls per month. Each live lottery refresh makes two
+calls (Lotto and EuroMillions), so successful results are reused for 24 hours
+(about 60 calls per month).
+The last-known-good result remains available as a stale fallback if the key or
+service is unavailable.
+
 ## Running
 
 From the repo root (the directory that contains `ceefax/`):
@@ -54,7 +78,7 @@ This will (debug/viewer mode):
 
 1. Load config from `config.toml`
 2. Load pages from `pages/`
-3. Compile them to 50×30 page frames
+3. Compile them to 50×23 page frames
 4. Refresh live API feeds/pages
 5. Open the terminal viewer (no signal RX/TX processing)
 
@@ -120,9 +144,17 @@ Controls:
 pip install windows-curses
 ```
 
-## Live Weather Page (Frome)
+## Live Weather Pages
 
-There is a small helper that can fetch **live weather data for Frome, UK** from `wttr.in` (similar to the Rust project [`shift/ceefax-weather`](https://github.com/shift/ceefax-weather?tab=readme-ov-file)) and write it into page `101`.
+Pages 101-103 use Open-Meteo's no-key geocoding and forecast APIs. Page 101
+contains the six established UK cities, page 102 uses the configured or detected
+local location, and page 103 contains the UK map. Successful responses are cached
+and a cached response is displayed as stale when the live service is unavailable.
+Page files and provider caches are replaced atomically.
+
+`MET_OFFICE_API_KEY` is reserved for a future Met Office DataHub integration. It
+is not currently used: DataHub products have endpoint-specific configuration, so
+the application deliberately does not guess an endpoint from the key alone.
 
 From the repo root (with your venv active):
 
@@ -130,11 +162,7 @@ From the repo root (with your venv active):
 python -m ceefax.src.update_weather_page
 ```
 
-This will:
-
-1. Call `wttr.in` for `Frome,UK`.
-2. Build a Ceefax-style panel sized to your page width.
-3. Overwrite `pages/101.json` with the latest data.
+This builds a Ceefax-style local panel and atomically updates `pages/102.json`.
 
 Then open the viewer and press `F5` to reload pages:
 
@@ -144,37 +172,65 @@ python -m ceefax.src.viewer
 
 ## UK Weather Map Page
 
-You can also generate a simple **UK weather map** (with icons and temperatures for a few cities including Frome) on page `120`:
+You can also generate a simple **UK weather map** (with icons and temperatures for a few cities including Frome) on page `103`:
 
 ```bash
 python -m ceefax.src.update_weather_map_page
 ```
 
-Then in the viewer, press `r` and go to **page 120** to see the map.
+Then in the viewer, press `F5` and go to **page 103** to see the map.
 
 ## Auto-updated News & Football Pages
 
-There are helpers to keep the **news (page 100)** and **football (page 150)** pages fresh using BBC RSS feeds.
+News pages 200-202 use the Guardian Open Platform when `GUARDIAN_API_KEY` is
+set, with the corresponding BBC RSS feed as fallback. Last-known-good headlines
+are cached and marked stale if both live providers fail. Set
+`CEEFAX_PROVIDER_CACHE` to override the default `ceefax/cache/providers` cache
+directory.
 
-### News (page 100)
+### Local news (page 200)
 
 ```bash
 python -m ceefax.src.update_news_page
 ```
 
-This fetches the latest headlines from the BBC Somerset RSS feed and writes them into `pages/100.json` in a Ceefax-style list.
+This fetches Somerset headlines from Guardian (when configured) or BBC RSS and
+writes them into `pages/200.json` in a Ceefax-style list. The world and UK
+updaters write pages 201 and 202 respectively.
 
-### Football (page 150)
+### Football (pages 300-304)
 
 ```bash
 python -m ceefax.src.update_football_page
+python -m ceefax.src.update_football_scores_page
+python -m ceefax.src.update_fixtures_page
 ```
 
-This fetches recent football headlines/results from BBC Sport Football RSS and writes them into `pages/150.json`.
+Page 300 contains BBC Sport headlines, page 301 contains live and recent Premier
+League scores, pages 302-303 contain the Premier League and Championship tables,
+and page 304 contains Premier League fixtures and results.
+
+Set `FOOTBALL_DATA_API_KEY` to a football-data.org v4 API token before generating
+pages 301-304. The token is sent in the `X-Auth-Token` header; page 300 uses BBC
+Sport RSS and does not require it. For example:
+
+```bash
+export FOOTBALL_DATA_API_KEY="your-football-data.org-token"
+```
+
+Page 504 uses The Movie Database (TMDB) for current, popular, and upcoming films.
+Set `TMDB_API_KEY` to a TMDB v3 API key before running
+`python -m ceefax.src.update_film_picks_page`:
+
+```bash
+export TMDB_API_KEY="your-tmdb-v3-api-key"
+```
 
 ### Running Updates Periodically
 
-On a Raspberry Pi or Linux box you can call these scripts from `cron` or a `systemd` timer (e.g. every 15 minutes) so pages 100 and 150 refresh automatically.
+On a Raspberry Pi or Linux box you can call these scripts from `cron` or a
+`systemd` timer (e.g. every 15 minutes) so news pages 200-202 and football pages
+300-304 refresh automatically.
 
 
 ## systemd Service (Raspberry Pi)
@@ -213,7 +269,7 @@ Fields:
 - `subpage`: optional integer, e.g. `1` for `100.1`
 - `title`: single-line title
 - `timestamp`: ISO 8601 string
-- `content`: array of text lines; will be wrapped/padded to 40 columns
+- `content`: array of text lines; will be wrapped/padded to 50 columns
 
 ## Next Steps
 
