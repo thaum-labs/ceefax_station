@@ -65,7 +65,6 @@ def build_sample(
                 sub_i = 1
         else:
             page, sub_i = pid, 1
-        # Add per-page dB (slightly vary around the base rx_db)
         page_db = rx_db
         if page_db is not None:
             page_db = page_db + random.uniform(-2.0, 2.0)
@@ -104,6 +103,17 @@ def build_sample(
     return (tx, rx)
 
 
+def _ingest(server: str, token: str, *, callsign: str, grid: str, source: str, payload: dict[str, Any]) -> None:
+    body = {
+        "token": token,
+        "uploader": {"callsign": callsign, "grid": grid},
+        "source_path": source,
+        "log": payload,
+    }
+    r = requests.post(server.rstrip("/") + "/api/ingest/log", json=body, timeout=20)
+    r.raise_for_status()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate sample Ceefaxstation TX/RX logs and optionally ingest into ceefaxweb server.")
     ap.add_argument("--write", action="store_true", help="Write sample logs into ceefax/logs_tx and ceefax/logs_rx.")
@@ -112,50 +122,54 @@ def main() -> int:
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)
-    # 6 stations: 2 transmitting, 4 listening
-    # TX stations: M7TJF (10m), G4ABC (2m)
-    # RX stations: M0XYZ, G8DEF, G9GHI, M1JKL
-    # Some stations receive from both transmitters
-    
-    # Frequency definitions (use specific frequencies, not band ranges)
-    # Format: "<MHz> (<band>)" so:
-    # - Website band filtering (LIKE %2m%) continues to work
-    # - UI displays a concrete tuned frequency
-    freq_10m = "28.120 MHz (10m)"
+
+    # Mock UK Ceefax network (distinct from the previous M7TJF/G4ABC set).
+    # 3 TX stations on different bands, several RX stations, mixed link quality.
+    freq_40m = "7.040 MHz (40m)"
+    freq_20m = "14.105 MHz (20m)"
     freq_2m = "144.800 MHz (2m)"
-    
-    # Sample data with frequency and dB information
-    # Format: (tx_callsign, tx_grid, rx_callsign, rx_grid, tx_freq, rx_freq, rx_db)
-    # Note: M7TJF is exclusively at IO81UF, no other stations use this grid
+    freq_70cm = "433.500 MHz (70cm)"
+
+    # (tx_callsign, tx_grid, rx_callsign, rx_grid, tx_freq, rx_freq, rx_db, hours_ago)
     samples = [
-        # M7TJF (10m) transmissions - located at IO81UF
-        ("M7TJF", "IO81UF", "M0XYZ", "IO83PR", freq_10m, freq_10m, -12.5),  # TX1 (10m) -> RX1
-        ("M7TJF", "IO81UF", "G8DEF", "IO92AB", freq_10m, freq_10m, -14.2),  # TX1 (10m) -> RX2
-        ("M7TJF", "IO81UF", "G9GHI", "IO93CD", freq_10m, freq_10m, -15.8),  # TX1 (10m) -> RX3 (also receives from G4ABC)
-        
-        # G4ABC (2m) transmissions
-        ("G4ABC", "IO91VW", "G9GHI", "IO93CD", freq_2m, freq_2m, -11.3),   # TX2 (2m) -> RX3 (also receives from M7TJF)
-        ("G4ABC", "IO91VW", "M1JKL", "IO94EF", freq_2m, freq_2m, -13.7),   # TX2 (2m) -> RX4
-        ("G4ABC", "IO91VW", "M0XYZ", "IO83PR", freq_2m, freq_2m, -16.1),   # TX2 (2m) -> RX1 (also receives from M7TJF)
-    ]
-    
-    # Listening-only stations (no reception)
-    listening_only = [
-        ("G8DEF", "IO92AB", freq_10m),  # RX2 also listening independently on 10m
-        ("M1JKL", "IO94EF", freq_2m),   # RX4 also listening independently on 2m
+        # GW0CEF (Wales) on 40m — longer-haul HF links
+        ("GW0CEF", "IO81JM", "G1RXA", "IO91OJ", freq_40m, freq_40m, -9.4, 2),
+        ("GW0CEF", "IO81JM", "MM0SCO", "IO85JV", freq_40m, freq_40m, -18.6, 3),
+        ("GW0CEF", "IO81JM", "GI0NIR", "IO64UJ", freq_40m, freq_40m, -21.2, 5),
+        ("GW0CEF", "IO81JM", "GD0MAN", "IO74QD", freq_40m, freq_40m, -16.8, 4),
+
+        # MM0FAX (Scotland) on 20m
+        ("MM0FAX", "IO85FP", "G1RXA", "IO91OJ", freq_20m, freq_20m, -14.1, 1),
+        ("MM0FAX", "IO85FP", "2E0LNK", "JO02AB", freq_20m, freq_20m, -17.5, 6),
+        ("MM0FAX", "IO85FP", "M0RCV", "IO83QE", freq_20m, freq_20m, -12.0, 2),
+
+        # G0PKT (SE England) on 2m / 70cm local VHF-UHF
+        ("G0PKT", "JO01CE", "2E0LNK", "JO02AB", freq_2m, freq_2m, -7.8, 1),
+        ("G0PKT", "JO01CE", "G7HEAR", "IO92XA", freq_2m, freq_2m, -11.6, 3),
+        ("G0PKT", "JO01CE", "G1RXA", "IO91OJ", freq_70cm, freq_70cm, -22.4, 7),
+        ("G0PKT", "JO01CE", "M0RCV", "IO83QE", freq_2m, freq_2m, -19.9, 8),
     ]
 
-    pages = ["200", "300", "301", "402", "503", "503.2", "600"]
+    # Listening-only stations (heard nothing yet in this window)
+    listening_only = [
+        ("G8IDLE", "IO93FB", freq_20m, 40),
+        ("M7WAIT", "IO82PL", freq_40m, 55),
+        ("2E1QUIET", "JO00AA", freq_70cm, 25),
+    ]
+
+    pages = ["101", "200", "301", "304", "402", "503", "503.2", "504", "600"]
 
     root = _repo_root()
     out_tx = root / "ceefax" / "logs_tx"
     out_rx = root / "ceefax" / "logs_rx"
-
     server = (args.ingest or "").rstrip("/") if args.ingest else None
+    token = args.token or ""
 
-    for i, (tx_cs, tx_grid, rx_cs, rx_grid, tx_freq, rx_freq, rx_db) in enumerate(samples):
-        gen_at = now - timedelta(hours=1 + i)
-        rx_ok = pages[: max(2, len(pages) - (i % 3))]  # vary reception quality
+    for i, (tx_cs, tx_grid, rx_cs, rx_grid, tx_freq, rx_freq, rx_db, hours_ago) in enumerate(samples):
+        gen_at = now - timedelta(hours=hours_ago, minutes=i * 3)
+        # Vary how many pages were decoded successfully.
+        keep = max(3, len(pages) - (i % 5))
+        rx_ok = pages[:keep]
         tx, rx = build_sample(
             tx_callsign=tx_cs,
             tx_grid=tx_grid,
@@ -170,26 +184,16 @@ def main() -> int:
         )
 
         if args.write:
-            tx_path = out_tx / f"sample_tx_{tx_cs}_{rx_cs}_{gen_at.strftime('%Y%m%d_%H%M%S')}.json"
-            rx_path = out_rx / f"sample_rx_{rx_cs}_from_{tx_cs}_{gen_at.strftime('%Y%m%d_%H%M%S')}.json"
-            _write_json(tx_path, tx)
-            _write_json(rx_path, rx)
+            stamp = gen_at.strftime("%Y%m%d_%H%M%S")
+            _write_json(out_tx / f"sample_tx_{tx_cs}_{rx_cs}_{stamp}.json", tx)
+            _write_json(out_rx / f"sample_rx_{rx_cs}_from_{tx_cs}_{stamp}.json", rx)
 
         if server:
-            ingest_url = server + "/api/ingest/log"
-            for payload, source in ((tx, f"sample:{tx_cs}:{rx_cs}:tx"), (rx, f"sample:{tx_cs}:{rx_cs}:rx")):
-                body = {
-                    "token": args.token,
-                    "uploader": {"callsign": "SAMPLE", "grid": "IO91VW"},  # Use different grid for sample uploader
-                    "source_path": source,
-                    "log": payload,
-                }
-                r = requests.post(ingest_url, json=body, timeout=20)
-                r.raise_for_status()
-    
-    # Create listening-only logs (no reception)
-    for rx_cs, rx_grid, freq in listening_only:
-        gen_at = now - timedelta(minutes=30)
+            _ingest(server, token, callsign=tx_cs, grid=tx_grid, source=f"sample:{tx_cs}:{rx_cs}:tx", payload=tx)
+            _ingest(server, token, callsign=rx_cs, grid=rx_grid, source=f"sample:{tx_cs}:{rx_cs}:rx", payload=rx)
+
+    for rx_cs, rx_grid, freq, minutes_ago in listening_only:
+        gen_at = now - timedelta(minutes=minutes_ago)
         rx_listening = {
             "schema": 1,
             "listener_callsign": rx_cs,
@@ -199,35 +203,32 @@ def main() -> int:
             "started_at": _iso(gen_at),
             "updated_at": _iso(gen_at + timedelta(minutes=5)),
             "frequency": freq,
-            # Noise-floor-ish value so sample data always has a dB number present
-            # even when the station didn't decode any pages.
             "rx_db": -99.0,
             "station_callsign": None,
             "tx_id": None,
             "tx_ids_seen": [],
             "cfx_frames": 0,
             "stations_heard": {},
-            "pages_decoded": {},  # Empty - just listening
+            "pages_decoded": {},
             "decoded_page_count": 0,
             "pages_seen_count": 0,
             "partial_page_count": 0,
             "complete_by_progress_count": 0,
         }
-        
+
         if args.write:
-            rx_path = out_rx / f"sample_rx_{rx_cs}_listening_{gen_at.strftime('%Y%m%d_%H%M%S')}.json"
-            _write_json(rx_path, rx_listening)
-        
+            stamp = gen_at.strftime("%Y%m%d_%H%M%S")
+            _write_json(out_rx / f"sample_rx_{rx_cs}_listening_{stamp}.json", rx_listening)
+
         if server:
-            ingest_url = server + "/api/ingest/log"
-            body = {
-                "token": args.token,
-                "uploader": {"callsign": rx_cs, "grid": rx_grid},
-                "source_path": f"sample:{rx_cs}:listening",
-                "log": rx_listening,
-            }
-            r = requests.post(ingest_url, json=body, timeout=20)
-            r.raise_for_status()
+            _ingest(
+                server,
+                token,
+                callsign=rx_cs,
+                grid=rx_grid,
+                source=f"sample:{rx_cs}:listening",
+                payload=rx_listening,
+            )
 
     print("Sample data generated.")
     if args.write:
@@ -239,5 +240,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

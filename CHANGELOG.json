@@ -8,6 +8,7 @@
       "changes": [
         "Added map style picker: Street (light), CARTO light, CARTO dark, and topographic (choice is remembered)",
         "Default map style is Street (light); dark map is optional",
+        "Refreshed the public map mock dataset with a new UK demo network (HF/VHF/UHF)",
         "Improved tracker UI/UX: clearer controls, legend, loading/error states, and accessibility",
         "Mobile: tapping a radio link opens the side panel with the reception table",
         "Added Download page pack on the tracker (shared teletext pages from the hub)",
