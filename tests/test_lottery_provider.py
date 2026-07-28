@@ -63,8 +63,8 @@ def test_api_auth_params_normalization_and_fresh_cache(
     }
     assert result.data["euromillions"]["lucky_stars"] == [2, 11]
     assert [call["params"] for call in calls] == [
-        {"slug": "uk-lotto", "country": "uk", "limit": 1},
-        {"id": 722, "limit": 1},
+        {"slug": "lotto", "country": "uk", "limit": 1},
+        {"slug": "euromillions", "country": "uk", "limit": 1},
     ]
     assert all(call["url"] == lottery.LOTTERY_RESULTS_API for call in calls)
     assert all(call["headers"] == {"Authorization": "Bearer secret-token"} for call in calls)

@@ -21,9 +21,11 @@ def _pad(text: str) -> str:
 
 
 POPULAR_CHANNELS: Tuple[str, ...] = ("BBC One", "BBC Two", "ITV1", "Channel 4")
-TVMAZE_SCHEDULE_URL = "https://api.tvmaze.com/schedule"
+TVMAZE_SCHEDULE_URL = "https://api.tvmaze.com/schedule/full"
 TVMAZE_SOURCE = "TVMaze GB schedule"
 TVMAZE_USER_AGENT = "CeefaxStation/1.0 (non-commercial; contact via repository)"
+# Country day schedule is sparse; full feed is larger but covers BBC/ITV/C4.
+# Overnight refreshes need a longer horizon than peak evening.
 
 
 @dataclass(frozen=True)
@@ -72,55 +74,63 @@ def _canonical_channel(name: str) -> str | None:
     return aliases.get(normalized)
 
 
+def _show_from_item(item: dict) -> dict:
+    """TVMaze country schedule nests show at top level; /schedule/full uses _embedded."""
+    show = item.get("show")
+    if isinstance(show, dict):
+        return show
+    embedded = item.get("_embedded") or {}
+    embedded_show = embedded.get("show") if isinstance(embedded, dict) else None
+    return embedded_show if isinstance(embedded_show, dict) else {}
+
+
 def fetch_tvmaze_schedule(*, start_utc: datetime, end_utc: datetime) -> List[dict]:
-    """Fetch all four channels from TVMaze's structured GB schedule."""
-    dates = {
-        start_utc.astimezone(timezone.utc).date().isoformat(),
-        end_utc.astimezone(timezone.utc).date().isoformat(),
-    }
+    """Fetch BBC One/Two, ITV1, and Channel 4 from TVMaze's full schedule feed."""
+    response = requests.get(
+        TVMAZE_SCHEDULE_URL,
+        headers={"User-Agent": TVMAZE_USER_AGENT},
+        timeout=60,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise ValueError("TVMaze returned a non-list schedule")
+
     listings: List[dict] = []
-    for date in sorted(dates):
-        response = requests.get(
-            TVMAZE_SCHEDULE_URL,
-            params={"country": "GB", "date": date},
-            headers={"User-Agent": TVMAZE_USER_AGENT},
-            timeout=20,
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        show = _show_from_item(item)
+        network = show.get("network") or {}
+        web_channel = show.get("webChannel") or {}
+        channel = _canonical_channel(str(network.get("name") or web_channel.get("name") or ""))
+        start = _parse_iso_utc(item.get("airstamp"))
+        if channel is None or start is None:
+            continue
+        runtime = item.get("runtime")
+        end = start + timedelta(minutes=int(runtime)) if runtime else None
+        # Keep programmes that overlap the window (currently airing or upcoming).
+        still_on = end is None or end > start_utc
+        if not (start < end_utc and still_on):
+            continue
+        if start + timedelta(hours=12) < start_utc:
+            # Ignore very old entries that lack a usable runtime end time.
+            continue
+        summary = show.get("summary") or item.get("summary") or ""
+        if summary:
+            summary = BeautifulSoup(str(summary), "html.parser").get_text(" ", strip=True)
+        listings.append(
+            {
+                "channel": channel,
+                "start_utc": start.isoformat(),
+                "end_utc": end.isoformat() if end else None,
+                "title": str(show.get("name") or "Unknown").strip(),
+                "subtitle": str(item.get("name") or "").strip() or None,
+                "synopsis": summary or None,
+            }
         )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            raise ValueError("TVMaze returned a non-list schedule")
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            show = item.get("show") or {}
-            network = show.get("network") or {}
-            web_channel = show.get("webChannel") or {}
-            channel = _canonical_channel(str(network.get("name") or web_channel.get("name") or ""))
-            start = _parse_iso_utc(item.get("airstamp"))
-            if channel is None or start is None or not (start_utc <= start < end_utc):
-                continue
-            summary = show.get("summary") or item.get("summary") or ""
-            if summary:
-                summary = BeautifulSoup(str(summary), "html.parser").get_text(" ", strip=True)
-            runtime = item.get("runtime")
-            end = start + timedelta(minutes=int(runtime)) if runtime else None
-            listings.append(
-                {
-                    "channel": channel,
-                    "start_utc": start.isoformat(),
-                    "end_utc": end.isoformat() if end else None,
-                    "title": str(show.get("name") or "Unknown").strip(),
-                    "subtitle": str(item.get("name") or "").strip() or None,
-                    "synopsis": summary or None,
-                }
-            )
     if not listings:
         raise ValueError("TVMaze returned no listings for the selected channels")
-    covered = {str(item["channel"]) for item in listings}
-    missing = set(POPULAR_CHANNELS) - covered
-    if missing:
-        raise ValueError(f"TVMaze schedule is missing channels: {', '.join(sorted(missing))}")
     return listings
 
 
@@ -450,11 +460,12 @@ def main() -> None:
       - page 503: TV highlights (non-sports) subpage 1
       - page 503.2: TV highlights (non-sports) subpage 2
 
-    Both are limited to the next 4 hours and the 4 main channels:
+    Both cover the next 24 hours on the 4 main channels:
       BBC One, BBC Two, ITV1, Channel 4
+    (TVMaze coverage can be sparse overnight; a longer window avoids empty pages.)
     """
     now_utc = datetime.now(timezone.utc)
-    end_utc = now_utc + timedelta(hours=4)
+    end_utc = now_utc + timedelta(hours=24)
 
     result = get_tv_schedule(start_utc=now_utc, end_utc=end_utc)
     listings = _restore_listings(result.data)
