@@ -1,7 +1,23 @@
 {
-  "current_version": "0.1.0-alpha",
+  "current_version": "0.1.1-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-07-28",
+      "version": "0.1.1-alpha",
+      "changes": [
+        "Added map style picker: Street (light), CARTO light, CARTO dark, and topographic (choice is remembered)",
+        "Default map style is Street (light); dark map is optional",
+        "Improved tracker UI/UX: clearer controls, legend, loading/error states, and accessibility",
+        "Mobile: tapping a radio link opens the side panel with the reception table",
+        "Added Download page pack on the tracker (shared teletext pages from the hub)",
+        "Stations can pull a shared hub page pack so TX does not need API keys",
+        "Durable live-data providers with last-known-good cache (news, weather, football, lottery, TV, films)",
+        "Lottery and TV schedule provider fixes for more reliable page refresh",
+        "Classic Ceefax-style terminal viewer polish and responsive layout",
+        "Simplified beginner README for hub-first setup"
+      ]
+    },
     {
       "date": "2026-01-01",
       "version": "0.1.0-alpha",

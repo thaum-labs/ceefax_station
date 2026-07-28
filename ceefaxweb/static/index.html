@@ -529,6 +529,15 @@
             <option value="70cm">70cm (433.500 MHz)</option>
           </select>
         </div>
+        <div class="row">
+          <label for="mapStyle">Map</label>
+          <select id="mapStyle">
+            <option value="osm">Street (light)</option>
+            <option value="carto-light">Light (CARTO)</option>
+            <option value="carto-dark">Dark (CARTO)</option>
+            <option value="topo">Topographic</option>
+          </select>
+        </div>
         <div class="muted" id="status" role="status" aria-live="polite">Connecting…</div>
 
         <div class="box">
@@ -600,10 +609,50 @@
     ></script>
     <script>
       const map = L.map('map', { worldCopyJump: true }).setView([54.5, -2.5], 6);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 18,
-        attribution: '&copy; OpenStreetMap &copy; CARTO'
-      }).addTo(map);
+
+      const MAP_STYLES = {
+        osm: {
+          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19
+        },
+        'carto-light': {
+          url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          maxZoom: 20
+        },
+        'carto-dark': {
+          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          maxZoom: 20
+        },
+        topo: {
+          url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, <a href="https://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+          maxZoom: 17
+        }
+      };
+
+      let baseLayer = null;
+      function applyMapStyle(styleId) {
+        const style = MAP_STYLES[styleId] || MAP_STYLES.osm;
+        if (baseLayer) map.removeLayer(baseLayer);
+        baseLayer = L.tileLayer(style.url, {
+          maxZoom: style.maxZoom || 18,
+          attribution: style.attribution
+        }).addTo(map);
+      }
+
+      const mapStyleSel = document.getElementById('mapStyle');
+      const savedMapStyle = (() => {
+        try { return localStorage.getItem('ceefax.mapStyle') || 'osm'; } catch { return 'osm'; }
+      })();
+      if (MAP_STYLES[savedMapStyle]) mapStyleSel.value = savedMapStyle;
+      applyMapStyle(mapStyleSel.value);
+      mapStyleSel.addEventListener('change', () => {
+        applyMapStyle(mapStyleSel.value);
+        try { localStorage.setItem('ceefax.mapStyle', mapStyleSel.value); } catch {}
+      });
 
       const rangeSel = document.getElementById('range');
       const bandSel = document.getElementById('band');
