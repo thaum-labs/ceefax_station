@@ -5,8 +5,10 @@ The live site runs on a **DigitalOcean droplet** (not App Platform).
 Config lives in:
 
 ```text
-/root/ceefax_station/.env
+/root/ceefax_station_website/.env
 ```
+
+(Older docs said `/root/ceefax_station` — this droplet uses `_website`.)
 
 That file is loaded by systemd for both:
 
@@ -19,7 +21,7 @@ Edit on the server:
 
 ```bash
 ssh root@YOUR_DROPLET_IP
-nano /root/ceefax_station/.env
+nano /root/ceefax_station_website/.env
 ```
 
 Then:
@@ -38,8 +40,8 @@ python -m ceefaxweb.refresh_hub_pages
 |---|---|---|
 | `CEEFAXWEB_HOST` | Yes | `127.0.0.1` |
 | `CEEFAXWEB_PORT` | Yes | `8088` |
-| `CEEFAXWEB_DB` | Yes | `/root/ceefax_station/ceefaxweb/ceefaxweb.sqlite3` |
-| `CEEFAXWEB_PAGE_PACK_DIR` | Yes (for hub packs) | `/root/ceefax_station/ceefaxweb/data/page_pack` |
+| `CEEFAXWEB_DB` | Yes | `/root/ceefax_station_website/ceefaxweb/ceefaxweb.sqlite3` |
+| `CEEFAXWEB_PAGE_PACK_DIR` | Yes (for hub packs) | `/root/ceefax_station_website/ceefaxweb/data/page_pack` |
 | `CEEFAX_PAGES_SOURCE` | Yes on server | **`local`** (server must build pages itself, not download from itself) |
 | `CEEFAX_HUB_CALLSIGN` | Optional | `CEEFAX` (used when refreshing hub pages) |
 | `GUARDIAN_API_KEY` | Recommended | Free Guardian Open Platform key |
@@ -53,8 +55,8 @@ python -m ceefaxweb.refresh_hub_pages
 ```bash
 CEEFAXWEB_HOST=127.0.0.1
 CEEFAXWEB_PORT=8088
-CEEFAXWEB_DB=/root/ceefax_station/ceefaxweb/ceefaxweb.sqlite3
-CEEFAXWEB_PAGE_PACK_DIR=/root/ceefax_station/ceefaxweb/data/page_pack
+CEEFAXWEB_DB=/root/ceefax_station_website/ceefaxweb/ceefaxweb.sqlite3
+CEEFAXWEB_PAGE_PACK_DIR=/root/ceefax_station_website/ceefaxweb/data/page_pack
 CEEFAX_PAGES_SOURCE=local
 CEEFAX_HUB_CALLSIGN=CEEFAX
 

@@ -69,12 +69,19 @@ jobs:
             cd "${REPO_DIR}"
             mkdir -p "${REPO_DIR}/ceefaxweb/data/page_pack"
             if [ -f "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.service" ]; then
-              cp "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.service" /etc/systemd/system/
-              cp "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.timer" /etc/systemd/system/
+              # Unit files in repo default to /root/ceefax_station; rewrite for this host path.
+              sed "s|/root/ceefax_station|${REPO_DIR}|g" \
+                "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.service" \
+                > /etc/systemd/system/ceefax-hub-pages.service
+              cp "${REPO_DIR}/ceefaxweb/systemd/ceefax-hub-pages.timer" /etc/systemd/system/ceefax-hub-pages.timer
               systemctl daemon-reload
               systemctl enable --now ceefax-hub-pages.timer || true
-              # Best-effort first publish (needs API keys in /root/ceefax_station/.env)
+              # Best-effort first publish (needs API keys in ${REPO_DIR}/.env)
               if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+                set -a
+                # shellcheck disable=SC1091
+                [ -f "${REPO_DIR}/.env" ] && . "${REPO_DIR}/.env"
+                set +a
                 "${REPO_DIR}/venv/bin/python" -m ceefaxweb.refresh_hub_pages || echo "Hub page refresh skipped/failed (check API keys in .env)"
               else
                 python3 -m ceefaxweb.refresh_hub_pages || echo "Hub page refresh skipped/failed (check API keys in .env)"
