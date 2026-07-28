@@ -30,7 +30,7 @@ Then:
 systemctl restart ceefaxweb
 systemctl restart ceefax-hub-pages.timer
 # Optional: publish once immediately
-cd /root/ceefax_station && source venv/bin/activate
+cd /root/ceefax_station_website && source venv/bin/activate
 python -m ceefaxweb.refresh_hub_pages
 ```
 
