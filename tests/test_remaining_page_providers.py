@@ -16,8 +16,11 @@ def test_travel_uses_stale_cache_and_never_writes_error_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from ceefax.src import update_travel_page as travel
+    from ceefax.src import providers as providers_mod
 
     monkeypatch.setenv("CEEFAX_PROVIDER_CACHE", str(tmp_path))
+    monkeypatch.setattr(providers_mod, "FRESH_TFL_SECONDS", 0)
+    monkeypatch.setattr(travel, "FRESH_TFL_SECONDS", 0)
     live_data = [{"name": "Victoria", "status": "Good Service"}]
     monkeypatch.setattr(travel, "fetch_tfl_line_status", lambda: live_data)
     assert travel.resolve_travel_status().data == live_data

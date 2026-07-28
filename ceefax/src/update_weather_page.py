@@ -10,7 +10,7 @@ from typing import List, Tuple, Optional
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_OPEN_METEO_SECONDS
 from .weather_map import (
     WeatherSummary,
     fetch_open_meteo,
@@ -573,6 +573,7 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
             )
         ],
         is_valid=lambda data: isinstance(data, dict) and bool(data.get("description")),
+        fresh_for_seconds=FRESH_OPEN_METEO_SECONDS,
     )
     summary = weather_summary_from_dict(result.data)
     page_lines = build_single_location_weather_page(

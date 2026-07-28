@@ -2,6 +2,10 @@
 
 Reads provider API keys from the environment, refreshes shared pages locally,
 then publishes the pack served by the public page-pack API.
+
+Refresh cadence is intentionally conservative for free API tiers:
+football-data.org (10/min), Guardian (500/day), Lottery free (100/month),
+and Open-Meteo (10k/day). Provider caches + request pacing further reduce load.
 """
 
 from __future__ import annotations

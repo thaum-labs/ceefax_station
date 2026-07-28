@@ -97,9 +97,12 @@ def test_news_prefers_guardian_then_uses_stale_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from ceefax.src import update_news_page
+    from ceefax.src import providers as providers_mod
 
     monkeypatch.setenv("CEEFAX_PROVIDER_CACHE", str(tmp_path))
     monkeypatch.setenv("GUARDIAN_API_KEY", "configured")
+    monkeypatch.setattr(providers_mod, "FRESH_GUARDIAN_SECONDS", 0)
+    monkeypatch.setattr(update_news_page, "FRESH_GUARDIAN_SECONDS", 0)
     monkeypatch.setattr(
         update_news_page,
         "fetch_guardian_headlines",

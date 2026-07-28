@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
+import time
 from hashlib import sha256
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -17,6 +19,24 @@ import requests
 T = TypeVar("T")
 FOOTBALL_DATA_API_ROOT = "https://api.football-data.org/v4"
 FOOTBALL_DATA_API_KEY_ENV = "FOOTBALL_DATA_API_KEY"
+
+# Cache TTLs sized around free-tier provider limits and the hub refresh cadence.
+# Hub timer is 2h; these skip live HTTP when a recent last-good cache exists.
+FRESH_FOOTBALL_SECONDS = 90 * 60  # football-data.org free: 10 req/min (4 calls/refresh)
+FRESH_GUARDIAN_SECONDS = 90 * 60  # Guardian developer: 1 req/sec, 500/day
+FRESH_TMDB_SECONDS = 6 * 60 * 60  # TMDB is generous; film lists change slowly
+FRESH_TVMAZE_SECONDS = 2 * 60 * 60  # TVMaze ~20/10s; schedule is hourly-ish
+FRESH_OPEN_METEO_SECONDS = 60 * 60  # Open-Meteo free: 10k/day; forecasts update slowly
+FRESH_TFL_SECONDS = 15 * 60  # TfL anonymous ~50/min; status can move faster
+
+_FOOTBALL_MIN_INTERVAL_S = 6.5  # stay under 10 req/min even with retries
+_GUARDIAN_MIN_INTERVAL_S = 1.05  # Guardian developer: max 1 req/sec
+_api_pace_state = {
+    "football": 0.0,
+    "guardian": 0.0,
+}
+_football_lock = threading.Lock()
+_guardian_lock = threading.Lock()
 _PROVIDER_ACTIVITY: dict[str, ProviderResult] = {}
 
 
@@ -225,6 +245,24 @@ def require_env(name: str) -> str:
     return value
 
 
+def _pace_call(lock: threading.Lock, key: str, min_interval_s: float) -> None:
+    """Space authenticated API calls to respect free-tier per-second/minute caps."""
+    with lock:
+        now = time.monotonic()
+        wait = min_interval_s - (now - _api_pace_state[key])
+        if wait > 0:
+            time.sleep(wait)
+        _api_pace_state[key] = time.monotonic()
+
+
+def pace_football_data_call() -> None:
+    _pace_call(_football_lock, "football", _FOOTBALL_MIN_INTERVAL_S)
+
+
+def pace_guardian_api_call() -> None:
+    _pace_call(_guardian_lock, "guardian", _GUARDIAN_MIN_INTERVAL_S)
+
+
 def fetch_football_data(
     path: str,
     *,
@@ -233,6 +271,7 @@ def fetch_football_data(
 ) -> dict[str, Any]:
     """Fetch one authenticated football-data.org v4 JSON resource."""
     token = require_env(FOOTBALL_DATA_API_KEY_ENV)
+    pace_football_data_call()
     response = requests.get(
         f"{FOOTBALL_DATA_API_ROOT}/{path.lstrip('/')}",
         headers={"X-Auth-Token": token},

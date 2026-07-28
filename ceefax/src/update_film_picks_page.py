@@ -8,7 +8,7 @@ from typing import Dict, List
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .providers import ProviderResult, atomic_write_json, require_env, resolve_provider
+from .providers import ProviderResult, atomic_write_json, require_env, resolve_provider, FRESH_TMDB_SECONDS
 
 
 def _pad(text: str) -> str:
@@ -51,7 +51,11 @@ def fetch_tmdb_films() -> Dict[str, List[Dict]]:
 
 
 def get_film_data() -> ProviderResult[Dict[str, List[Dict]]]:
-    return resolve_provider("films-504", [(TMDB_SOURCE, fetch_tmdb_films)])
+    return resolve_provider(
+        "films-504",
+        [(TMDB_SOURCE, fetch_tmdb_films)],
+        fresh_for_seconds=FRESH_TMDB_SECONDS,
+    )
 
 
 def format_rating(vote_average: float) -> str:

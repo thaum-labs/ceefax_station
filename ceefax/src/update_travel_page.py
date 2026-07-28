@@ -10,7 +10,7 @@ from typing import Dict, List
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_TFL_SECONDS
 
 
 def _pad(text: str) -> str:
@@ -62,6 +62,7 @@ def resolve_travel_status() -> ProviderResult[List[Dict]]:
         [("TfL Unified API", fetch_tfl_line_status)],
         is_valid=lambda data: bool(data)
         and all(isinstance(item, dict) and item.get("name") for item in data),
+        fresh_for_seconds=FRESH_TFL_SECONDS,
     )
 
 

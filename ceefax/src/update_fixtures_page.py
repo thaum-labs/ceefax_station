@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .compiler import PAGE_HEIGHT, PAGE_WIDTH
-from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider
+from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider, FRESH_FOOTBALL_SECONDS
 
 
 RESULT_STATUSES = {"FINISHED", "IN_PLAY", "PAUSED"}
@@ -75,6 +75,7 @@ def _fixtures() -> ProviderResult[Dict[str, List[dict[str, Any]]]]:
             and isinstance(data.get("scores"), list)
             and isinstance(data.get("fixtures"), list)
         ),
+        fresh_for_seconds=FRESH_FOOTBALL_SECONDS,
     )
 
 

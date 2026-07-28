@@ -9,7 +9,7 @@ from typing import Any, List
 import requests
 
 from .compiler import PAGE_HEIGHT, PAGE_WIDTH
-from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider
+from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider, FRESH_FOOTBALL_SECONDS
 
 
 BBC_FOOTBALL_RSS = "https://feeds.bbci.co.uk/sport/football/rss.xml"
@@ -104,6 +104,7 @@ def _league_table(code: str) -> ProviderResult[List[List[str]]]:
     return resolve_provider(
         f"football-standings-{code.lower()}",
         [(FOOTBALL_DATA_SOURCE, lambda: fetch_league_rows(code, limit=20))],
+        fresh_for_seconds=FRESH_FOOTBALL_SECONDS,
     )
 
 

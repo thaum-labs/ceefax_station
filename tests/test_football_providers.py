@@ -141,6 +141,8 @@ def test_structured_page_uses_stale_cache_when_api_unavailable(
     }
     monkeypatch.setenv("FOOTBALL_DATA_API_KEY", "test-token")
     monkeypatch.setenv("CEEFAX_PROVIDER_CACHE", str(tmp_path))
+    monkeypatch.setattr(providers, "FRESH_FOOTBALL_SECONDS", 0)
+    monkeypatch.setattr(scores, "FRESH_FOOTBALL_SECONDS", 0)
     monkeypatch.setattr(providers.requests, "get", lambda *_a, **_k: FakeResponse(payload))
     current = scores.build_football_scores_page()
     assert any("CURRENT" in line for line in current)

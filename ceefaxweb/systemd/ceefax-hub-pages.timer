@@ -1,9 +1,16 @@
 [Unit]
-Description=Run Ceefax hub page refresh every 30 minutes
+Description=Run Ceefax hub page refresh on a rate-limit-friendly schedule
 
 [Timer]
+# Free-tier API budgets (research-backed):
+# - football-data.org free: 10 req/min (hub uses 4 calls/refresh)
+# - Guardian developer: 1 req/sec, 500/day (hub uses up to 3 calls/refresh)
+# - Lottery Results Feed free: 100 calls/month (already cached 24h)
+# - Open-Meteo free: 10k/day (weather pages make many calls when uncached)
+# - TMDB / TVMaze / TfL: comparatively generous for our volume
+# 2h cadence keeps Guardian well under 500/day and Open-Meteo well under 10k/day.
 OnBootSec=2min
-OnUnitActiveSec=30min
+OnUnitActiveSec=2h
 AccuracySec=1min
 Unit=ceefax-hub-pages.service
 Persistent=true

@@ -7,7 +7,7 @@ from typing import List
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
 from .news_providers import fetch_bbc_rss_headlines, fetch_guardian_headlines
-from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_GUARDIAN_SECONDS
 
 
 BBC_WORLD_RSS = "https://feeds.bbci.co.uk/news/world/rss.xml"
@@ -33,7 +33,11 @@ def resolve_headlines(limit: int = 6) -> ProviderResult[List[str]]:
             )
         )
     providers.append(("BBC World RSS", lambda: fetch_headlines(limit)))
-    return resolve_provider("news-201-world", providers)
+    return resolve_provider(
+        "news-201-world",
+        providers,
+        fresh_for_seconds=FRESH_GUARDIAN_SECONDS,
+    )
 
 
 def build_world_news_page(result: ProviderResult[List[str]] | None = None) -> List[str]:

@@ -8,6 +8,8 @@ from typing import List
 
 import requests
 
+from .providers import pace_guardian_api_call
+
 
 GUARDIAN_SEARCH_URL = "https://content.guardianapis.com/search"
 
@@ -30,6 +32,7 @@ def fetch_guardian_headlines(
     }
     if query:
         params["q"] = query
+    pace_guardian_api_call()
     response = requests.get(
         GUARDIAN_SEARCH_URL,
         params=params,

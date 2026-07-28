@@ -7,6 +7,7 @@
       "version": "0.1.1-alpha",
       "changes": [
         "Improved the map legend: stations vs links, listening-only (blue), partial as diagonal split, dashed TX→RX link swatches",
+        "Slowed hub page-pack refresh to every 2 hours and added provider cache/pacing for free API rate limits",
         "Added map style picker: Street (light), CARTO light, CARTO dark, and topographic (choice is remembered)",
         "Default map style is Street (light); dark map is optional",
         "Refreshed the public map mock dataset with a new UK demo network (HF/VHF/UHF)",

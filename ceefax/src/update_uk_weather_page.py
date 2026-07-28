@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_OPEN_METEO_SECONDS
 from .weather_map import (
     WeatherSummary,
     fetch_open_meteo,
@@ -232,6 +232,7 @@ def main() -> None:
             )
         ],
         is_valid=lambda data: isinstance(data, dict) and all(query in data for query in queries),
+        fresh_for_seconds=FRESH_OPEN_METEO_SECONDS,
     )
     prefetched: Dict[str, WeatherSummary] = {
         query: weather_summary_from_dict(data)

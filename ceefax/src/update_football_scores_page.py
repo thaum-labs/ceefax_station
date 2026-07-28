@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, List
 
 from .compiler import PAGE_HEIGHT, PAGE_WIDTH
-from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider
+from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider, FRESH_FOOTBALL_SECONDS
 
 
 SCORED_STATUSES = {"FINISHED", "IN_PLAY", "PAUSED"}
@@ -69,6 +69,7 @@ def _scores() -> ProviderResult[List[dict[str, Any]]]:
         "football-scores-pl",
         [("football-data.org", fetch_premier_league_scores)],
         is_valid=lambda data: isinstance(data, list),
+        fresh_for_seconds=FRESH_FOOTBALL_SECONDS,
     )
 
 

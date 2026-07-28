@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_TVMAZE_SECONDS
 
 
 def _pad(text: str) -> str:
@@ -138,6 +138,7 @@ def get_tv_schedule(*, start_utc: datetime, end_utc: datetime) -> ProviderResult
     return resolve_provider(
         "tv-503",
         [(TVMAZE_SOURCE, lambda: fetch_tvmaze_schedule(start_utc=start_utc, end_utc=end_utc))],
+        fresh_for_seconds=FRESH_TVMAZE_SECONDS,
     )
 
 
