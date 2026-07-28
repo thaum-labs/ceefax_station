@@ -123,11 +123,7 @@ ceefaxstation pages pull
 ceefaxstation debug --refresh --view --pages-source auto
 ```
 
-Hub operators publish with:
-
-```bash
-python -m ceefaxweb.publish_pages
-```
+Shared pages come from the official hub at [ceefaxstation.com](https://ceefaxstation.com). Stations should not run their own hub/website.
 
 ## Live data pages
 
@@ -203,4 +199,4 @@ Optional systemd unit: `service/ceefax.service` (adjust paths for your install).
 ## Related docs
 
 - Root [README.md](../README.md) — installers, screenshots, tracker upload
-- [ceefaxweb/README.md](../ceefaxweb/README.md) — central tracker server notes
+- Live map: [ceefaxstation.com](https://ceefaxstation.com)

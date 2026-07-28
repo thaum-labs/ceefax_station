@@ -216,8 +216,6 @@ Then open [ceefaxstation.com](https://ceefaxstation.com). Make sure your **grid*
 ## Helpful links
 
 - Live map + hub: [ceefaxstation.com](https://ceefaxstation.com)
-- Hub pack status: [ceefaxstation.com/api/pages/manifest](https://ceefaxstation.com/api/pages/manifest)
-- Server setup (admins): [DIGITALOCEAN.md](DIGITALOCEAN.md)
 - Extra technical notes: [ceefax/README.md](ceefax/README.md)
 - Licence: [MIT](LICENSE)
 
@@ -231,15 +229,13 @@ Then open [ceefaxstation.com](https://ceefaxstation.com). Make sure your **grid*
 ```
 ceefax/           station app, page updaters, viewer
 ceefaxstation/    CLI (`python -m ceefaxstation ...`)
-ceefaxweb/        public tracker + hub page pack API
+ceefaxweb/        official site source (ceefaxstation.com — not for self-hosting)
 installers/       Windows setup .exe (may lag main)
 ```
 
 ```bash
 python -m pytest
 ```
-
-Server operators: see [DIGITALOCEAN.md](DIGITALOCEAN.md) for `.env` keys and the hub refresh timer.
 
 </details>
 

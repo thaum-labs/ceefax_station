@@ -48,7 +48,7 @@ def pull_page_pack(
     if response.status_code == 404:
         raise RuntimeError(
             "Hub has no published page pack yet. "
-            "Hub operator: refresh pages, then run python -m ceefaxweb.publish_pages"
+            "Official hub page pack is unavailable; try again later or use --pages-source local"
         )
     if response.status_code == 429:
         raise RuntimeError("Hub page-pack rate limit exceeded; try again shortly")
