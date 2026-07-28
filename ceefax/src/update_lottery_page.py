@@ -106,8 +106,10 @@ def _fetch_game(*, params: dict[str, Any]) -> Any:
 
 def fetch_lottery_results() -> dict[str, dict[str, Any]]:
     """Fetch and normalize the latest Lotto and EuroMillions draws."""
-    lotto = _fetch_game(params={"slug": "uk-lotto", "country": "uk", "limit": 1})
-    euro = _fetch_game(params={"id": 722, "limit": 1})
+    # Lottery Results Feed uses slug "lotto" (not "uk-lotto"). id 722 is
+    # Ireland EuroMillions; UK EuroMillions is slug "euromillions" + country uk.
+    lotto = _fetch_game(params={"slug": "lotto", "country": "uk", "limit": 1})
+    euro = _fetch_game(params={"slug": "euromillions", "country": "uk", "limit": 1})
     return {
         "national": _normalize_lotto(lotto),
         "euromillions": _normalize_euromillions(euro),

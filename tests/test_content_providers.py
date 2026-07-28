@@ -54,7 +54,7 @@ def test_tvmaze_filters_and_normalizes_four_channels(monkeypatch: pytest.MonkeyP
     assert all(item["synopsis"] == "Summary" for item in items)
 
 
-def test_tvmaze_rejects_incomplete_channel_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tvmaze_accepts_partial_channel_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
     from ceefax.src import update_tv_guide_page as tv
 
     payload = [
@@ -66,7 +66,41 @@ def test_tvmaze_rejects_incomplete_channel_coverage(monkeypatch: pytest.MonkeyPa
         for channel in ("BBC One", "ITV1", "Channel 4")
     ]
     monkeypatch.setattr(tv.requests, "get", lambda *_args, **_kwargs: FakeResponse(payload))
-    with pytest.raises(ValueError, match="BBC Two"):
+    items = tv.fetch_tvmaze_schedule(
+        start_utc=datetime(2026, 7, 28, 20, tzinfo=timezone.utc),
+        end_utc=datetime(2026, 7, 28, 22, tzinfo=timezone.utc),
+    )
+    assert {item["channel"] for item in items} == {"BBC One", "ITV1", "Channel 4"}
+
+
+def test_tvmaze_reads_embedded_show_from_full_feed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ceefax.src import update_tv_guide_page as tv
+
+    payload = [
+        {
+            "airstamp": "2026-07-28T20:30:00Z",
+            "runtime": 60,
+            "name": "Episode 1",
+            "_embedded": {
+                "show": {"name": "Embedded Show", "network": {"name": "BBC Two"}, "summary": "<p>Hi</p>"}
+            },
+        }
+    ]
+    monkeypatch.setattr(tv.requests, "get", lambda *_args, **_kwargs: FakeResponse(payload))
+    items = tv.fetch_tvmaze_schedule(
+        start_utc=datetime(2026, 7, 28, 20, tzinfo=timezone.utc),
+        end_utc=datetime(2026, 7, 28, 22, tzinfo=timezone.utc),
+    )
+    assert items[0]["channel"] == "BBC Two"
+    assert items[0]["title"] == "Embedded Show"
+    assert items[0]["synopsis"] == "Hi"
+
+
+def test_tvmaze_rejects_empty_listings(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ceefax.src import update_tv_guide_page as tv
+
+    monkeypatch.setattr(tv.requests, "get", lambda *_args, **_kwargs: FakeResponse([]))
+    with pytest.raises(ValueError, match="no listings"):
         tv.fetch_tvmaze_schedule(
             start_utc=datetime(2026, 7, 28, 20, tzinfo=timezone.utc),
             end_utc=datetime(2026, 7, 28, 22, tzinfo=timezone.utc),
