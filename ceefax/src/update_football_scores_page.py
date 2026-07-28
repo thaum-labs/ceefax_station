@@ -1,119 +1,127 @@
-"""
-Update page 301 with live football scores from BBC Sport.
-"""
-import json
+"""Update page 301 from structured Premier League match data."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
-import requests
-import xml.etree.ElementTree as ET
-
-from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .compiler import PAGE_HEIGHT, PAGE_WIDTH
+from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider
 
 
-BBC_FOOTBALL_RSS = "https://feeds.bbci.co.uk/sport/football/rss.xml"
+SCORED_STATUSES = {"FINISHED", "IN_PLAY", "PAUSED"}
 
 
 def _pad(text: str) -> str:
-    txt = text[:PAGE_WIDTH]
-    return txt.ljust(PAGE_WIDTH)
+    return text[:PAGE_WIDTH].ljust(PAGE_WIDTH)
 
 
-def extract_scores(headlines: List[str]) -> List[str]:
-    """Extract scorelines from football headlines."""
-    import re
+def _page(lines: List[str]) -> List[str]:
+    lines = lines[:PAGE_HEIGHT]
+    return [_pad(line) for line in lines] + [_pad("")] * (PAGE_HEIGHT - len(lines))
 
-    score_re = re.compile(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b")
-    scores = []
 
-    for headline in headlines:
-        # Look for score patterns like "Team 2-1 Other Team"
-        match = score_re.search(headline)
-        if match:
-            # Try to extract team names and score
-            parts = headline.split(match.group(0))
-            if len(parts) >= 2:
-                team1 = parts[0].strip()[-20:].strip()  # Last 20 chars before score
-                team2 = parts[1].strip()[:20].strip()  # First 20 chars after score
-                score = match.group(0)
-                scores.append(f"{team1:20} {score:>6} {team2:<20}")
-            else:
-                scores.append(headline[:PAGE_WIDTH])
-        else:
-            # No score, but might be a fixture
-            if "v" in headline.lower() or "vs" in headline.lower():
-                scores.append(headline[:PAGE_WIDTH])
+def _normalize_matches(payload: dict[str, Any]) -> List[dict[str, Any]]:
+    matches = payload.get("matches")
+    if not isinstance(matches, list):
+        raise ValueError("matches response has no matches list")
+    normalized: List[dict[str, Any]] = []
+    for match in matches:
+        if not isinstance(match, dict):
+            continue
+        home = match.get("homeTeam")
+        away = match.get("awayTeam")
+        full_time = (match.get("score") or {}).get("fullTime") or {}
+        if not isinstance(home, dict) or not isinstance(away, dict):
+            continue
+        normalized.append(
+            {
+                "utc_date": str(match.get("utcDate") or ""),
+                "status": str(match.get("status") or ""),
+                "home": str(home.get("shortName") or home.get("name") or ""),
+                "away": str(away.get("shortName") or away.get("name") or ""),
+                "home_score": full_time.get("home"),
+                "away_score": full_time.get("away"),
+            }
+        )
+    return normalized
 
-    return scores[:10]  # Limit to 10 items
+
+def fetch_premier_league_scores(now: datetime | None = None) -> List[dict[str, Any]]:
+    current = now or datetime.now(timezone.utc)
+    payload = fetch_football_data(
+        "competitions/PL/matches",
+        params={
+            "dateFrom": (current - timedelta(days=3)).date().isoformat(),
+            "dateTo": current.date().isoformat(),
+        },
+    )
+    return [
+        match
+        for match in _normalize_matches(payload)
+        if match["status"] in SCORED_STATUSES
+    ]
+
+
+def _scores() -> ProviderResult[List[dict[str, Any]]]:
+    return resolve_provider(
+        "football-scores-pl",
+        [("football-data.org", fetch_premier_league_scores)],
+        is_valid=lambda data: isinstance(data, list),
+    )
+
+
+def _match_line(match: dict[str, Any]) -> str:
+    date = match["utc_date"][5:10].replace("-", "/")
+    home_score = match.get("home_score")
+    away_score = match.get("away_score")
+    if home_score is None or away_score is None:
+        score = match["status"].replace("_", " ")[:7]
+    else:
+        score = f"{home_score}-{away_score}"
+    return (
+        f"{date:>5} {match['home'][:17]:>17} "
+        f"{score:^7} {match['away'][:17]:<17}"
+    )
 
 
 def build_football_scores_page() -> List[str]:
-    lines: List[str] = []
-    lines.append(_pad("FOOTBALL LIVE SCORES"))
-
-    try:
-        resp = requests.get(BBC_FOOTBALL_RSS, timeout=10)
-        resp.raise_for_status()
-
-        root = ET.fromstring(resp.content)
-        items = root.findall("./channel/item/title")
-        headlines: List[str] = []
-        for item in items[:15]:
-            if item.text:
-                headlines.append(item.text.strip())
-
-        scores = extract_scores(headlines)
-
-        sep = _pad("-" * PAGE_WIDTH)
-        lines.append(sep)
-        lines.append(_pad("PREMIER LEAGUE"))
-        lines.append(sep)
-
-        for score in scores[:6]:
-            lines.append(_pad(score))
-            if score != scores[-1]:
-                lines.append(_pad(""))
-
-        if len(scores) > 6:
-            lines.append(sep)
-            lines.append(_pad("OTHER LEAGUES"))
-            lines.append(sep)
-            for score in scores[6:]:
-                lines.append(_pad(score))
-                if score != scores[-1]:
-                    lines.append(_pad(""))
-
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching scores:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
-
-    lines.append(_pad(""))
-    lines.append(_pad("Source: BBC Sport"))
-
-    return lines[:PAGE_HEIGHT]
+    result = _scores()
+    matches = sorted(result.data, key=lambda match: match["utc_date"], reverse=True)
+    lines = [
+        "FOOTBALL LIVE SCORES",
+        "-" * PAGE_WIDTH,
+        "PREMIER LEAGUE - LIVE & RECENT",
+        "-" * PAGE_WIDTH,
+    ]
+    if matches:
+        lines.extend(_match_line(match) for match in matches[:17])
+    else:
+        lines.append("No live or recent matches in the UTC window")
+    lines = lines[:21]
+    lines.append("")
+    state = "STALE" if result.stale else "CURRENT"
+    stamp = result.fetched_at[5:16].replace("T", " ")
+    lines.append(f"Src {result.source[:17]} As-of {stamp}Z {state}")
+    return _page(lines)
 
 
 def main() -> None:
-    """Update page 301 with latest football live scores."""
-    root = Path(__file__).resolve().parent.parent
-    pages_dir = root / "pages"
-    page_file = pages_dir / "301.json"
-
+    page_file = Path(__file__).resolve().parent.parent / "pages" / "301.json"
     content = build_football_scores_page()
-
-    page = {
-        "page": "301",
-        "title": "Football Live Scores",
-        "timestamp": "From BBC Sport (live)",
-        "subpage": 1,
-        "content": content,
-    }
-
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
-    print(f"Updated {page_file} with latest football live scores")
+    atomic_write_json(
+        page_file,
+        {
+            "page": "301",
+            "title": "Football Live Scores",
+            "timestamp": "football-data.org",
+            "subpage": 1,
+            "content": content,
+        },
+    )
+    print(f"Updated {page_file} with latest football scores")
 
 
 if __name__ == "__main__":
     main()
-
