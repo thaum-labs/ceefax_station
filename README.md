@@ -333,6 +333,7 @@ More technical detail: see [`ceefax/README.md`](ceefax/README.md).
 
 - Live map: [ceefaxstation.com](https://ceefaxstation.com)
 - This project: [github.com/thaum-labs/ceefax_station](https://github.com/thaum-labs/ceefax_station)
+- DigitalOcean env vars: [DIGITALOCEAN.md](DIGITALOCEAN.md)
 - Licence: [MIT](LICENSE) (free to use)
 
 ---
