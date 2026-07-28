@@ -35,8 +35,116 @@
       }
       .map-hint[hidden] { display: none !important; }
       .howto-tap { display: none; }
-      .sw-link-ok { background: linear-gradient(90deg, rgba(255,211,77,0.85), rgba(255,211,77,0.35)); }
-      .sw-link-partial { background: linear-gradient(90deg, rgba(74,163,255,0.85), rgba(74,163,255,0.35)); }
+      /* Legend — matches station squares + dashed TX→RX links on the map */
+      .legend-box { margin-top: 10px; }
+      .legend-title {
+        font-weight: 650;
+        font-size: 13px;
+        margin: 0 0 8px 0;
+        color: #f3f3f3;
+      }
+      .legend-section {
+        margin-top: 10px;
+      }
+      .legend-section:first-of-type { margin-top: 0; }
+      .legend-heading {
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #9a9a9a;
+        margin: 0 0 6px 0;
+      }
+      .legend {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .legend-item {
+        display: grid;
+        grid-template-columns: 40px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 2px 0;
+      }
+      .legend-copy { min-width: 0; }
+      .legend-label {
+        display: block;
+        font-size: 13px;
+        line-height: 1.25;
+        color: #f3f3f3;
+      }
+      .legend-desc {
+        display: block;
+        margin-top: 1px;
+        font-size: 11px;
+        line-height: 1.3;
+        color: #9a9a9a;
+      }
+      .swatch {
+        width: 40px;
+        height: 22px;
+        border-radius: 2px;
+        border: 2px solid rgba(255,255,255,0.35);
+        box-sizing: border-box;
+        flex: 0 0 auto;
+      }
+      .sw-station-tx {
+        background: rgba(46,204,113,0.55);
+        border-color: #2ecc71;
+      }
+      .sw-station-ok {
+        background: rgba(255,211,77,0.50);
+        border-color: #ffd34d;
+      }
+      .sw-station-none {
+        background: rgba(74,163,255,0.45);
+        border-color: #4aa3ff;
+      }
+      .sw-station-partial {
+        border-color: #ffd34d;
+        background:
+          linear-gradient(135deg,
+            rgba(255,211,77,0.70) 0 49.5%,
+            rgba(74,163,255,0.55) 50.5% 100%);
+      }
+      .sw-link {
+        height: 14px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        position: relative;
+      }
+      .sw-link::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 8px;
+        top: 50%;
+        height: 0;
+        border-top: 3px dashed currentColor;
+        transform: translateY(-50%);
+        opacity: 0.95;
+      }
+      .sw-link::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 50%;
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 7px solid currentColor;
+        transform: translateY(-50%);
+      }
+      .sw-link-ok { color: #ffd34d; }
+      .sw-link-partial { color: #4aa3ff; }
+      .legend-note {
+        margin: 8px 0 0 0;
+        font-size: 11px;
+        line-height: 1.35;
+        color: #9a9a9a;
+      }
       @media (prefers-reduced-motion: reduce) {
         #side, .sidebar-toggle::before, .sidebar-toggle::after,
         .sidebar-toggle-text, .mobile-link-notification {
@@ -63,14 +171,6 @@
         background: #0f0f0f;
         width: fit-content;
       }
-
-      /* Simple legend (matches current map styling) */
-      .legend { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }
-      .legend-item { display: flex; align-items: center; justify-content: space-between; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 8px; background: #0f0f0f; }
-      .swatch { width: 46px; height: 18px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.25); }
-      .sw-yellow { background: rgba(255,211,77,0.85); }
-      .sw-blue { background: rgba(74,163,255,0.75); }
-      .sw-green { background: rgba(46,204,113,0.80); }
 
       /* Improve click affordance on map paths */
       .leaflet-interactive { cursor: pointer; }
@@ -396,20 +496,38 @@
         .box strong {
           font-size: 12px;
         }
+        .legend-title {
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+        .legend-section { margin-top: 8px; }
+        .legend-heading {
+          font-size: 10px;
+          margin-bottom: 4px;
+        }
         .legend {
           gap: 4px;
-          margin-top: 4px;
         }
         .legend-item {
-          padding: 4px 6px;
-          font-size: 11px;
+          grid-template-columns: 32px 1fr;
+          gap: 8px;
+          padding: 1px 0;
         }
-        .legend-item span:first-child {
-          font-size: 11px;
-        }
+        .legend-label { font-size: 12px; }
+        .legend-desc { font-size: 10px; }
         .swatch {
           width: 32px;
-          height: 16px;
+          height: 18px;
+        }
+        .sw-link { height: 12px; }
+        .sw-link::after {
+          border-top-width: 4px;
+          border-bottom-width: 4px;
+          border-left-width: 6px;
+        }
+        .legend-note {
+          font-size: 10px;
+          margin-top: 6px;
         }
         .muted {
           font-size: 10px;
@@ -420,12 +538,9 @@
           padding-top: 10px;
           font-size: 11px;
         }
-        /* Keep a short how-to + full legend on mobile */
+        /* Keep how-to + legend on mobile; hide only long secondary notes if needed */
         #status + .box {
           display: block;
-        }
-        .legend-note {
-          display: none;
         }
         /* Allow detail table to show - panel will scroll if needed */
         #detail {
@@ -472,9 +587,15 @@
           font-size: 11px;
         }
         .legend-item {
-          padding: 3px 5px;
-          font-size: 10px;
+          grid-template-columns: 28px 1fr;
+          gap: 7px;
         }
+        .swatch {
+          width: 28px;
+          height: 16px;
+        }
+        .legend-label { font-size: 11px; }
+        .legend-desc { display: none; }
         #status {
           font-size: 10px;
         }
@@ -486,7 +607,7 @@
     <div id="app">
       <div id="map" role="region" aria-label="Station map">
         <div class="map-hint" id="mapHint">
-          <strong>Tip:</strong> tap a yellow/blue line for TX→RX pages. Green = transmitting.
+          <strong>Tip:</strong> tap a dashed line for the TX→RX page table. Green = TX, yellow = RX OK, blue = listening, split = partial.
         </div>
       </div>
       <div class="mobile-link-notification" id="mobileLinkNotification" role="status" aria-live="polite">
@@ -541,25 +662,71 @@
         <div class="muted" id="status" role="status" aria-live="polite">Connecting…</div>
 
         <div class="box">
-          <div>
-            <strong class="howto-click">Click a line</strong><strong class="howto-tap">Tap a line</strong>
-            to see pages TX and RX status.
-          </div>
-          <div class="muted">Stations need a Maidenhead grid to appear on the map.</div>
+          <div class="muted">Stations need a Maidenhead grid square to appear on the map.</div>
         </div>
 
-        <div class="box">
-          <div><strong>Legend</strong></div>
-          <div class="legend">
-            <div class="legend-item"><span>Transmitting station (TX)</span><span class="swatch sw-green" aria-hidden="true"></span></div>
-            <div class="legend-item"><span>Receiving OK (all pages)</span><span class="swatch sw-yellow" aria-hidden="true"></span></div>
-            <div class="legend-item"><span>Receiving partial</span><span class="swatch sw-blue" aria-hidden="true"></span></div>
-            <div class="legend-item"><span>Complete link</span><span class="swatch sw-link-ok" aria-hidden="true"></span></div>
-            <div class="legend-item"><span>Incomplete link</span><span class="swatch sw-link-partial" aria-hidden="true"></span></div>
+        <div class="box legend-box">
+          <h2 class="legend-title">Legend</h2>
+
+          <div class="legend-section">
+            <div class="legend-heading">Stations (grid squares)</div>
+            <div class="legend" role="list">
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-station-tx" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Transmitting (TX)</span>
+                  <span class="legend-desc">Sent pages in this time window</span>
+                </span>
+              </div>
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-station-ok" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Receiving OK</span>
+                  <span class="legend-desc">Got every page from linked TX stations</span>
+                </span>
+              </div>
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-station-partial" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Partial receive</span>
+                  <span class="legend-desc">Diagonal split — some TX pages missing</span>
+                </span>
+              </div>
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-station-none" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Listening only</span>
+                  <span class="legend-desc">On the map, but no pages decoded yet</span>
+                </span>
+              </div>
+            </div>
           </div>
-          <div class="muted legend-note" style="margin-top:8px;">
-            Partial stations use a diagonal split. Links animate from TX toward RX.
+
+          <div class="legend-section">
+            <div class="legend-heading">Links (TX → RX)</div>
+            <div class="legend" role="list">
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-link sw-link-ok" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Complete</span>
+                  <span class="legend-desc">Yellow dashed line — all pages received</span>
+                </span>
+              </div>
+              <div class="legend-item" role="listitem">
+                <span class="swatch sw-link sw-link-partial" aria-hidden="true"></span>
+                <span class="legend-copy">
+                  <span class="legend-label">Incomplete</span>
+                  <span class="legend-desc">Blue dashed line — missing pages</span>
+                </span>
+              </div>
+            </div>
           </div>
+
+          <p class="legend-note">
+            Lines animate from TX toward RX.
+            <span class="howto-click">Click</span><span class="howto-tap">Tap</span>
+            a line for the page table.
+          </p>
         </div>
 
         <div class="box" id="detail" style="display:none;" aria-live="polite">
