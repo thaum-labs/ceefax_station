@@ -40,7 +40,8 @@ def run_hourly_ax25_audio(
     """
     Hourly scheduler:
       - refresh pages before the hour
-      - start emitting AX.25 AFSK exactly on the hour
+      - pre-render WAV when playing from file so RF starts on the hour
+      - stream-to-stdout modes encode on the hour so PCM begins at :00
       - transmit a full 3× carousel as one continuous WAV/PCM stream
     """
     ax = config.ax25
@@ -65,6 +66,7 @@ def run_hourly_ax25_audio(
 
         # Prime cached settings so update_all won't prompt.
         # Frequency is optional but we set it to "" to avoid interactive prompts.
+        # persist_radio_config merges and will not wipe an existing frequency.
         prime_user_settings(callsign=ax.callsign, frequency="", auto_location=True)
 
         # Refresh feeds/pages (writes JSON pages on disk).
@@ -92,9 +94,14 @@ def run_hourly_ax25_audio(
             max_info_bytes=ax.max_info_bytes,
         )
 
-        # Ensure we start exactly at the hour; if refresh overran, skip to next hour.
+        output_mode = (au.output or "files").lower()
+        # stdout/both must encode live at :00 so PCM/RF starts with the hour.
+        stream_live = output_mode in ("stdout", "both")
+        # File/play path: render before :00, then start aplay exactly on the hour.
+        prerender = (not stream_live) and (play or output_mode == "files")
+
         now2 = datetime.now()
-        if now2 >= hour:
+        if now2 >= hour and not prerender:
             logging.warning(
                 "Refresh/build overran hour boundary (%s >= %s); skipping TX this hour",
                 now2,
@@ -103,18 +110,15 @@ def run_hourly_ax25_audio(
             continue
 
         logging.info(
-            "Prepared TX: %d pages, %d fragments, %d UI frames. Waiting for %s",
+            "Prepared TX: %d pages, %d fragments, %d UI frames. Target hour %s",
             plan.pages,
             plan.fragments,
             len(plan.ui_frames),
             hour,
         )
-        _sleep_until(hour)
 
         wav_name = hour.strftime(f"ceefax_ax25_hourly_{max(1, loops_in_wav)}x_%Y%m%d_%H00.wav")
-        logging.info("Starting AX.25 AFSK TX now (%s)", hour)
-
-        wav_path = write_ax25_audio_wav_and_or_stdout(
+        write_kwargs = dict(
             plan=plan,
             sample_rate=au.sample_rate,
             symbol_rate=au.symbol_rate,
@@ -125,12 +129,36 @@ def run_hourly_ax25_audio(
             inter_frame_flags=ax.inter_frame_flags,
             postamble_flags=ax.postamble_flags,
             output_dir=config.general.output_dir,
-            output_mode=au.output,
             wav_basename=wav_name,
         )
-        logging.info("Wrote AX.25 audio WAV: %s", wav_path)
 
-        if play:
+        wav_path: str | None = None
+        if prerender:
+            logging.info("Pre-rendering AX.25 WAV before hour (%s)", hour)
+            wav_path = write_ax25_audio_wav_and_or_stdout(
+                output_mode="files",
+                **write_kwargs,
+            )
+            logging.info("Pre-rendered AX.25 audio WAV: %s", wav_path)
+            now3 = datetime.now()
+            if now3 < hour:
+                _sleep_until(hour)
+            else:
+                logging.warning(
+                    "Pre-render finished after hour boundary (%s); starting immediately",
+                    now3,
+                )
+            logging.info("Starting play/TX now (%s)", hour)
+        else:
+            _sleep_until(hour)
+            logging.info("Starting AX.25 AFSK TX now (%s)", hour)
+            wav_path = write_ax25_audio_wav_and_or_stdout(
+                output_mode=output_mode,
+                **write_kwargs,
+            )
+            logging.info("Wrote AX.25 audio WAV: %s", wav_path)
+
+        if play and wav_path:
             try:
                 logging.info(
                     "Playing WAV (%dx): %s",
@@ -145,4 +173,3 @@ def run_hourly_ax25_audio(
                 )
             except Exception as exc:  # noqa: BLE001
                 logging.exception("Playback failed (continuing scheduler): %s", exc)
-

@@ -3,14 +3,14 @@ Update page 401 with TFL (Transport for London) status information.
 
 Uses TFL Unified API (free, no API key required).
 """
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List
 
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 def _pad(text: str) -> str:
@@ -26,44 +26,46 @@ def fetch_tfl_line_status() -> List[Dict]:
     Fetch TFL line status from TFL Unified API.
     Returns list of line statuses with name and status.
     """
-    try:
-        url = f"{TFL_API_BASE}/Line/Mode/tube,dlr,overground,elizabeth-line/Status"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        
-        line_statuses = []
-        for line_group in data:
-            line_name = line_group.get("name", "Unknown")
-            line_statuses_list = line_group.get("lineStatuses", [])
-            
-            # Get the most severe status
-            status_text = "Good Service"
-            for status in line_statuses_list:
-                status_severity = status.get("statusSeverity", 10)
-                status_description = status.get("statusSeverityDescription", "")
-                reason = status.get("reason", "")
-                
-                # Lower severity number = worse service
-                if status_severity < 10:
-                    status_text = status_description
-                    if reason:
-                        # Truncate reason if too long
-                        status_text = f"{status_description}: {reason[:30]}"
-                    break
-            
-            line_statuses.append({
-                "name": line_name,
-                "status": status_text
-            })
-        
-        return line_statuses
-    except Exception as e:  # noqa: BLE001
-        # Return empty list on error
-        return []
+    url = f"{TFL_API_BASE}/Line/Mode/tube,dlr,overground,elizabeth-line/Status"
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    if not isinstance(data, list):
+        raise ValueError("TfL returned a non-list response")
+
+    line_statuses = []
+    for line_group in data:
+        if not isinstance(line_group, dict):
+            continue
+        line_name = line_group.get("name", "Unknown")
+        line_statuses_list = line_group.get("lineStatuses", [])
+
+        status_text = "Good Service"
+        for status in line_statuses_list:
+            status_severity = status.get("statusSeverity", 10)
+            status_description = status.get("statusSeverityDescription", "")
+            reason = status.get("reason", "")
+            if status_severity < 10:
+                status_text = status_description
+                if reason:
+                    status_text = f"{status_description}: {reason[:30]}"
+                break
+
+        line_statuses.append({"name": str(line_name), "status": str(status_text)})
+    return line_statuses
 
 
-def build_travel_page() -> List[str]:
+def resolve_travel_status() -> ProviderResult[List[Dict]]:
+    """Resolve live TfL status or the last valid normalized response."""
+    return resolve_provider(
+        "travel-401",
+        [("TfL Unified API", fetch_tfl_line_status)],
+        is_valid=lambda data: bool(data)
+        and all(isinstance(item, dict) and item.get("name") for item in data),
+    )
+
+
+def build_travel_page(result: ProviderResult[List[Dict]] | None = None) -> List[str]:
     """Build travel information page with TFL statuses in table format."""
     lines: List[str] = []
     lines.append(_pad("TRAVEL INFORMATION"))
@@ -74,28 +76,18 @@ def build_travel_page() -> List[str]:
     sep = _pad("-" * PAGE_WIDTH)
     lines.append(sep)
     
-    tfl_statuses = fetch_tfl_line_status()
-    
-    if tfl_statuses:
-        # Format as table: "Line Name        Status"
-        for line_info in tfl_statuses[:12]:
-            name = line_info.get("name", "Unknown")
-            status = line_info.get("status", "Unknown")
-            # Truncate status if too long
-            if len(status) > 25:
-                status = status[:22] + "..."
-            # Format: "Bakerloo         Good Service"
-            display = f"{name:<18} {status}"
-            lines.append(_pad(display[:PAGE_WIDTH]))
-    else:
-        lines.append(_pad("Error: Could not fetch TFL status"))
-        lines.append(_pad(""))
-        lines.append(_pad("TFL API may be temporarily"))
-        lines.append(_pad("unavailable. Please try again"))
-        lines.append(_pad("later."))
-    
+    result = result or resolve_travel_status()
+    for line_info in result.data[:12]:
+        name = line_info.get("name", "Unknown")
+        status = line_info.get("status", "Unknown")
+        if len(status) > 25:
+            status = status[:22] + "..."
+        lines.append(_pad(f"{name:<18} {status}"[:PAGE_WIDTH]))
+
     lines.append(_pad(""))
-    lines.append(_pad("Source: TFL Unified API"))
+    lines.append(_pad(f"Source: {result.source}"))
+    stale = " | STALE" if result.stale else ""
+    lines.append(_pad(f"As-of: {result.fetched_at}{stale}"))
     
     return lines[:PAGE_HEIGHT]
 
@@ -106,7 +98,8 @@ def main() -> None:
     pages_dir = root / "pages"
     page_file = pages_dir / "401.json"
     
-    content = build_travel_page()
+    result = resolve_travel_status()
+    content = build_travel_page(result)
     
     page = {
         "page": "401",
@@ -116,7 +109,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with TFL travel information")
 
 

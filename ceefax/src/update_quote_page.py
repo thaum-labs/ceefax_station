@@ -1,14 +1,13 @@
-"""
-Update page 501 with quote of the day from API.
-"""
+"""Update page 501 from a curated public-domain quote collection."""
+from __future__ import annotations
+
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import List, Tuple
 
-import requests
-
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import atomic_write_json
 
 
 def _pad(text: str) -> str:
@@ -16,33 +15,16 @@ def _pad(text: str) -> str:
     return txt.ljust(PAGE_WIDTH)
 
 
-def fetch_quote_of_the_day() -> Tuple[str, str]:
-    """
-    Fetch a quote from working quote APIs.
-    Tries multiple sources for reliability.
-    """
-    # Try multiple quote APIs - using more reliable sources
-    apis = [
-        # Quote Garden API (usually reliable)
-        ("https://quotegarden.io/api/v3/quotes/random", lambda r: (r.json().get("data", {}).get("quoteText", ""), r.json().get("data", {}).get("quoteAuthor", "Unknown"))),
-        # Zen Quotes API
-        ("https://zenquotes.io/api/random", lambda r: (r.json()[0].get("q", ""), r.json()[0].get("a", "Unknown"))),
-        # Quotable API
-        ("https://api.quotable.io/random", lambda r: (r.json().get("content", ""), r.json().get("author", "Unknown"))),
-    ]
-    
-    for url, parser in apis:
-        try:
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            quote, author = parser(resp)
-            if quote and len(quote) > 10:  # Ensure we got a valid quote
-                return (quote, author)
-        except Exception:  # noqa: BLE001
-            continue
-    
-    # If all APIs fail
-    raise RuntimeError("All quote APIs are unavailable. Please try again later.")
+QUOTES_PATH = Path(__file__).resolve().parent.parent / "data" / "public_domain_quotes.json"
+
+
+def fetch_quote_of_the_day(day: date | None = None) -> Tuple[str, str]:
+    """Select a stable quote for a calendar day, without network access."""
+    quotes = json.loads(QUOTES_PATH.read_text(encoding="utf-8"))
+    if not isinstance(quotes, list) or not quotes:
+        raise ValueError("public-domain quote collection is empty")
+    selected = quotes[(day or date.today()).toordinal() % len(quotes)]
+    return str(selected["quote"]), str(selected["author"])
 
 
 def build_quote_page() -> List[str]:
@@ -52,43 +34,34 @@ def build_quote_page() -> List[str]:
     lines.append(_pad("-" * PAGE_WIDTH))
     lines.append(_pad(""))
     
-    try:
-        quote, author = fetch_quote_of_the_day()
-        
-        # Word wrap the quote
-        words = quote.split()
-        current_line = ""
-        for word in words:
-            if len(current_line) + len(word) + 1 <= PAGE_WIDTH - 2:  # Account for quotes
-                if current_line:
-                    current_line += " " + word
-                else:
-                    current_line = f'"{word}'
+    quote, author = fetch_quote_of_the_day()
+
+    words = quote.split()
+    current_line = ""
+    for word in words:
+        if len(current_line) + len(word) + 1 <= PAGE_WIDTH - 2:
+            if current_line:
+                current_line += " " + word
             else:
-                if current_line:
-                    if not current_line.endswith('"'):
-                        current_line += '"'
-                    lines.append(_pad(current_line))
                 current_line = f'"{word}'
-        
-        if current_line:
-            if not current_line.endswith('"'):
-                current_line += '"'
-            lines.append(_pad(current_line))
-        
-        lines.append(_pad(""))
-        lines.append(_pad(f"                    - {author}"))
-        lines.append(_pad(""))
-        lines.append(_pad("-" * PAGE_WIDTH))
-        lines.append(_pad(""))
-        lines.append(_pad("Source: Quote APIs (Zen/Quotable)"))
-    except Exception as e:  # noqa: BLE001
-        lines.append(_pad("Error: Could not fetch quote"))
-        lines.append(_pad(""))
-        error_msg = str(e)[:PAGE_WIDTH]
-        lines.append(_pad(error_msg))
-        lines.append(_pad(""))
-        lines.append(_pad("Please try again later"))
+        else:
+            if current_line:
+                if not current_line.endswith('"'):
+                    current_line += '"'
+                lines.append(_pad(current_line))
+            current_line = f'"{word}'
+
+    if current_line:
+        if not current_line.endswith('"'):
+            current_line += '"'
+        lines.append(_pad(current_line))
+
+    lines.append(_pad(""))
+    lines.append(_pad(f"                    - {author}"))
+    lines.append(_pad(""))
+    lines.append(_pad("-" * PAGE_WIDTH))
+    lines.append(_pad(""))
+    lines.append(_pad("Source: Curated public-domain quotes"))
     
     return lines[:PAGE_HEIGHT]
 
@@ -109,7 +82,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with quote of the day")
 
 

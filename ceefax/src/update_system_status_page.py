@@ -8,14 +8,13 @@ Update page 901 (System Status) with live-ish status based on the last update ru
 
 from __future__ import annotations
 
-import json
 import os
-import platform
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import atomic_write_json
 
 
 def _pad(text: str) -> str:
@@ -75,37 +74,44 @@ def build_system_status_page(
     pages_loaded: int,
     os_uptime_s: Optional[int],
 ) -> List[str]:
-    lines: List[str] = []
-    lines.append(_pad("SYSTEM STATUS"))
-    lines.append(_pad(""))
+    failing = [k for k, (ok, _) in feed_status.items() if not ok]
+    cached = [k for k, (ok, detail) in feed_status.items() if ok and detail == "STALE"]
+    if failing:
+        summary = f"Issues detected: {len(failing)} source(s)"
+    elif cached:
+        summary = f"Operating with cached data: {len(cached)}"
+    else:
+        summary = "All systems operational"
 
-    # Service statuses intentionally left static / placeholder per user request.
-    lines.append(_pad("SERVICE STATUS"))
-    lines.append(_pad("-" * PAGE_WIDTH))
-    lines.append(_pad("Page Compiler:     ONLINE"))
-    lines.append(_pad("Carousel:          RUNNING"))
-    lines.append(_pad("Audio Encoder:     READY"))
-    lines.append(_pad("Transmitter:       STANDBY"))
-    lines.append(_pad(""))
+    lines: List[str] = [
+        _pad("SYSTEM STATUS"),
+        _pad(summary),
+        _pad(""),
+    ]
 
     lines.append(_pad("DATA SOURCES"))
     lines.append(_pad("-" * PAGE_WIDTH))
 
     # Render feed status rows.
     for label in [
-        "Weather (wttr.in)",
-        "News (BBC RSS)",
-        "Sport (BBC)",
+        "Weather (Open-Meteo)",
+        "News (Guardian/BBC)",
+        "Sport (API/RSS)",
         "Exchange Rates",
         "Travel (TFL)",
-        "TV (TV Guide)",
-        "Film Picks",
+        "TV (TVMaze)",
+        "Film (TMDB)",
         "Lottery",
         "Entertainment APIs",
         "PSK Reporter",
     ]:
         ok, detail = feed_status.get(label, (False, "UNKNOWN"))
-        status_txt = "CONNECTED" if ok else "ERROR"
+        if ok and detail == "STALE":
+            status_txt = "CACHED"
+        elif ok and detail == "SKIPPED":
+            status_txt = "SKIPPED"
+        else:
+            status_txt = "CONNECTED" if ok else "ERROR"
         # Keep line readable in 50 cols
         right = status_txt
         left = f"{label}:"
@@ -122,17 +128,6 @@ def build_system_status_page(
     lines.append(_pad(f"OS Uptime:         {_fmt_duration(os_uptime_s)}"))
     lines.append(_pad(f"Pages Loaded:      {pages_loaded}"))
     lines.append(_pad(f"Last Update:       {last_update_hhmmss}"))
-    lines.append(_pad(""))
-
-    failing = [k for k, (ok, _) in feed_status.items() if not ok]
-    if not failing:
-        lines.append(_pad("All systems operational"))
-    else:
-        lines.append(_pad("Issues detected:"))
-        # List up to 2 failing sources
-        for k in failing[:2]:
-            lines.append(_pad(f"- {k[:PAGE_WIDTH-2]}"))
-
     return lines[:PAGE_HEIGHT]
 
 
@@ -164,19 +159,19 @@ def write_system_status_page(
         "subpage": 1,
         "content": content,
     }
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
 
 
 def main() -> None:
     # Standalone: write UNKNOWN statuses
     feed_status = {
-        "Weather (wttr.in)": (False, "UNKNOWN"),
-        "News (BBC RSS)": (False, "UNKNOWN"),
-        "Sport (BBC)": (False, "UNKNOWN"),
+        "Weather (Open-Meteo)": (False, "UNKNOWN"),
+        "News (Guardian/BBC)": (False, "UNKNOWN"),
+        "Sport (API/RSS)": (False, "UNKNOWN"),
         "Exchange Rates": (False, "UNKNOWN"),
         "Travel (TFL)": (False, "UNKNOWN"),
-        "TV (TV Guide)": (False, "UNKNOWN"),
-        "Film Picks": (False, "UNKNOWN"),
+        "TV (TVMaze)": (False, "UNKNOWN"),
+        "Film (TMDB)": (False, "UNKNOWN"),
         "Lottery": (False, "UNKNOWN"),
         "Entertainment APIs": (False, "UNKNOWN"),
         "PSK Reporter": (False, "UNKNOWN"),

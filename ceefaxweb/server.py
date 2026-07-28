@@ -155,7 +155,7 @@ def create_app() -> FastAPI:
 
         Body format:
           {
-            "token": "...",                 // optional (required if server configured)
+            "token": "...",                 // optional / ignored (public uploads)
             "uploader": {"callsign": "...", "grid": "IO91..."},  // optional but recommended
             "source_path": "ceefax/logs_tx/....json",           // optional
             "log": {...}                    // required: the log JSON
@@ -163,15 +163,10 @@ def create_app() -> FastAPI:
         """
         conn = request.app.state.db_conn
         hub = request.app.state.hub
-        
-        # Token is optional - allow public uploads for seamless user experience
-        # If a token is set in environment, it's still accepted but not required
-        required_token = os.environ.get("CEEFAXWEB_UPLOAD_TOKEN") or ""
-        token = str(body.get("token") or "")
-        # Only enforce token if one is configured AND provided token doesn't match
-        # This allows public uploads while still supporting token-based auth if needed
-        if required_token and token and token != required_token:
-            raise HTTPException(status_code=401, detail="invalid token")
+
+        # Public uploads by design: no token is required.
+        # CEEFAXWEB_UPLOAD_TOKEN may still exist in deploy env for compatibility,
+        # but it is not enforced (keeps `ceefaxstation upload` zero-config).
 
         uploader = body.get("uploader") or {}
         up_callsign = str(uploader.get("callsign") or "").strip().upper() or None

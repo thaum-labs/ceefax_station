@@ -1,7 +1,7 @@
 from typing import List, Dict, Tuple
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .weather_map import WeatherSummary, fetch_wttr_many
+from .weather_map import WeatherSummary, fetch_open_meteo_many
 
 
 # Rough UK "map" layout positions (row, col) for each city label
@@ -30,7 +30,12 @@ def _put_text(buf: List[List[str]], row: int, col: int, text: str) -> None:
             buf[row][c] = ch
 
 
-def build_uk_weather_map() -> List[str]:
+def build_uk_weather_map(
+    summaries: Dict[str, WeatherSummary] | None = None,
+    *,
+    source_label: str = "Open-Meteo",
+    stale: bool = False,
+) -> List[str]:
     """
     Build a Ceefax-style UK weather map as PAGE_HEIGHT lines.
 
@@ -49,26 +54,13 @@ def build_uk_weather_map() -> List[str]:
     title = "UK WEATHER FOR TONIGHT"
     _put_text(buf, 0, 0, title.center(PAGE_WIDTH))
 
-    # Fetch summaries for each region in parallel (major speedup)
-    queries = [q for (q, _row, _col) in REGIONS.values()]
-    fetched = fetch_wttr_many(queries, max_workers=6)
-
-    # Map back to region keys + apply fallback if missing
-    summaries: Dict[str, WeatherSummary] = {}
-    for name, (query, _row, _col) in REGIONS.items():
-        s = fetched.get(query) or fetched.get(query.replace(",GB", ",UK"))
-        if s is None:
-            summaries[name] = WeatherSummary(
-                location=name,
-                temp_c="?",
-                feels_like_c="?",
-                description="Data unavailable",
-                wind_kph="?",
-                wind_dir="?",
-                icon="☁",
-            )
-        else:
-            summaries[name] = s
+    if summaries is None:
+        queries = [q for (q, _row, _col) in REGIONS.values()]
+        fetched = fetch_open_meteo_many(queries, max_workers=6)
+        summaries = {
+            name: fetched[query]
+            for name, (query, _row, _col) in REGIONS.items()
+        }
 
     # ASCII-art UK outline used as background (from asciiart.website),
     # centred horizontally to fit PAGE_WIDTH.
@@ -142,7 +134,7 @@ def build_uk_weather_map() -> List[str]:
         draw_tile(top_row, left_col, s, label)
 
     # Footer similar to classic Ceefax pages
-    footer1 = "From wttr.in (unofficial)"
+    footer1 = f"Source: {source_label}{' (STALE)' if stale else ''}"
     footer2 = "News   Sport   Travel   Main Menu"
     _put_text(buf, PAGE_HEIGHT - 3, 0, footer1[:PAGE_WIDTH])
     _put_text(buf, PAGE_HEIGHT - 2, 0, footer2[:PAGE_WIDTH])

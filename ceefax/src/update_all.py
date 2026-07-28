@@ -13,11 +13,14 @@ This script calls all individual update scripts to refresh:
 
 Includes retry logic for failed updates (max 2 retries).
 """
+from __future__ import annotations
+
 import sys
 import time
 import io
 import contextlib
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Tuple, Optional, Dict, List, Any
 
 from . import (
@@ -47,6 +50,7 @@ from . import (
     update_system_logs_page,
     update_system_status_page,
 )
+from .providers import clear_provider_activity, provider_activity_snapshot
 
 
 MAX_RETRIES = 2
@@ -118,15 +122,19 @@ _user_callsign: Optional[str] = None
 _user_frequency: Optional[str] = None
 
 
-def persist_radio_config(callsign: Optional[str], frequency: Optional[str] = None, grid: Optional[str] = None) -> None:
+def persist_radio_config(
+    callsign: Optional[str],
+    frequency: Optional[str] = None,
+    grid: Optional[str] = None,
+    *,
+    config_path: Optional[Path] = None,
+) -> None:
     """
-    Write ceefax/radio_config.json for the viewer / start page.
+    Merge into ceefax/radio_config.json for the viewer / start page.
     Safe to call in non-interactive scheduled runs.
-    
-    Args:
-        callsign: Callsign to save
-        frequency: Optional frequency to save
-        grid: Optional Maidenhead grid square to save (only if not already set in config)
+
+    Never clears existing frequency/grid when callers pass empty/None (hourly priming
+    often passes frequency="" to skip prompts). Grid is only filled in when missing.
     """
     if not callsign:
         return
@@ -135,29 +143,33 @@ def persist_radio_config(callsign: Optional[str], frequency: Optional[str] = Non
         from pathlib import Path
 
         root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
-        
-        # Read existing config to preserve grid if already set
-        existing_data = {}
+        config_file = Path(config_path) if config_path is not None else (root / "radio_config.json")
+
+        existing_data: dict = {}
         if config_file.exists():
             try:
-                existing_data = json.loads(config_file.read_text(encoding="utf-8"))
+                loaded = json.loads(config_file.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    existing_data = loaded
             except Exception:  # noqa: BLE001
                 pass
-        
-        config_data = {"callsign": callsign}
-        if frequency:
-            config_data["frequency"] = frequency
-        
-        # Only set grid if:
-        # 1. Grid is provided AND
-        # 2. No grid is already set in existing config (don't overwrite user's manual setting)
+
+        config_data = dict(existing_data)
+        config_data["callsign"] = callsign
+
+        freq = (frequency or "").strip() if frequency is not None else ""
+        if freq:
+            config_data["frequency"] = freq
+        elif existing_data.get("frequency"):
+            config_data["frequency"] = existing_data["frequency"]
+
+        # Only set grid if missing; never overwrite a user's manual grid.
         if grid and not existing_data.get("grid"):
             config_data["grid"] = grid.strip().upper()
         elif existing_data.get("grid"):
-            # Preserve existing grid
             config_data["grid"] = existing_data["grid"]
-        
+
+        config_file.parent.mkdir(parents=True, exist_ok=True)
         config_file.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
     except Exception:  # noqa: BLE001
         # Never fail page updates due to config persistence issues.
@@ -420,20 +432,10 @@ def get_user_callsign_and_frequency() -> Tuple[Optional[str], Optional[str]]:
             _user_frequency = None
             break
     
-    # Save call sign (and optional frequency) to a config file for the viewer to access.
-    # We persist the callsign even if the user skips frequency so the start page can
-    # still render "{{users callsign}}" correctly.
+    # Merge callsign / frequency into radio_config without wiping grid or prior frequency.
     if _user_callsign:
-        import json
-        from pathlib import Path
+        persist_radio_config(_user_callsign, _user_frequency)
 
-        root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
-        config_data = {"callsign": _user_callsign}
-        if _user_frequency:
-            config_data["frequency"] = _user_frequency
-        config_file.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
-    
     return (_user_callsign, _user_frequency)
 
 
@@ -718,6 +720,7 @@ def get_user_location() -> Optional[Tuple[str, str]]:
 def update_all() -> None:
     """Update all live data pages with retry logic."""
     global _user_location
+    clear_provider_activity()
     
     print("=" * 60)
     print("CEEFAX - Updating All Live Data Pages")
@@ -812,30 +815,51 @@ def update_all() -> None:
     )
 
     # Update System Status page (901) with data-source health derived from the run.
-    def _all_ok(keys: List[str]) -> Tuple[bool, str]:
+    provider_activity = provider_activity_snapshot()
+
+    def _feed_health(keys: List[str], cache_prefixes: Tuple[str, ...]) -> Tuple[bool, str]:
         ok = all(update_ok.get(k, False) for k in keys)
-        return (ok, "OK" if ok else "FAIL")
+        if not ok:
+            return (False, "FAIL")
+        matching = [
+            result
+            for cache_key, result in provider_activity.items()
+            if cache_key.startswith(cache_prefixes)
+        ]
+        if not matching:
+            return (True, "SKIPPED")
+        if any(result.stale for result in matching):
+            return (True, "STALE")
+        return (True, "OK")
 
     feed_status = {
-        "Weather (wttr.in)": _all_ok(["UK Weather (101)", "Local Weather (102)", "Weather Map (103)"]),
-        "News (BBC RSS)": _all_ok(["News Headlines (200)", "World News (201)", "UK News (202)"]),
-        "Sport (BBC)": _all_ok(
+        "Weather (Open-Meteo)": _feed_health(
+            ["UK Weather (101)", "Local Weather (102)", "Weather Map (103)"],
+            ("weather-",),
+        ),
+        "News (Guardian/BBC)": _feed_health(
+            ["News Headlines (200)", "World News (201)", "UK News (202)"],
+            ("news-",),
+        ),
+        "Sport (API/RSS)": _feed_health(
             [
                 "Sports Headlines (300) & League Tables (302, 303)",
                 "Football Live Scores (301)",
                 "Fixtures & Results (304)",
                 "Other Sports (305)",
-            ]
+            ],
+            ("football-", "other-sports-"),
         ),
-        "Exchange Rates": _all_ok(["Exchange Rates (400)"]),
-        "Travel (TFL)": _all_ok(["Travel Info (401)"]),
-        "TV (TV Guide)": _all_ok(["TV Highlights (503.1/503.2)"]),
-        "Film Picks": _all_ok(["Film Picks (504)"]),
-        "Lottery": _all_ok(["Lottery Results (402)"]),
-        "Entertainment APIs": _all_ok(
-            ["Fact of the Day (500)", "Quote of the Day (501)", "On This Day (502)", "Joke of the Day (600)", "Daily Quiz (602)"]
+        "Exchange Rates": _feed_health(["Exchange Rates (400)"], ("exchange-",)),
+        "Travel (TFL)": _feed_health(["Travel Info (401)"], ("travel-",)),
+        "TV (TVMaze)": _feed_health(["TV Highlights (503.1/503.2)"], ("tv-",)),
+        "Film (TMDB)": _feed_health(["Film Picks (504)"], ("films-",)),
+        "Lottery": _feed_health(["Lottery Results (402)"], ("lottery-",)),
+        "Entertainment APIs": _feed_health(
+            ["Fact of the Day (500)", "Quote of the Day (501)", "On This Day (502)", "Joke of the Day (600)", "Daily Quiz (602)"],
+            ("fact-", "on-this-day-", "joke-", "quiz-"),
         ),
-        "PSK Reporter": _all_ok(["Callsign Info (700)"]),
+        "PSK Reporter": _feed_health(["Callsign Info (700)"], ("callsign-",)),
     }
     update_system_status_page.write_system_status_page(feed_status=feed_status, last_update_iso=run_ts)
 

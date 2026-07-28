@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import atomic_write_json
 
 
 def _pad(text: str) -> str:
@@ -98,7 +99,7 @@ def _load_log(log_file: Path) -> List[Dict[str, Any]]:
 
 
 def _save_log(log_file: Path, entries: List[Dict[str, Any]]) -> None:
-    log_file.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    atomic_write_json(log_file, entries)
 
 
 def append_run_entries(run_entries: List[Dict[str, Any]], max_entries: int = 200) -> None:
@@ -189,7 +190,7 @@ def write_system_logs_page(
         "subpage": 1,
         "content": content,
     }
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
 
 
 def main() -> None:

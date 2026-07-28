@@ -1,15 +1,15 @@
 """
 Update page 305 with other sports news from BBC Sport.
 """
-import json
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 import requests
-import xml.etree.ElementTree as ET
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 def _pad(text: str) -> str:
@@ -53,63 +53,44 @@ def fetch_other_sports() -> Dict[str, List[str]]:
     return sports_data
 
 
-def build_other_sports_page() -> List[str]:
+def resolve_other_sports() -> ProviderResult[Dict[str, List[str]]]:
+    """Resolve and cache one combined normalized result for all BBC feeds."""
+    return resolve_provider(
+        "other-sports-305",
+        [("BBC Sport RSS", fetch_other_sports)],
+        is_valid=lambda data: isinstance(data, dict)
+        and any(isinstance(items, list) and items for items in data.values()),
+    )
+
+
+def build_other_sports_page(
+    result: ProviderResult[Dict[str, List[str]]] | None = None,
+) -> List[str]:
     """Build other sports page."""
     lines: List[str] = []
     lines.append(_pad("OTHER SPORTS"))
-    lines.append(_pad(""))
-    
-    data = fetch_other_sports()
+    result = result or resolve_other_sports()
+    data = result.data
+    lines.append(_pad(f"Source: {result.source}"))
+    stale = " | STALE" if result.stale else ""
+    lines.append(_pad(f"As-of: {result.fetched_at}{stale}"))
+
     sep = _pad("-" * PAGE_WIDTH)
-    
-    # Rugby
-    lines.append(_pad("RUGBY"))
-    lines.append(sep)
-    if data.get("rugby"):
-        for headline in data["rugby"]:
-            lines.append(_pad(headline))
-    else:
-        lines.append(_pad("Error: Could not fetch rugby news"))
-        lines.append(_pad("BBC Sport RSS may be unavailable"))
-    
-    lines.append(_pad(""))
-    
-    # Cricket
-    lines.append(_pad("CRICKET"))
-    lines.append(sep)
-    if data.get("cricket"):
-        for headline in data["cricket"]:
-            lines.append(_pad(headline))
-    else:
-        lines.append(_pad("Error: Could not fetch cricket news"))
-        lines.append(_pad("BBC Sport RSS may be unavailable"))
-    
-    lines.append(_pad(""))
-    
-    # Tennis
-    lines.append(_pad("TENNIS"))
-    lines.append(sep)
-    if data.get("tennis"):
-        for headline in data["tennis"]:
-            lines.append(_pad(headline))
-    else:
-        lines.append(_pad("Error: Could not fetch tennis news"))
-        lines.append(_pad("BBC Sport RSS may be unavailable"))
-    
-    lines.append(_pad(""))
-    
-    # Motorsport
-    lines.append(_pad("MOTORSPORT"))
-    lines.append(sep)
-    if data.get("motorsport"):
-        for headline in data["motorsport"]:
-            lines.append(_pad(headline))
-    else:
-        lines.append(_pad("Error: Could not fetch motorsport"))
-        lines.append(_pad("news. BBC Sport RSS unavailable"))
-    
-    lines.append(_pad(""))
-    lines.append(_pad("Source: BBC Sport"))
+
+    for key, heading in (
+        ("rugby", "RUGBY"),
+        ("cricket", "CRICKET"),
+        ("tennis", "TENNIS"),
+        ("motorsport", "MOTORSPORT"),
+    ):
+        lines.append(_pad(heading))
+        lines.append(sep)
+        headlines = data.get(key, [])
+        if headlines:
+            for headline in headlines[:2]:
+                lines.append(_pad(headline))
+        else:
+            lines.append(_pad("Feed temporarily unavailable"))
     
     return lines[:PAGE_HEIGHT]
 
@@ -120,7 +101,8 @@ def main() -> None:
     pages_dir = root / "pages"
     page_file = pages_dir / "305.json"
     
-    content = build_other_sports_page()
+    result = resolve_other_sports()
+    content = build_other_sports_page(result)
     
     page = {
         "page": "305",
@@ -130,7 +112,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with other sports news")
 
 

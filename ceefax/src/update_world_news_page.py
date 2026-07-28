@@ -1,14 +1,13 @@
 """
 Update page 201 with world news from BBC World RSS.
 """
-import json
+import os
 from pathlib import Path
 from typing import List
 
-import requests
-import xml.etree.ElementTree as ET
-
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .news_providers import fetch_bbc_rss_headlines, fetch_guardian_headlines
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 BBC_WORLD_RSS = "https://feeds.bbci.co.uk/news/world/rss.xml"
@@ -20,31 +19,32 @@ def _pad(text: str) -> str:
 
 
 def fetch_headlines(limit: int = 6) -> List[str]:
-    """Fetch top headlines from BBC World RSS."""
-    resp = requests.get(BBC_WORLD_RSS, timeout=10)
-    resp.raise_for_status()
-
-    root = ET.fromstring(resp.content)
-    items = root.findall("./channel/item/title")
-    titles: List[str] = []
-    for item in items[:limit]:
-        if item.text:
-            titles.append(item.text.strip())
-    return titles
+    """Fetch top headlines from BBC World RSS (compatibility helper)."""
+    return fetch_bbc_rss_headlines(BBC_WORLD_RSS, limit=limit)
 
 
-def build_world_news_page() -> List[str]:
+def resolve_headlines(limit: int = 6) -> ProviderResult[List[str]]:
+    providers = []
+    if (os.environ.get("GUARDIAN_API_KEY") or "").strip():
+        providers.append(
+            (
+                "Guardian Open Platform",
+                lambda: fetch_guardian_headlines(section="world", limit=limit),
+            )
+        )
+    providers.append(("BBC World RSS", lambda: fetch_headlines(limit)))
+    return resolve_provider("news-201-world", providers)
+
+
+def build_world_news_page(result: ProviderResult[List[str]] | None = None) -> List[str]:
     lines: List[str] = []
     lines.append(_pad("WORLD NEWS"))
-
-    try:
-        headlines = fetch_headlines()
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching headlines:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
+    result = result or resolve_headlines()
+    headlines = result.data
 
     sep = _pad("-" * PAGE_WIDTH)
+    lines.append(_pad(f"{result.source}{' - STALE' if result.stale else ''}"))
+    lines.append(sep)
 
     for title in headlines:
         wrapped = []
@@ -55,7 +55,7 @@ def build_world_news_page() -> List[str]:
         lines.extend(wrapped)
         lines.append(sep)
 
-    lines.append(_pad("Source: BBC World RSS Feed"))
+    lines.append(_pad(f"As of: {result.fetched_at}"))
 
     return lines[:PAGE_HEIGHT]
 
@@ -66,17 +66,18 @@ def main() -> None:
     pages_dir = root / "pages"
     page_file = pages_dir / "201.json"
 
-    content = build_world_news_page()
+    result = resolve_headlines()
+    content = build_world_news_page(result)
 
     page = {
         "page": "201",
         "title": "World News",
-        "timestamp": "From BBC World RSS (live)",
+        "timestamp": f"{result.source} - {result.status_label}",
         "subpage": 1,
         "content": content,
     }
 
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with latest world news headlines")
 
 

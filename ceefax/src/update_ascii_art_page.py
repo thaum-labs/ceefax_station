@@ -1,12 +1,12 @@
 """
 Update page 301 with ASCII art of the day.
 """
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import List
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import atomic_write_json
 
 
 def _pad(text: str) -> str:
@@ -179,7 +179,7 @@ def main() -> None:
         "content": content,
     }
     
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with ASCII art of the day")
 
 

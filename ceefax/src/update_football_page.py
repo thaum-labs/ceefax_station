@@ -1,271 +1,187 @@
-import json
-from pathlib import Path
-from typing import List
+"""Update football headlines (300) and league tables (302/303)."""
 
-import re
-import requests
+from __future__ import annotations
+
 import xml.etree.ElementTree as ET
-from bs4 import BeautifulSoup
+from pathlib import Path
+from typing import Any, List
 
-from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+import requests
+
+from .compiler import PAGE_HEIGHT, PAGE_WIDTH
+from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider
 
 
 BBC_FOOTBALL_RSS = "https://feeds.bbci.co.uk/sport/football/rss.xml"
-BBC_PL_TABLE_URL = "https://www.bbc.co.uk/sport/football/premier-league/table"
-BBC_CHAMPIONSHIP_TABLE_URL = "https://www.bbc.co.uk/sport/football/championship/table"
-SCORE_RE = re.compile(r"\b\d{1,2}\s*-\s*\d{1,2}\b")
+FOOTBALL_DATA_SOURCE = "football-data.org"
 
 
 def _pad(text: str) -> str:
-    txt = text[:PAGE_WIDTH]
-    return txt.ljust(PAGE_WIDTH)
+    return text[:PAGE_WIDTH].ljust(PAGE_WIDTH)
+
+
+def _page(lines: List[str]) -> List[str]:
+    return [_pad(line) for line in lines[:PAGE_HEIGHT]] + [_pad("")] * max(
+        0, PAGE_HEIGHT - len(lines)
+    )
+
+
+def _as_of(result: ProviderResult[Any]) -> str:
+    state = "STALE" if result.stale else "CURRENT"
+    stamp = result.fetched_at[5:16].replace("T", " ")
+    return f"Src {result.source[:17]} As-of {stamp}Z {state}"
 
 
 def fetch_results(limit: int = 6) -> List[str]:
-    """
-    Fetch recent football headlines from BBC Sport RSS.
-    Many titles include scorelines which we can display directly.
-    """
-    resp = requests.get(BBC_FOOTBALL_RSS, timeout=10)
-    resp.raise_for_status()
-
-    root = ET.fromstring(resp.content)
-    items = root.findall("./channel/item/title")
-    titles: List[str] = []
-    for item in items[:limit]:
-        if item.text:
-            titles.append(item.text.strip())
-    return titles
+    """Fetch durable BBC football RSS headlines."""
+    response = requests.get(BBC_FOOTBALL_RSS, timeout=10)
+    response.raise_for_status()
+    root = ET.fromstring(response.content)
+    return [
+        item.text.strip()
+        for item in root.findall("./channel/item/title")
+        if item.text and item.text.strip()
+    ][:limit]
 
 
-def fetch_league_rows(url: str, limit: int = 20) -> List[List[str]]:
-    """
-    Fetch league table rows from the BBC table page.
+def _headlines() -> ProviderResult[List[str]]:
+    return resolve_provider(
+        "football-headlines-300",
+        [("BBC Sport RSS", lambda: fetch_results(limit=6))],
+    )
 
-    Returns a list of [pos, team, p, w, d, l, f, a, gd, pts].
-    """
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    table = soup.find("table")
-    if not table or not table.tbody:
-        raise RuntimeError("Could not find league table on BBC page")
+def _normalize_standings(payload: dict[str, Any], limit: int = 20) -> List[List[str]]:
+    standings = payload.get("standings")
+    if not isinstance(standings, list):
+        raise ValueError("standings response has no standings list")
+    total = next(
+        (
+            entry.get("table")
+            for entry in standings
+            if isinstance(entry, dict) and entry.get("type") == "TOTAL"
+        ),
+        None,
+    )
+    if not isinstance(total, list):
+        raise ValueError("standings response has no TOTAL table")
 
     rows: List[List[str]] = []
-    for tr in table.tbody.find_all("tr")[:limit]:
-        # Get entire row text as tokens
-        row_text = tr.get_text(" ", strip=True).replace("–", "-")
-        tokens = row_text.split()
-        if len(tokens) < 10:
+    for entry in total[:limit]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("team"), dict):
             continue
-
-        # First token is position
-        pos = tokens[0]
-
-        # Find index of the first numeric after pos (this is P)
-        p_idx = None
-        for i, tok in enumerate(tokens[1:], start=1):
-            if tok.lstrip("+-").isdigit():
-                p_idx = i
-                break
-        if p_idx is None:
+        team = entry["team"].get("shortName") or entry["team"].get("name")
+        if not team:
             continue
-
-        # Team name is everything between pos and first numeric token
-        team_tokens = tokens[1:p_idx]
-        team = " ".join(team_tokens)
-
-        # Remaining numeric tokens: P, W, D, L, F, A, GD, Pts, ...
-        numeric_tokens = [t for t in tokens[p_idx:] if t.lstrip("+-").isdigit()]
-        if len(numeric_tokens) < 8:
-            continue
-        p, w, d, l, f, a, gd, pts = numeric_tokens[:8]
-
-        rows.append([pos, team, p, w, d, l, f, a, gd, pts])
+        rows.append(
+            [
+                str(entry.get("position", "")),
+                str(team),
+                str(entry.get("playedGames", "")),
+                str(entry.get("won", "")),
+                str(entry.get("draw", "")),
+                str(entry.get("lost", "")),
+                str(entry.get("goalsFor", "")),
+                str(entry.get("goalsAgainst", "")),
+                str(entry.get("goalDifference", "")),
+                str(entry.get("points", "")),
+            ]
+        )
+    if not rows:
+        raise ValueError("standings response contained no usable rows")
     return rows
 
 
+def fetch_league_rows(code: str, limit: int = 20) -> List[List[str]]:
+    """Fetch and normalize a football-data.org competition table."""
+    return _normalize_standings(
+        fetch_football_data(f"competitions/{code}/standings"),
+        limit=limit,
+    )
+
+
+def _league_table(code: str) -> ProviderResult[List[List[str]]]:
+    return resolve_provider(
+        f"football-standings-{code.lower()}",
+        [(FOOTBALL_DATA_SOURCE, lambda: fetch_league_rows(code, limit=20))],
+    )
+
+
 def build_football_page() -> List[str]:
-    lines: List[str] = []
-    lines.append(_pad("SPORTS HEADLINES"))
-    # Separator line spanning full page width, used between stories
-    sep = _pad("-" * PAGE_WIDTH)
-    # Keep pages uniform: show the "blue line" directly under the top heading.
-    lines.append(sep)
+    result = _headlines()
+    lines = ["SPORTS HEADLINES", "-" * PAGE_WIDTH]
+    for title in result.data:
+        while title:
+            lines.append(title[:PAGE_WIDTH])
+            title = title[PAGE_WIDTH:]
+        lines.append("-" * PAGE_WIDTH)
+    lines = lines[:22]
+    lines.append(_as_of(result))
+    return _page(lines)
 
-    try:
-        results = fetch_results(limit=6)
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching football results:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
 
-    lines.append(_pad("COMP / FIXTURE / RESULT"))
-    lines.append(sep)
-
-    for title in results:
-        # We simply show the RSS title; many already contain scores.
-        wrapped = []
-        text = title
-        while text:
-            wrapped.append(_pad(text[: PAGE_WIDTH]))
-            text = text[PAGE_WIDTH:]
-        lines.extend(wrapped)
-        lines.append(sep)
-
-    lines.append(_pad("Source: BBC Sport Football RSS"))
-
-    return lines[:PAGE_HEIGHT]
+def _build_table_page(title: str, code: str) -> List[str]:
+    result = _league_table(code)
+    lines = [
+        title,
+        f"{'Pos':>2} {'Team':<25} {'P':>2} {'W':>2} {'D':>2} {'L':>2} {'GD':>3} {'Pts':>3}",
+    ]
+    for pos, team, played, won, drawn, lost, _gf, _ga, gd, points in result.data:
+        lines.append(
+            f"{pos:>2} {team[:25]:<25} {played:>2} {won:>2} "
+            f"{drawn:>2} {lost:>2} {gd:>3} {points:>3}"
+        )
+    lines.append(_as_of(result))
+    return _page(lines)
 
 
 def build_premier_league_table_page() -> List[str]:
-    """
-    Ceefax-style Premier League table page.
-
-    Uses the BBC Premier League table HTML, rendered as:
-      Pos Team           P  W  D  L  F  A Pts
-    """
-    lines: List[str] = []
-    table_width = PAGE_WIDTH
-
-    def sep(char: str = "-") -> str:
-        return _pad(char * table_width)
-
-    lines.append(_pad("PREMIER LEAGUE TABLE (BBC Sport)"))
-
-    # Cleaner header: widen team column and use GD + Pts (fits PAGE_WIDTH=50 nicely)
-    header = (
-        f"{'Pos':>2} "
-        f"{'Team':<25} "
-        f"{'P':>2} {'W':>2} {'D':>2} {'L':>2} "
-        f"{'GD':>3} {'Pts':>3}"
-    )
-    lines.append(_pad(header))
-    lines.append(sep("="))
-
-    try:
-        rows = fetch_league_rows(BBC_PL_TABLE_URL, limit=20)
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching league table:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
-
-    for pos, team, p, w, d, l, _f, _a, gd, pts in rows:
-        # Allow up to 25 chars for team name; keep alignment stable
-        name = team[:25]
-
-        row = (
-            f"{pos:>2} "
-            f"{name:<25} "
-            f"{p:>2} {w:>2} {d:>2} {l:>2} "
-            f"{gd:>3} {pts:>3}"
-        )
-        lines.append(_pad(row))
-
-    lines.append(sep("="))
-    lines.append(_pad("Source: BBC Premier League (bbc.co.uk/sport)"))
-
-    return lines[:PAGE_HEIGHT]
+    return _build_table_page("PREMIER LEAGUE TABLE", "PL")
 
 
 def build_championship_table_page() -> List[str]:
-    """
-    Ceefax-style Championship league table page.
+    return _build_table_page("CHAMPIONSHIP TABLE", "ELC")
 
-    Uses the BBC Championship table HTML, rendered as:
-      Pos Team           P  W  D  L  F  A Pts
-    """
-    lines: List[str] = []
-    table_width = PAGE_WIDTH
-
-    def sep(char: str = "-") -> str:
-        return _pad(char * table_width)
-
-    lines.append(_pad("CHAMPIONSHIP TABLE (BBC Sport)"))
-
-    # Match Premier League formatting for consistency
-    header = (
-        f"{'Pos':>2} "
-        f"{'Team':<25} "
-        f"{'P':>2} {'W':>2} {'D':>2} {'L':>2} "
-        f"{'GD':>3} {'Pts':>3}"
-    )
-    lines.append(_pad(header))
-    lines.append(sep("="))
-
-    try:
-        rows = fetch_league_rows(BBC_CHAMPIONSHIP_TABLE_URL, limit=20)
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching league table:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
-
-    for pos, team, p, w, d, l, _f, _a, gd, pts in rows:
-        name = team[:25]
-
-        row = (
-            f"{pos:>2} "
-            f"{name:<25} "
-            f"{p:>2} {w:>2} {d:>2} {l:>2} "
-            f"{gd:>3} {pts:>3}"
-        )
-        lines.append(_pad(row))
-
-    lines.append(sep("="))
-    lines.append(_pad("Source: BBC Championship (bbc.co.uk/sport)"))
-
-    return lines[:PAGE_HEIGHT]
 
 def main() -> None:
-    """
-    Update page 300 with latest sports headlines,
-    page 302 with Premier League table, and page 303 with Championship table.
-    """
-    root = Path(__file__).resolve().parent.parent
-    pages_dir = root / "pages"
-    
-    # Page 300: Sports Headlines
-    page_file = pages_dir / "300.json"
-    content = build_football_page()
-    page = {
-        "page": "300",
-        "title": "Sports Headlines",
-        "timestamp": "From BBC Sport RSS (live)",
-        "subpage": 1,
-        "content": content,
-    }
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
-    print(f"Updated {page_file} with latest sports headlines")
-
-    # Page 302: Premier League Table
-    pl_table_content = build_premier_league_table_page()
-    page_file_pl = pages_dir / "302.json"
-    page_pl = {
-        "page": "302",
-        "title": "Premier League Table",
-        "timestamp": "From BBC Sport (live)",
-        "subpage": 1,
-        "content": pl_table_content,
-    }
-    page_file_pl.write_text(json.dumps(page_pl, indent=2), encoding="utf-8")
-    print(f"Updated {page_file_pl} with Premier League table")
-
-    # Page 303: Championship Table
-    champ_table_content = build_championship_table_page()
-    page_file_champ = pages_dir / "303.json"
-    page_champ = {
-        "page": "303",
-        "title": "Championship Table",
-        "timestamp": "From BBC Sport (live)",
-        "subpage": 1,
-        "content": champ_table_content,
-    }
-    page_file_champ.write_text(json.dumps(page_champ, indent=2), encoding="utf-8")
-    print(f"Updated {page_file_champ} with Championship table")
+    """Build all content before atomically replacing any page."""
+    pages_dir = Path(__file__).resolve().parent.parent / "pages"
+    pages = [
+        (
+            pages_dir / "300.json",
+            {
+                "page": "300",
+                "title": "Sports Headlines",
+                "timestamp": "BBC Sport RSS",
+                "subpage": 1,
+                "content": build_football_page(),
+            },
+        ),
+        (
+            pages_dir / "302.json",
+            {
+                "page": "302",
+                "title": "Premier League Table",
+                "timestamp": "football-data.org",
+                "subpage": 1,
+                "content": build_premier_league_table_page(),
+            },
+        ),
+        (
+            pages_dir / "303.json",
+            {
+                "page": "303",
+                "title": "Championship Table",
+                "timestamp": "football-data.org",
+                "subpage": 1,
+                "content": build_championship_table_page(),
+            },
+        ),
+    ]
+    for path, payload in pages:
+        atomic_write_json(path, payload)
+        print(f"Updated {path}")
 
 
 if __name__ == "__main__":
     main()
-
-
