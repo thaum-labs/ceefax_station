@@ -97,7 +97,7 @@ python -m src.main | aplay -f S16_LE -c 1 -r 48000
 
 ## Text Viewer (Ceefax-style)
 
-There is a simple terminal viewer that shows the 50×30 frames in a Ceefax-like layout using `curses`.
+There is a responsive terminal viewer that shows the 50×23 frames in an authentic Ceefax-style layout using `curses`. It supports standard 80×24 PowerShell windows and expands cleanly in larger terminals.
 
 From the repo root:
 
@@ -106,10 +106,13 @@ python -m ceefax.src.viewer
 ```
 
 Controls:
+- Type any three-digit page number (for example `503`) – open that page
 - `n` / Right arrow / Page Down – next page
 - `p` / Left arrow / Page Up – previous page
-- `r` – reload pages from disk
-- `q` – quit
+- `r` – receive mode
+- `t` – transmit mode
+- `F5` – reload pages from disk
+- `Esc` / `q` – exit or return from TX/RX mode
 
 **Note for Windows:** full `curses` support may require installing `windows-curses` via:
 
@@ -133,7 +136,7 @@ This will:
 2. Build a Ceefax-style panel sized to your page width.
 3. Overwrite `pages/101.json` with the latest data.
 
-Then open the viewer and press `r` to reload pages:
+Then open the viewer and press `F5` to reload pages:
 
 ```bash
 python -m ceefax.src.viewer
