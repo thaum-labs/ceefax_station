@@ -19,6 +19,17 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+def _resolve_db_path(explicit: str | None = None) -> Path:
+    import os
+
+    if explicit:
+        return Path(explicit).expanduser()
+    env = os.environ.get("CEEFAXWEB_DB")
+    if env:
+        return Path(env).expanduser()
+    return default_db_path(_repo_root())
+
+
 def replace_callsign(old_callsign: str, new_callsign: str) -> None:
     """Replace all occurrences of old_callsign with new_callsign in the database."""
     old_cs = old_callsign.strip().upper()
@@ -32,9 +43,8 @@ def replace_callsign(old_callsign: str, new_callsign: str) -> None:
         print("Error: Old and new callsigns are the same")
         return
     
-    # Connect to database
-    repo_root = _repo_root()
-    db_path = default_db_path(repo_root)
+    # Connect to database (honours CEEFAXWEB_DB)
+    db_path = _resolve_db_path()
     
     if not db_path.exists():
         print(f"Error: Database not found at {db_path}")

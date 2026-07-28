@@ -273,7 +273,21 @@ def _load_radio_config() -> dict:
         return {}
 
 
-_AUDIO_LEVEL_RE = re.compile(r"audio level[^0-9\\-]*(-?\\d+(?:\\.\\d+)?)", re.I)
+_AUDIO_LEVEL_RE = re.compile(r"audio level[^0-9\-]*(-?\d+(?:\.\d+)?)", re.I)
+
+
+def _format_progress_bar(width: int, percent: float) -> str:
+    """
+    Build a fixed-width progress bar body like [===>    ] (brackets included).
+    Total length is always width + 2.
+    """
+    percent = max(0.0, min(1.0, percent))
+    filled = int(width * percent)
+    if filled <= 0:
+        return "[" + " " * width + "]"
+    if filled >= width:
+        return "[" + "=" * width + "]"
+    return "[" + "=" * (filled - 1) + ">" + " " * (width - filled) + "]"
 
 
 def _maybe_update_audio_db(stats: dict, *, line: str) -> None:
@@ -1050,13 +1064,7 @@ def _draw_ascii_progress_bar(stdscr: "curses._CursesWindow", row: int, col: int,
     
     # Clamp percent
     percent = max(0.0, min(1.0, percent))
-    
-    # Calculate filled width
-    filled = int(width * percent)
-    empty = width - filled
-    
-    # Build progress bar: [====>     ] 45%
-    bar = "[" + "=" * filled + ">" * (1 if filled < width and filled > 0 else 0) + " " * empty + "]"
+    bar = _format_progress_bar(width, percent)
     percent_str = f" {int(percent * 100)}%"
     
     # Combine label, bar, and percent
@@ -2273,7 +2281,7 @@ def _rx_viewer_loop_live(
                 _draw_rx_screen(stdscr, "Waiting for pages...", msg)
 
             ch = stdscr.getch()
-            if ch in (ord("q"), ord("Q")):
+            if ch in (ord("q"), ord("Q")) or ch == 27:  # q or ESC
                 break
             if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
                 if pages:

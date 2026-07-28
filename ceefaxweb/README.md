@@ -37,15 +37,9 @@ Open:
 
 ### Upload Configuration
 
-Uploads are **public by default** - no token required. This allows seamless uploads from user stations.
+Uploads are **public by default** — no token required. This allows seamless uploads from user stations via `ceefaxstation upload`.
 
-If you want to add optional token-based authentication, set:
-
-```bash
-set CEEFAXWEB_UPLOAD_TOKEN=your-secret-token
-```
-
-Note: Even with a token set, uploads without tokens are still accepted (public uploads).
+`CEEFAXWEB_UPLOAD_TOKEN` (if set in the server environment) is **not enforced**; the ingest API accepts uploads with or without a token. Do not treat that env var as access control.
 
 The uploader:
 - Watches `ceefax/logs_tx` and `ceefax/logs_rx`

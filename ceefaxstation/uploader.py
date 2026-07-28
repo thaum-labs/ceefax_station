@@ -161,12 +161,17 @@ def upload_logs(
             "source_path": rel,
             "log": log,
         }
-        r = requests.post(ingest_url, json=body, timeout=20)
-        r.raise_for_status()
+        try:
+            r = requests.post(ingest_url, json=body, timeout=20)
+            r.raise_for_status()
+        except requests.RequestException as exc:
+            print(f"Upload failed for {rel}: {exc}")
+            return
 
         files_state[rel] = {"sha256": sha, "uploaded_at": time.time()}
         state["files"] = files_state
         _save_state(state)
+        print(f"Uploaded {rel}")
 
     print(f"Uploading logs to {ingest_url}")
     print(f"Uploader: callsign={uploader_callsign or '-'} grid={uploader_grid or '-'}")

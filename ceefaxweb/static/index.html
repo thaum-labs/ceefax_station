@@ -706,6 +706,15 @@
         tx: '#2ecc71'      // green
       };
 
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       // Animated "flow" links (GridTracker-ish direction indicator)
       let flowLinks = []; // { el, offset, speed }
       let flowRaf = null;
@@ -781,7 +790,15 @@
           // Require bbox (grid) to draw a rectangle.
           if (!s.bbox || !s.bbox.sw || !s.bbox.ne) continue;
           seen.add(s.callsign);
-          if (!stationMarkers.has(s.callsign)) {
+
+          // Always refresh existing markers so status/bbox/grid updates apply on live ingest.
+          if (stationMarkers.has(s.callsign)) {
+            const prev = stationMarkers.get(s.callsign);
+            for (const l of (prev.layers || [])) map.removeLayer(l);
+            stationMarkers.delete(s.callsign);
+          }
+
+          {
             const sw = [s.bbox.sw.lat, s.bbox.sw.lon];
             const ne = [s.bbox.ne.lat, s.bbox.ne.lon];
 
@@ -813,7 +830,13 @@
 
             const role = isTx ? 'TX' : ((s.is_rx) ? 'RX' : 'RX (none)');
             const gridDisplay = s.grid ? ` (${s.grid})` : '';
-            const popupHtml = `<b>${s.callsign}${gridDisplay}</b><br/>Grid: ${s.grid || '-'}<br/>Role: ${role}<br/>Status: ${s.status || '-'}<br/><span class="muted">Last seen: ${s.last_seen_utc || '-'}</span>`;
+            const safeCall = escapeHtml(s.callsign);
+            const safeGrid = escapeHtml(s.grid || '-');
+            const safeGridDisplay = escapeHtml(gridDisplay);
+            const safeRole = escapeHtml(role);
+            const safeStatus = escapeHtml(s.status || '-');
+            const safeLast = escapeHtml(s.last_seen_utc || '-');
+            const popupHtml = `<b>${safeCall}${safeGridDisplay}</b><br/>Grid: ${safeGrid}<br/>Role: ${safeRole}<br/>Status: ${safeStatus}<br/><span class="muted">Last seen: ${safeLast}</span>`;
             for (const l of layers) l.bindPopup(popupHtml);
             for (const l of layers) l.bindTooltip(`${s.callsign}${gridDisplay}`, { sticky: true });
 
@@ -999,11 +1022,11 @@
           // Table body
           const tbody = document.createElement('tbody');
           for (const r of freqRows) {
-            const page = r.page_id || '-';
+            const page = escapeHtml(r.page_id || '-');
             const txOk = !!r.tx;
             const rxOk = !!r.rx_ok;
-            const db = (r.rx_db == null ? '-' : `${Number(r.rx_db).toFixed(1)}`);
-            const age = fmtAge(r.age_s);
+            const db = escapeHtml(r.rx_db == null ? '-' : `${Number(r.rx_db).toFixed(1)}`);
+            const age = escapeHtml(fmtAge(r.age_s));
             const tr = document.createElement('tr');
             tr.innerHTML = `
               <td>${page}</td>

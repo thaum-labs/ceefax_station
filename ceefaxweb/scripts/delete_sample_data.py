@@ -135,15 +135,21 @@ def delete_sample_data(db_path: Path) -> dict[str, int]:
 
 def main() -> int:
     import argparse
+    import os
     
     ap = argparse.ArgumentParser(description="Delete all sample data from the database")
-    ap.add_argument("--db", help="Path to database file (default: ceefax/cache/ceefaxweb.sqlite3)")
+    ap.add_argument(
+        "--db",
+        help="Path to database file (default: CEEFAXWEB_DB or ceefax/cache/ceefaxweb.sqlite3)",
+    )
     ap.add_argument("--confirm", action="store_true", help="Skip confirmation prompt")
     args = ap.parse_args()
     
     root = Path(__file__).resolve().parent.parent.parent
     if args.db:
-        db_path = Path(args.db)
+        db_path = Path(args.db).expanduser()
+    elif os.environ.get("CEEFAXWEB_DB"):
+        db_path = Path(os.environ["CEEFAXWEB_DB"]).expanduser()
     else:
         db_path = default_db_path(root)
     

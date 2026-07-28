@@ -30,6 +30,25 @@ def _parse_iso(dt: str | None) -> datetime | None:
         return None
 
 
+def _normalize_page_id(page: Any, sub: Any) -> str:
+    """
+    Build a page id like "503" or "503.2".
+    Accepts subpage as int or numeric string.
+    """
+    page_s = str(page or "").strip()
+    if not page_s:
+        return ""
+    sub_i = 1
+    if sub is not None and str(sub).strip() != "":
+        try:
+            sub_i = int(sub)
+        except (TypeError, ValueError):
+            sub_i = 1
+    if sub_i != 1:
+        return f"{page_s}.{sub_i}"
+    return page_s
+
+
 def _sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()
 
@@ -247,10 +266,7 @@ def ingest_log(
                 tx_id = str(v.get("tx_id") or "")
                 page = str(v.get("page") or "").strip()
                 sub = v.get("subpage")
-                if page and isinstance(sub, int) and sub != 1:
-                    page_id = f"{page}.{sub}"
-                else:
-                    page_id = page
+                page_id = _normalize_page_id(page, sub)
                 if not tx_id or not page_id:
                     continue
                 # Best-effort per-page timestamp (started_at + first_complete_rx_s)
@@ -481,9 +497,11 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
     table_rows: list[dict[str, Any]] = []
     sent: list[str] = []
     ok: list[str] = []
+    seen_pages: set[str] = set()
 
     for r in sent_rows:
         page_id = r["page_id"]
+        seen_pages.add(page_id)
         sent.append(page_id)
         rxr = rx_by_page.get(page_id)
         rx_ok = bool(rxr and rxr.get("rx_at_utc"))
@@ -505,6 +523,30 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
                 "rx_at_utc": rx_at,
                 "frequency": (rxr or {}).get("rx_freq") or r["tx_freq"],
                 "rx_db": (rxr or {}).get("rx_db"),
+                "age_s": age_s,
+            }
+        )
+
+    # Include RX-only pages (received without a matching TX row in this window).
+    for page_id in sorted(rx_by_page.keys()):
+        if page_id in seen_pages:
+            continue
+        rxr = rx_by_page[page_id]
+        rx_at = rxr.get("rx_at_utc")
+        if not rx_at:
+            continue
+        ok.append(page_id)
+        age_base = _parse_iso(rx_at) or now
+        age_s = max(0.0, (now - age_base).total_seconds())
+        table_rows.append(
+            {
+                "page_id": page_id,
+                "tx": False,
+                "rx_ok": True,
+                "tx_at_utc": None,
+                "rx_at_utc": rx_at,
+                "frequency": rxr.get("rx_freq"),
+                "rx_db": rxr.get("rx_db"),
                 "age_s": age_s,
             }
         )
