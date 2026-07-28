@@ -4,69 +4,139 @@
 
 # Ceefax Station
 
-A modern recreation of the classic Ceefax teletext service, running on Windows with live data feeds, AX.25 packet radio transmission, and a public web tracker.
+A modern recreation of the classic Ceefax teletext service for Windows amateur radio stations: live data pages, AX.25 packet radio TX/RX, a responsive terminal viewer, and a public web tracker.
 
 ## Features
 
-### 📺 Teletext Pages
-- **Weather**: UK forecasts, local weather, weather maps
-- **News**: Headlines, UK news, world news
-- **Sport**: Live scores, league tables, fixtures & results
-- **Entertainment**: TV highlights, film picks, facts, quotes
-- **Finance**: Exchange rates, lottery results
-- **Travel**: Travel information and updates
+### Teletext Pages
+- **Weather** — UK forecasts, local weather, UK weather map (Open-Meteo)
+- **News** — Headlines, UK, and world news (Guardian API with BBC RSS fallback)
+- **Sport** — Headlines, live scores, league tables, fixtures (football-data.org + BBC RSS)
+- **Entertainment** — TV highlights (TVMaze), film picks (TMDB), facts, quotes, jokes, quiz
+- **Finance / travel** — Exchange rates, lottery results, TfL travel info
+- **Radio** — Callsign / PSK Reporter activity on page 700
 
-### 📡 Packet Radio (AX.25)
-- Transmit pages via AFSK1200 modulation
-- Receive and decode AX.25 packets
-- Hourly automatic transmission with page refresh
-- Integration with Dire Wolf for decoding
+Live pages use durable providers with **last-known-good caching**. If a feed is down, Ceefax keeps showing the last good page and marks it stale instead of blanking out.
 
-### 🌐 Web Tracker
-- Public website showing transmitting and receiving stations
-- Real-time map visualization with Maidenhead grid squares
-- Station-to-station link tracking
-- Page transmission/reception statistics
-- View at [ceefaxstation.com](https://ceefaxstation.com)
+### Packet Radio (AX.25)
+- Transmit pages via AFSK1200
+- Receive and decode AX.25 packets (Dire Wolf)
+- Hourly automatic TX with page refresh **before** the hour, then play on `:00`
+- In-terminal TX / RX dashboards
+
+### Terminal Viewer
+- Authentic Ceefax-style layout
+- Works in standard **80×24** PowerShell windows and larger terminals
+- Three-digit page entry, unified Esc behaviour, TX/RX modes from the TUI
+
+### Web Tracker
+- Public map of transmitting and receiving stations
+- Maidenhead grid squares and station-to-station links
+- Live at [ceefaxstation.com](https://ceefaxstation.com)
+
+## Screenshots
+
+### Terminal viewer
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-000.png">
+        <img src="screenshots/ceefax-terminal/page-000.png" width="260" alt="Page 000 (Start)" />
+      </a>
+      <br/><sub><b>Page 000</b> — Start</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-101.png">
+        <img src="screenshots/ceefax-terminal/page-101.png" width="260" alt="Weather (Page 101)" />
+      </a>
+      <br/><sub><b>Page 101</b> — Weather</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-103.png">
+        <img src="screenshots/ceefax-terminal/page-103.png" width="260" alt="UK Weather Map (Page 103)" />
+      </a>
+      <br/><sub><b>Page 103</b> — UK weather map</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-200.png">
+        <img src="screenshots/ceefax-terminal/page-200.png" width="260" alt="News (Page 200)" />
+      </a>
+      <br/><sub><b>Page 200</b> — News</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-304.png">
+        <img src="screenshots/ceefax-terminal/page-304.png" width="260" alt="Football (Page 304)" />
+      </a>
+      <br/><sub><b>Page 304</b> — Fixtures</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-402.png">
+        <img src="screenshots/ceefax-terminal/page-402.png" width="260" alt="Lottery (Page 402)" />
+      </a>
+      <br/><sub><b>Page 402</b> — Lottery</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-503.png">
+        <img src="screenshots/ceefax-terminal/page-503.png" width="260" alt="TV Highlights (Page 503)" />
+      </a>
+      <br/><sub><b>Page 503</b> — TV highlights</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/ceefax-terminal/page-504.png">
+        <img src="screenshots/ceefax-terminal/page-504.png" width="260" alt="Film Picks (Page 504)" />
+      </a>
+      <br/><sub><b>Page 504</b> — Film picks</sub>
+    </td>
+    <td></td>
+  </tr>
+</table>
+
+### Web tracker
+
+![Desktop tracker](screenshots/desktop-main.png)
+
+| Mobile map | Mobile panel |
+| --- | --- |
+| <img src="screenshots/mobile-map.png" width="220" alt="Mobile map" /> | <img src="screenshots/mobile-panel-expanded.png" width="220" alt="Mobile panel" /> |
 
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11 (specific version required for special character support)
-- Windows
+- **Python 3.11** (required for special-character support)
+- **Windows** (primary supported platform)
+- Optional: Dire Wolf for live RX decode
 
 ### Installation
 
-You have two options for installing Ceefax Station:
+#### Option 1: Windows Installer
 
-#### Option 1: Windows Installer (Recommended for most users)
+1. Download the latest installer from `installers/` (for example `CeefaxStation-Setup-0.1.0.exe`)
+2. Run the setup wizard
+3. Configure callsign / frequency / grid via Start Menu → **Configure Station**, or edit `ceefax/radio_config.json`
 
-1. Download the latest installer from the `installers/` directory in this repository:
-   - Latest: `installers/CeefaxStation-Setup-0.1.0.exe`
+The packaged installer can lag behind GitHub `main`. For the newest code, use Option 2.
 
-2. Run the installer and follow the setup wizard
+#### Option 2: From Git
 
-3. Configure your station:
-   - After installation, edit `C:\Program Files\Ceefax Station\ceefax\radio_config.json` (or use the "Configure Station" shortcut from the Start menu)
-   - Set your callsign, frequency, and grid square
-
-**Note:** The installer may be behind the latest code available on GitHub. For the most up-to-date version, use Option 2 below.
-
-#### Option 2: Manual Installation (Latest code from Git)
-
-1. Clone the repository:
 ```bash
 git clone https://github.com/thaum-labs/ceefax_station.git
 cd ceefax_station
-```
-
-2. Install dependencies:
-```bash
 python -m pip install -r ceefax/requirements.txt
 ```
 
-3. Configure your station:
+On Windows, also install curses support:
+
+```bash
+python -m pip install windows-curses
+```
+
 Edit `ceefax/radio_config.json`:
+
 ```json
 {
   "callsign": "YOUR_CALLSIGN",
@@ -75,168 +145,121 @@ Edit `ceefax/radio_config.json`:
 }
 ```
 
-## Usage
+### Optional API keys
 
-### Viewer Mode (Debug)
-View pages locally without transmission:
+Most pages work without keys. These unlock richer / required live sources:
+
+| Variable | Pages | Provider | Free? |
+|---|---:|---|---|
+| `GUARDIAN_API_KEY` | 200–202 | Guardian Open Platform (BBC RSS fallback) | Yes (non-commercial) |
+| `FOOTBALL_DATA_API_KEY` | 301–304 | football-data.org | Yes (free tier) |
+| `LOTTERY_RESULTS_API_KEY` | 402 | Lottery Results Feed | Yes (100 calls/month) |
+| `TMDB_API_KEY` | 504 | The Movie Database | Yes (non-commercial) |
+| `CEEFAX_PROVIDER_CACHE` | all | Optional cache directory override | — |
+
+**macOS / Linux** (add to `~/.zshrc` or `~/.bashrc`):
+
 ```bash
-ceefaxstation debug --view
+export GUARDIAN_API_KEY="..."
+export FOOTBALL_DATA_API_KEY="..."
+export LOTTERY_RESULTS_API_KEY="..."
+export TMDB_API_KEY="..."
 ```
 
-Refresh all API feeds and view:
+**Windows PowerShell** (permanent for your user; reopen the terminal after):
+
+```powershell
+[Environment]::SetEnvironmentVariable("GUARDIAN_API_KEY", "...", "User")
+[Environment]::SetEnvironmentVariable("FOOTBALL_DATA_API_KEY", "...", "User")
+[Environment]::SetEnvironmentVariable("LOTTERY_RESULTS_API_KEY", "...", "User")
+[Environment]::SetEnvironmentVariable("TMDB_API_KEY", "...", "User")
+```
+
+Do **not** commit API keys to the repository.
+
+Lottery tip: each live refresh uses **2** API calls. Successful results are reused for 24 hours so the free monthly quota lasts.
+
+## Usage
+
+### Viewer (debug)
 ```bash
+ceefaxstation debug --view
 ceefaxstation debug --refresh --view
 ```
 
-### Receive Mode (RX)
-Decode from a WAV file:
+Viewer controls:
+- Type a **three-digit** page number (for example `503`)
+- `n` / Right / Page Down — next page
+- `p` / Left / Page Up — previous page
+- `r` — receive mode · `t` — transmit mode
+- `F5` — reload pages from disk
+- `Esc` / `q` — exit or leave TX/RX
+
+### Receive
 ```bash
 ceefaxstation rx latest
-```
-
-Listen live from soundcard:
-```bash
 ceefaxstation rx live
 ```
 
-### Transmit Mode (TX)
-Transmit now:
+### Transmit
 ```bash
 ceefaxstation tx now --play
-```
-
-Hourly automatic transmission:
-```bash
 ceefaxstation tx hourly --play
 ```
 
-### Upload Logs to Web Tracker
+Hourly mode refreshes pages shortly before the hour, prepares the WAV, then plays on the hour.
 
-Upload your logs to the public tracker website automatically. **No configuration needed!**
+### Upload logs to the web tracker
 
-Simply run:
+No token required — uploads go to the public tracker:
+
 ```bash
 ceefaxstation upload
 ```
 
-The uploader will:
-- Automatically use the public tracker at https://ceefaxstation.com
-- Read your callsign and grid from `ceefax/radio_config.json`
-- Watch for new log files and upload them automatically
-- No token or additional configuration required
+Or:
 
-Or use the provided PowerShell script (reads config automatically):
 ```powershell
 .\start_uploader.ps1
 ```
-
-**Note:** The public tracker at [ceefaxstation.com](https://ceefaxstation.com) is the only supported upload destination. Users should not run their own tracker servers.
 
 ## Project Structure
 
 ```
 .
-├── ceefax/              # Main application
-│   ├── src/            # Source code
-│   ├── pages/          # Page definitions (JSON)
-│   ├── logs_tx/        # Transmission logs
-│   ├── logs_rx/        # Reception logs
+├── ceefax/                 # Station app, pages, providers, viewer
+│   ├── src/                # Updaters, AX.25, terminal UI
+│   ├── pages/              # Generated teletext JSON (local / runtime)
+│   ├── cache/providers/    # Last-known-good provider cache
 │   └── requirements.txt
-├── ceefaxstation/       # CLI interface
-├── ceefaxweb/          # Web tracker application
-└── README.md
+├── ceefaxstation/          # CLI entrypoint
+├── ceefaxweb/              # Public tracker server (central host)
+├── screenshots/            # README images
+├── scripts/                # Screenshot / logo generators
+└── installers/             # Windows setup builds
 ```
 
-## Web Tracker
+## Regenerating screenshots
 
-The web tracker is a public website that visualizes:
-- Transmitting stations (green markers)
-- Receiving stations (yellow/blue markers)
-- Station-to-station links
-- Page transmission statistics
-- Reception quality (dB, frequency, age)
+From a machine with refreshed `ceefax/pages/*.json` and Playwright installed:
 
-### Screenshots
-
-![Desktop Main View](screenshots/desktop-main.png)
-
-The desktop interface features a split layout with an interactive map on the left showing station locations and transmission links, and a control panel on the right with filters, settings, and station information.
-
-## Ceefax Terminal Viewer
-
-### Screenshots
-
-<table>
-  <tr>
-    <td align="center">
-      <a href="screenshots/ceefax-terminal/page-000.png">
-        <img src="screenshots/ceefax-terminal/page-000.png" width="260" alt="Page 000 (Start)" />
-      </a>
-      <br/><sub><b>Page 000</b> (Start)</sub>
-    </td>
-    <td align="center">
-      <a href="screenshots/ceefax-terminal/page-503.png">
-        <img src="screenshots/ceefax-terminal/page-503.png" width="260" alt="TV Guide (Page 503)" />
-      </a>
-      <br/><sub><b>TV Guide</b> (Page 503)</sub>
-    </td>
-    <td align="center">
-      <a href="screenshots/ceefax-terminal/page-304.png">
-        <img src="screenshots/ceefax-terminal/page-304.png" width="260" alt="Football Fixtures (Page 304)" />
-      </a>
-      <br/><sub><b>Football</b> (Fixtures, Page 304)</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="screenshots/ceefax-terminal/page-101.png">
-        <img src="screenshots/ceefax-terminal/page-101.png" width="260" alt="London Weather (Page 101)" />
-      </a>
-      <br/><sub><b>London</b> (Weather, Page 101)</sub>
-    </td>
-    <td align="center">
-      <a href="screenshots/ceefax-terminal/page-103.png">
-        <img src="screenshots/ceefax-terminal/page-103.png" width="260" alt="UK Weather Map (Page 103)" />
-      </a>
-      <br/><sub><b>UK</b> (Weather map, Page 103)</sub>
-    </td>
-    <td></td>
-  </tr>
-</table>
-
-### Web Tracker
-
-The public web tracker is hosted at [ceefaxstation.com](https://ceefaxstation.com). Users should upload their logs to this central tracker rather than running their own servers.
-
-## Configuration
-
-### Radio Configuration
-Edit `ceefax/radio_config.json`:
-- `callsign`: Your amateur radio callsign
-- `frequency`: Operating frequency
-- `grid`: Maidenhead grid square
-
-### Page Content
-Pages are defined in `ceefax/pages/*.json`. Each page includes:
-- Page number
-- Title
-- Content (array of lines)
-- Timestamp
-- Subpage number
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+python scripts/generate_ceefax_viewer_screenshots.py
+python scripts/generate_readme_logo.py
+python scripts/generate_tracker_screenshots.py
+```
 
 ## Development
 
-### Versioning
-The project uses semantic versioning with alpha/beta/release stages:
-- **Alpha**: `0.x.x-alpha` (current stage)
-- **Beta**: `0.x.x-beta` (future)
-- **Release**: `x.x.x` (future, no suffix)
-
-Version is stored in `VERSION` file and changelog in `CHANGELOG.json`.
+- Versioning: semantic, currently alpha (`VERSION` + `CHANGELOG.json`)
+- Tests: `python -m pytest`
+- Preferred base branch: `main`
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE).
 
 Created by M7TJF
 
@@ -247,4 +270,4 @@ Created by M7TJF
 
 ---
 
-**Ceefax Station** - Bringing teletext to the modern era with packet radio
+**Ceefax Station** — bringing teletext to the modern era with packet radio
