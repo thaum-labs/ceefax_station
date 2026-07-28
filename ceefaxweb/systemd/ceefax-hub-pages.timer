@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Ceefax hub page refresh every 30 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+AccuracySec=1min
+Unit=ceefax-hub-pages.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

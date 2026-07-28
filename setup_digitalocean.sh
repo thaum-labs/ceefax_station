@@ -46,14 +46,31 @@ pip install -r ceefax/requirements.txt
 
 # Step 6: Create .env file
 echo "[6/10] Creating .env file..."
-cat > .env << 'EOF'
+if [ ! -f .env ]; then
+  cat > .env << 'EOF'
+# Web server
 CEEFAXWEB_HOST=127.0.0.1
 CEEFAXWEB_PORT=8088
 CEEFAXWEB_DB=/root/ceefax_station/ceefaxweb/ceefaxweb.sqlite3
-CEEFAXWEB_UPLOAD_TOKEN=XjouK8GEhhczBsidV70PbThv3iNlmGBawAAmYx0BsaI
+CEEFAXWEB_UPLOAD_TOKEN=
+
+# Hub page pack (shared teletext pages for TX stations)
+CEEFAXWEB_PAGE_PACK_DIR=/root/ceefax_station/ceefaxweb/data/page_pack
+CEEFAX_PAGES_SOURCE=local
+CEEFAX_HUB_CALLSIGN=CEEFAX
+
+# Free provider API keys (kept on the server only — stations pull the pack)
+GUARDIAN_API_KEY=
+FOOTBALL_DATA_API_KEY=
+LOTTERY_RESULTS_API_KEY=
+TMDB_API_KEY=
 EOF
-chmod 600 .env
-echo ".env file created"
+  chmod 600 .env
+  echo ".env file created — fill in the API keys before enabling hub publishing"
+else
+  echo ".env already exists, leaving it unchanged"
+fi
+mkdir -p /root/ceefax_station/ceefaxweb/data/page_pack
 
 # Step 7: Create systemd service
 echo "[7/10] Creating systemd service..."
@@ -79,6 +96,14 @@ EOF
 systemctl daemon-reload
 systemctl enable ceefaxweb
 echo "Systemd service created and enabled"
+
+# Hub page refresh timer (every 30 minutes)
+echo "Installing hub page refresh timer..."
+cp /root/ceefax_station/ceefaxweb/systemd/ceefax-hub-pages.service /etc/systemd/system/
+cp /root/ceefax_station/ceefaxweb/systemd/ceefax-hub-pages.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ceefax-hub-pages.timer
+echo "Hub page timer enabled (runs every 30 minutes once API keys are set)"
 
 # Step 8: Configure Nginx
 echo "[8/10] Configuring Nginx..."
