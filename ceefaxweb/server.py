@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
+from .page_pack_api import RateLimiter, default_pack_dir, get_pack_manifest, pack_zip_path
 
 
 def _repo_root() -> Path:
@@ -56,6 +57,9 @@ async def lifespan(app: FastAPI):
     # Store connection and hub in app state
     app.state.db_conn = conn
     app.state.hub = Hub()
+    app.state.page_pack_dir = default_pack_dir(_repo_root())
+    # Public pack download: 30 requests / minute / client IP
+    app.state.page_pack_limiter = RateLimiter(limit=30, window_seconds=60.0)
     
     # Run cleanup on startup (best effort - don't block if it fails)
     try:
@@ -147,6 +151,44 @@ def create_app() -> FastAPI:
             except Exception:  # noqa: BLE001
                 pass
         return JSONResponse({"version": "unknown"})
+
+    def _enforce_page_pack_rate_limit(request: Request) -> None:
+        limiter: RateLimiter = request.app.state.page_pack_limiter
+        forwarded = (request.headers.get("x-forwarded-for") or "").strip()
+        if forwarded:
+            ip = forwarded.split(",", 1)[0].strip() or "unknown"
+        else:
+            ip = request.client.host if request.client else "unknown"
+        if not limiter.allow(ip):
+            raise HTTPException(status_code=429, detail="Too many page-pack requests; try again shortly")
+
+    @app.get("/api/pages/manifest")
+    def api_pages_manifest(request: Request) -> JSONResponse:
+        """Public manifest of the shared teletext page pack (rate-limited)."""
+        _enforce_page_pack_rate_limit(request)
+        pack_dir: Path = request.app.state.page_pack_dir
+        try:
+            manifest = get_pack_manifest(pack_dir)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return JSONResponse(manifest)
+
+    @app.get("/api/pages/pack")
+    def api_pages_pack(request: Request) -> FileResponse:
+        """Public zip download of shared teletext pages (rate-limited). Excludes 102/700."""
+        _enforce_page_pack_rate_limit(request)
+        pack_dir: Path = request.app.state.page_pack_dir
+        try:
+            zip_path = pack_zip_path(pack_dir)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return FileResponse(
+            path=str(zip_path),
+            media_type="application/zip",
+            filename="ceefax-pages.zip",
+        )
 
     @app.post("/api/ingest/log")
     async def api_ingest(request: Request, body: dict[str, Any]) -> JSONResponse:

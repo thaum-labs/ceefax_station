@@ -84,8 +84,10 @@ def _refresh_pages(
     frequency: str | None,
     location: str | None,
     auto_location: bool,
+    pages_source: str | None = None,
+    hub_url: str | None = None,
 ) -> None:
-    from ceefax.src.update_all import prime_user_settings, update_all
+    from ceefax.src.hub_pages import refresh_station_pages
 
     loc_tuple = None
     if location:
@@ -93,13 +95,15 @@ def _refresh_pages(
         name = location.split(",", 1)[0].strip() or location.strip()
         loc_tuple = (name, location.strip())
 
-    prime_user_settings(
+    refresh_station_pages(
         callsign=(callsign.strip().upper() if callsign else None),
         frequency=(frequency.strip() if frequency is not None else None),
         location=loc_tuple,
         auto_location=auto_location,
+        source=pages_source,
+        hub_url=hub_url,
+        pages_dir=_repo_root() / "ceefax" / "pages",
     )
-    update_all()
 
 
 def _tx_now(
@@ -218,10 +222,57 @@ def main(argv: list[str] | None = None) -> int:
             "  ceefaxstation rx latest --listener M7TJF\n"
             "  ceefaxstation rx live --device USB --listener M7TJF\n"
             "  ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 2\n"
+            "  ceefaxstation pages pull\n"
             "  ceefaxstation shell\n"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    # ---- pages (hub pack) ----
+    p_pages = sub.add_parser("pages", help="Download or publish shared teletext page packs.")
+    pages_sub = p_pages.add_subparsers(dest="pages_cmd", required=True)
+
+    p_pages_pull = pages_sub.add_parser(
+        "pull",
+        help="Download shared pages from the hub (keeps local 102/700). Default hub: ceefaxstation.com",
+    )
+    p_pages_pull.add_argument(
+        "--server",
+        default=None,
+        help="Hub base URL (default: CEEFAX_PAGES_HUB_URL or https://ceefaxstation.com).",
+    )
+    p_pages_pull.add_argument(
+        "--pages-dir",
+        default=None,
+        help="Destination pages directory (default: ceefax/pages).",
+    )
+    p_pages_pull.add_argument(
+        "--refresh-local",
+        dest="refresh_local",
+        action="store_true",
+        default=True,
+        help="Also refresh local-only pages 102/700 after pull (default).",
+    )
+    p_pages_pull.add_argument(
+        "--no-refresh-local",
+        dest="refresh_local",
+        action="store_false",
+    )
+
+    p_pages_publish = pages_sub.add_parser(
+        "publish",
+        help="Hub operator: publish shared pages from a local pages dir into the pack directory.",
+    )
+    p_pages_publish.add_argument(
+        "--pages-dir",
+        default=None,
+        help="Source pages directory (default: ceefax/pages).",
+    )
+    p_pages_publish.add_argument(
+        "--pack-dir",
+        default=None,
+        help="Destination pack dir (default: CEEFAXWEB_PAGE_PACK_DIR or ceefaxweb/data/page_pack).",
+    )
 
     # ---- upload ----
     p_upload = sub.add_parser("upload", help="Upload logs_tx/logs_rx to a server for the public tracker website.")
@@ -266,6 +317,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_false",
         default=True,
         help="Disable automatic location detection for refresh runs.",
+    )
+    p_debug.add_argument(
+        "--pages-source",
+        choices=["auto", "hub", "local"],
+        default=None,
+        help="Where to get pages: auto (hub then local), hub, or local (default: CEEFAX_PAGES_SOURCE or auto).",
+    )
+    p_debug.add_argument(
+        "--hub-url",
+        default=None,
+        help="Hub base URL for page packs (default: CEEFAX_PAGES_HUB_URL or https://ceefaxstation.com).",
     )
 
     # ---- rx ----
@@ -365,6 +427,42 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
+    if args.cmd == "pages":
+        if args.pages_cmd == "pull":
+            from ceefax.src.hub_pages import pull_page_pack, refresh_local_only_pages
+            from ceefax.src.update_all import prime_user_settings
+
+            pages_dir = Path(args.pages_dir).expanduser() if args.pages_dir else (_repo_root() / "ceefax" / "pages")
+            try:
+                manifest = pull_page_pack(pages_dir=pages_dir, hub_url=args.server)
+            except Exception as exc:  # noqa: BLE001
+                print(f"pages pull failed: {exc}", file=sys.stderr)
+                return 1
+            print(
+                f"Pulled {manifest.get('page_count')} shared pages "
+                f"(generated {manifest.get('generated_at')}) into {pages_dir}"
+            )
+            if args.refresh_local:
+                prime_user_settings(auto_location=True)
+                refresh_local_only_pages()
+            return 0
+
+        if args.pages_cmd == "publish":
+            from ceefax.src.page_pack import publish_pack
+            from ceefaxweb.page_pack_api import default_pack_dir
+
+            source = Path(args.pages_dir).expanduser() if args.pages_dir else (_repo_root() / "ceefax" / "pages")
+            pack_dir = Path(args.pack_dir).expanduser() if args.pack_dir else default_pack_dir(_repo_root())
+            try:
+                manifest = publish_pack(source_pages_dir=source, pack_dir=pack_dir)
+            except Exception as exc:  # noqa: BLE001
+                print(f"pages publish failed: {exc}", file=sys.stderr)
+                return 1
+            print(f"Published {manifest['page_count']} shared pages to {pack_dir}")
+            return 0
+
+        return 2
+
     if args.cmd == "upload":
         from ceefaxstation.uploader import upload_logs
 
@@ -396,6 +494,8 @@ def main(argv: list[str] | None = None) -> int:
                 frequency=args.frequency,
                 location=args.location,
                 auto_location=bool(args.auto_location),
+                pages_source=getattr(args, "pages_source", None),
+                hub_url=getattr(args, "hub_url", None),
             )
         if args.view:
             return _run_module("ceefax.src.viewer", [])
