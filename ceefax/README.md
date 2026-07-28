@@ -1,28 +1,23 @@
-# Ceefax Station Broadcast System
+# Ceefax Station (core app)
 
-A Ceefax/Teletext-style information broadcast system for Raspberry Pi.
+Ceefax/Teletext-style information broadcast system. **Windows is the primary supported platform**; Linux / Raspberry Pi remain useful for development and experiments.
 
 ## Overview
 
-- Pages defined as JSON (`pages/*.json`)
--- JSON pages compiled into 50×30 "Teletext-like" text frames
-- Carousel scheduler cycles through pages
-- Audio encoder converts frames into a simple FSK-like audio stream
-- Main loop runs on a Raspberry Pi and can be managed via systemd
+- Pages defined as JSON under `pages/`
+- JSON pages compiled into 50×23 teletext-like text frames
+- Carousel scheduler cycles through pages for TX
+- Audio / AX.25 encoders produce WAV streams for AFSK transmission
+- Responsive curses terminal viewer with TX / RX modes
+- Durable live-data providers with last-known-good caching
 
-**Note:** This is a starter implementation and does **not** implement the full Teletext broadcast spec. It gives you:
-- A 50×30 text page format
-- A basic page compiler and carousel
-- A simple FSK audio generator that writes `.wav` files you can pipe to a transmitter or `aplay`
-
-You can evolve this into proper Teletext line encoding and real-time audio streaming.
+This is **not** a full broadcast Teletext encoder. It provides a Ceefax-style page format, carousel, AX.25 packaging, and AFSK audio suitable for amateur radio use.
 
 ## Requirements
 
-- Python 3.9+
-- On Raspberry Pi (Linux) for real use
-
-Install Python dependencies:
+- Python 3.11+ recommended (3.11 preferred on Windows for character support)
+- Windows: `pip install windows-curses`
+- Optional: Dire Wolf for live RX decode
 
 ```bash
 pip install -r requirements.txt
@@ -30,252 +25,163 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Edit `config.toml`:
+Edit `config.toml` (typically `ceefax/config.toml` when present locally — it is gitignored):
 
-- `general.mode`:
-  - `"audio"` – audio output (WAV files or stdout stream)
-  - `"ax25"` – (placeholder) for future AX.25 mode
-- `general.page_dir` – directory containing JSON pages
-- `audio.*` – audio parameters, tone frequencies, etc.
-  - `audio.output`:
-    - `"files"` – generate per-page WAV files in `out/`
-    - `"stdout"` – stream raw PCM to stdout for piping to `aplay`/VOX
-- `carousel.*` – how long each page is displayed / transmitted (set `page_duration_ms = 0` for continuous streaming without extra gaps)
+- `general.mode`: `"audio"` or `"ax25"`
+- `general.page_dir` — directory containing JSON pages
+- `audio.*` — tone / sample-rate / output (`files` or `stdout`)
+- `carousel.*` — page duration (set `page_duration_ms = 0` for continuous stream)
 
-Optional provider credentials are read from environment variables and must not
-be committed to the repository:
+Station identity lives in `radio_config.json`:
+
+```json
+{
+  "callsign": "YOUR_CALLSIGN",
+  "frequency": "2m (144.0-148.0 MHz)",
+  "grid": "IO91WM"
+}
+```
+
+### Optional provider credentials
+
+Read from environment variables. Never commit secrets.
 
 | Variable | Pages | Provider |
 |---|---:|---|
 | `GUARDIAN_API_KEY` | 200–202 | Guardian Open Platform (BBC RSS fallback) |
-| `FOOTBALL_DATA_API_KEY` | 301–304 | football-data.org |
-| `LOTTERY_RESULTS_API_KEY` | 402 | Lottery Results Feed |
-| `TMDB_API_KEY` | 504 | The Movie Database |
+| `FOOTBALL_DATA_API_KEY` | 301–304 | football-data.org v4 |
+| `LOTTERY_RESULTS_API_KEY` | 402 | Lottery Results Feed (`lotto` + `euromillions`, UK) |
+| `TMDB_API_KEY` | 504 | The Movie Database v3 |
 | `CEEFAX_PROVIDER_CACHE` | all live pages | Optional cache directory override |
 
-Page 402 uses the Lottery Results Feed structured API. Set its bearer token in
-the environment before refreshing pages:
+Lottery free tier allows **100 calls/month**. Each live refresh makes **two** calls; successful results are reused for **24 hours**. Stale cache is kept if the key or service fails.
 
 ```bash
-export LOTTERY_RESULTS_API_KEY="your-lottery-results-feed-token"
+export GUARDIAN_API_KEY="..."
+export FOOTBALL_DATA_API_KEY="..."
+export LOTTERY_RESULTS_API_KEY="..."
+export TMDB_API_KEY="..."
 ```
 
-The free tier allows 100 calls per month. Each live lottery refresh makes two
-calls (Lotto and EuroMillions), so successful results are reused for 24 hours
-(about 60 calls per month).
-The last-known-good result remains available as a stale fallback if the key or
-service is unavailable.
+`MET_OFFICE_API_KEY` is reserved for a future Met Office DataHub integration and is not used today.
 
 ## Running
 
-From the repo root (the directory that contains `ceefax/`):
+From the **repo root**:
 
 ```bash
 python -m ceefaxstation debug --refresh --view
 ```
 
-This will (debug/viewer mode):
+Debug mode refreshes live feeds/pages and opens the terminal viewer (no RF).
 
-1. Load config from `config.toml`
-2. Load pages from `pages/`
-3. Compile them to 50×23 page frames
-4. Refresh live API feeds/pages
-5. Open the terminal viewer (no signal RX/TX processing)
-
-### CLI (new)
-
-All commands start with `ceefaxstation`:
+### CLI
 
 ```bash
-# Debug viewer mode (refresh + view)
+# Debug viewer
 python -m ceefaxstation debug --refresh --view
 
-# RX: decode latest generated AX.25 WAV and view
+# RX: decode latest AX.25 WAV
 python -m ceefaxstation rx latest --listener M7TJF
 
-# RX: decode live soundcard input via Dire Wolf and view
+# RX: live soundcard via Dire Wolf
 python -m ceefaxstation rx live --device USB --listener M7TJF
 
-# TX: hourly scheduler (refresh 5 minutes before the hour, generate WAV, play on the hour)
+# TX: hourly (refresh before :00, generate WAV, play on the hour)
 python -m ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 1
 ```
 
-**Note:** The old `python -m ceefax ...` commands still work, but are now a compatibility shim that maps onto `ceefaxstation`.
+Legacy `python -m ceefax ...` commands still map onto `ceefaxstation`.
 
-You can play per-page WAVs with:
-
-```bash
-aplay out/page_100.wav
-```
-
-For **continuous VOX streaming** (no extra gaps), set:
-
-- `audio.output = "stdout"`
-- `carousel.page_duration_ms = 0`
-
-Then run:
-
-```bash
-python -m src.main | aplay -f S16_LE -c 1 -r 48000
-```
-
-## Text Viewer (Ceefax-style)
-
-There is a responsive terminal viewer that shows the 50×23 frames in an authentic Ceefax-style layout using `curses`. It supports standard 80×24 PowerShell windows and expands cleanly in larger terminals.
-
-From the repo root:
+## Terminal viewer
 
 ```bash
 python -m ceefax.src.viewer
 ```
 
 Controls:
-- Type any three-digit page number (for example `503`) – open that page
-- `n` / Right arrow / Page Down – next page
-- `p` / Left arrow / Page Up – previous page
-- `r` – receive mode
-- `t` – transmit mode
-- `F5` – reload pages from disk
-- `Esc` / `q` – exit or return from TX/RX mode
+- Type any three-digit page number (for example `503`)
+- `n` / Right / Page Down — next page
+- `p` / Left / Page Up — previous page
+- `r` — receive mode
+- `t` — transmit mode
+- `F5` — reload pages from disk
+- `Esc` / `q` — exit or return from TX/RX
 
-**Note for Windows:** full `curses` support may require installing `windows-curses` via:
+Designed for authentic classic Ceefax look on **80×24** and larger terminals.
 
-```bash
-pip install windows-curses
-```
+## Live data pages
 
-## Live Weather Pages
+Providers write pages atomically and keep a last-known-good cache under `cache/providers/` (override with `CEEFAX_PROVIDER_CACHE`).
 
-Pages 101-103 use Open-Meteo's no-key geocoding and forecast APIs. Page 101
-contains the six established UK cities, page 102 uses the configured or detected
-local location, and page 103 contains the UK map. Successful responses are cached
-and a cached response is displayed as stale when the live service is unavailable.
-Page files and provider caches are replaced atomically.
+| Pages | Source notes |
+|---|---|
+| 101–103 | Open-Meteo (no key) |
+| 200–202 | Guardian if keyed, else BBC RSS |
+| 300 | BBC Sport RSS |
+| 301–304 | football-data.org (key required for live tables/scores/fixtures) |
+| 305 | BBC RSS aggregated |
+| 400 | Frankfurter / ECB |
+| 401 | TfL |
+| 402 | Lottery Results Feed |
+| 500 / 602 | Fact / quiz APIs + cache |
+| 501 | Bundled public-domain quotes |
+| 502 | Wikimedia On This Day |
+| 503 | TVMaze full schedule (BBC One/Two, ITV1, Channel 4; 24h window) |
+| 504 | TMDB |
+| 600 | JokeAPI + local fallback |
+| 700 | PSK Reporter |
 
-`MET_OFFICE_API_KEY` is reserved for a future Met Office DataHub integration. It
-is not currently used: DataHub products have endpoint-specific configuration, so
-the application deliberately does not guess an endpoint from the key alone.
-
-From the repo root (with your venv active):
-
-```bash
-python -m ceefax.src.update_weather_page
-```
-
-This builds a Ceefax-style local panel and atomically updates `pages/102.json`.
-
-Then open the viewer and press `F5` to reload pages:
+Bulk refresh:
 
 ```bash
-python -m ceefax.src.viewer
+python -m ceefax.src.update_all
 ```
 
-## UK Weather Map Page
-
-You can also generate a simple **UK weather map** (with icons and temperatures for a few cities including Frome) on page `103`:
-
-```bash
-python -m ceefax.src.update_weather_map_page
-```
-
-Then in the viewer, press `F5` and go to **page 103** to see the map.
-
-## Auto-updated News & Football Pages
-
-News pages 200-202 use the Guardian Open Platform when `GUARDIAN_API_KEY` is
-set, with the corresponding BBC RSS feed as fallback. Last-known-good headlines
-are cached and marked stale if both live providers fail. Set
-`CEEFAX_PROVIDER_CACHE` to override the default `ceefax/cache/providers` cache
-directory.
-
-### Local news (page 200)
+Or single updaters, for example:
 
 ```bash
 python -m ceefax.src.update_news_page
-```
-
-This fetches Somerset headlines from Guardian (when configured) or BBC RSS and
-writes them into `pages/200.json` in a Ceefax-style list. The world and UK
-updaters write pages 201 and 202 respectively.
-
-### Football (pages 300-304)
-
-```bash
 python -m ceefax.src.update_football_page
-python -m ceefax.src.update_football_scores_page
-python -m ceefax.src.update_fixtures_page
+python -m ceefax.src.update_lottery_page
+python -m ceefax.src.update_film_picks_page
 ```
 
-Page 300 contains BBC Sport headlines, page 301 contains live and recent Premier
-League scores, pages 302-303 contain the Premier League and Championship tables,
-and page 304 contains Premier League fixtures and results.
-
-Set `FOOTBALL_DATA_API_KEY` to a football-data.org v4 API token before generating
-pages 301-304. The token is sent in the `X-Auth-Token` header; page 300 uses BBC
-Sport RSS and does not require it. For example:
-
-```bash
-export FOOTBALL_DATA_API_KEY="your-football-data.org-token"
-```
-
-Page 504 uses The Movie Database (TMDB) for current, popular, and upcoming films.
-Set `TMDB_API_KEY` to a TMDB v3 API key before running
-`python -m ceefax.src.update_film_picks_page`:
-
-```bash
-export TMDB_API_KEY="your-tmdb-v3-api-key"
-```
-
-### Running Updates Periodically
-
-On a Raspberry Pi or Linux box you can call these scripts from `cron` or a
-`systemd` timer (e.g. every 15 minutes) so news pages 200-202 and football pages
-300-304 refresh automatically.
-
-
-## systemd Service (Raspberry Pi)
-
-Copy `service/ceefax.service` to:
-
-```bash
-sudo cp service/ceefax.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable ceefax
-sudo systemctl start ceefax
-```
-
-Ensure `ExecStart` inside `ceefax.service` points at your Python interpreter and project path.
-
-## JSON Page Format
-
-Example (`pages/100.json`):
+## JSON page format
 
 ```json
 {
   "page": "100",
   "title": "News Headlines",
-  "timestamp": "2025-01-15T12:34:00Z",
+  "timestamp": "2026-07-28T12:34:00Z",
   "subpage": 1,
   "content": [
     "Headline one goes here.",
-    "Headline two goes here.",
-    "Headline three goes here."
+    "Headline two goes here."
   ]
 }
 ```
 
-Fields:
-- `page`: string page number `"100"`–`"999"`
-- `subpage`: optional integer, e.g. `1` for `100.1`
+- `page`: `"000"`–`"999"`
+- `subpage`: optional integer
 - `title`: single-line title
-- `timestamp`: ISO 8601 string
-- `content`: array of text lines; will be wrapped/padded to 50 columns
+- `timestamp`: ISO 8601 (or source label)
+- `content`: lines padded/wrapped to 50 columns
 
-## Next Steps
+## Linux / Raspberry Pi notes
 
-- Replace the simple audio encoder with a real Teletext/AX.25 encoder
-- Add a small web UI or API to edit JSON pages
-- Implement live reload (watch `pages/` for changes)
-- Implement a proper continuous audio stream rather than per-page WAVs
+You can still run updaters and audio pipelines on Linux. Example continuous VOX stream:
 
+- `audio.output = "stdout"`
+- `carousel.page_duration_ms = 0`
 
+```bash
+python -m src.main | aplay -f S16_LE -c 1 -r 48000
+```
+
+Optional systemd unit: `service/ceefax.service` (adjust paths for your install).
+
+## Related docs
+
+- Root [README.md](../README.md) — installers, screenshots, tracker upload
+- [ceefaxweb/README.md](../ceefaxweb/README.md) — central tracker server notes

@@ -19,7 +19,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from ceefax.src.compiler import PAGE_HEIGHT, PAGE_WIDTH, compile_page_to_matrix, load_page_from_file
-from ceefax.src.config import load_config
 
 
 def _build_html(*, page_num: str, title: str, matrix: list[str]) -> str:
@@ -125,27 +124,26 @@ async def _screenshot_html(*, html_path: Path, png_path: Path) -> None:
 
 
 async def main() -> None:
-    cfg = load_config()
-    pages_dir = Path(cfg.general.page_dir)
+    pages_dir = REPO_ROOT / "ceefax" / "pages"
+    if not pages_dir.is_dir():
+        raise SystemExit(f"Missing pages directory: {pages_dir}")
 
-    out_dir = Path("screenshots/ceefax-terminal")
+    out_dir = REPO_ROOT / "screenshots" / "ceefax-terminal"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    tmp_dir = Path("screenshots/.tmp-ceefax-html")
+    tmp_dir = REPO_ROOT / "screenshots" / ".tmp-ceefax-html"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Requested pages:
-    # - 000 (start)
-    # - TV guide (use 503: TV Highlights as the TV guide content page)
-    # - Football fixtures (304: Fixtures & Results)
-    # - London weather (101)
-    # - UK weather map (103)
+    # Showcase pages covering the durable live providers and classic layout.
     targets: list[tuple[str, str]] = [
         ("000", "Start"),
-        ("503", "TV Guide"),
-        ("304", "Football Fixtures"),
         ("101", "London Weather"),
         ("103", "UK Weather Map"),
+        ("200", "News Headlines"),
+        ("304", "Football Fixtures"),
+        ("402", "Lottery Results"),
+        ("503", "TV Highlights"),
+        ("504", "Film Picks"),
     ]
 
     for page_num, _label in targets:
