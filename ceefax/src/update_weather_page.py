@@ -4,14 +4,19 @@ Update page 102 with local weather based on user's IP location.
 Uses IP geolocation to find nearby towns and displays weather for them.
 """
 import json
-import time
 from pathlib import Path
 from typing import List, Tuple, Optional
 
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .weather_map import fetch_wttr, WeatherSummary
+from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .weather_map import (
+    WeatherSummary,
+    fetch_open_meteo,
+    weather_summary_from_dict,
+    weather_summary_to_dict,
+)
 
 
 def _pad(text: str) -> str:
@@ -310,7 +315,14 @@ def get_nearby_towns(lat: float, lon: float, base_city: str, count: int = 6) -> 
     return result[:count]
 
 
-def build_single_location_weather_page(name: str, query: str) -> List[str]:
+def build_single_location_weather_page(
+    name: str,
+    query: str,
+    *,
+    summary: WeatherSummary | None = None,
+    source_label: str = "Open-Meteo",
+    stale: bool = False,
+) -> List[str]:
     """Build a single location weather page with detailed forecast."""
     lines: List[str] = []
     
@@ -320,7 +332,8 @@ def build_single_location_weather_page(name: str, query: str) -> List[str]:
             query = query[:-3] + ",UK"
         
         print(f"Fetching weather for {name} using query: {query}")
-        summary: WeatherSummary = fetch_wttr(query)
+        if summary is None:
+            summary = fetch_open_meteo(query)
         icon_lines = _ascii_icon(summary.description)
 
         # Centered title
@@ -376,7 +389,7 @@ def build_single_location_weather_page(name: str, query: str) -> List[str]:
         lines.append(_center_pad(f"Error fetching data: {str(e)[:PAGE_WIDTH-20]}"))
 
     lines.append(_center_pad(""))
-    lines.append(_center_pad("Data source: wttr.in (unofficial)"))
+    lines.append(_center_pad(f"Source: {source_label}{' (STALE)' if stale else ''}"))
 
     return lines[:PAGE_HEIGHT]
 
@@ -392,7 +405,7 @@ def build_local_weather_page(cities: List[Tuple[str, str]]) -> List[str]:
             if query.endswith(",GB"):
                 normalized_query = query[:-3] + ",UK"
             
-            summary: WeatherSummary = fetch_wttr(normalized_query)
+            summary: WeatherSummary = fetch_open_meteo(normalized_query)
             icon_lines = _ascii_icon(summary.description)
 
             lines.append(_pad(""))
@@ -437,7 +450,7 @@ def build_local_weather_page(cities: List[Tuple[str, str]]) -> List[str]:
             lines.append(_pad(f"{name}: Error fetching data"))
 
     lines.append(_pad(""))
-    lines.append(_pad("Data source: wttr.in (unofficial)"))
+    lines.append(_pad("Data source: Open-Meteo"))
 
     return lines[:PAGE_HEIGHT]
 
@@ -551,16 +564,33 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
                 print(f"Note: Could not save grid to config: {e}")
     
     # Create only ONE page (102.json) with user's location
-    page_lines = build_single_location_weather_page(name, query)
+    result: ProviderResult[dict] = resolve_provider(
+        f"weather-102-{query.lower()}",
+        [
+            (
+                "Open-Meteo",
+                lambda: weather_summary_to_dict(fetch_open_meteo(query)),
+            )
+        ],
+        is_valid=lambda data: isinstance(data, dict) and bool(data.get("description")),
+    )
+    summary = weather_summary_from_dict(result.data)
+    page_lines = build_single_location_weather_page(
+        name,
+        query,
+        summary=summary,
+        source_label=result.source,
+        stale=result.stale,
+    )
     page_file = pages_dir / "102.json"
     page_data = {
         "page": "102",
         "title": f"{name} Weather",
-        "timestamp": "From wttr.in (live)",
+        "timestamp": f"{result.source} - {result.status_label}",
         "subpage": 1,
         "content": page_lines,
     }
-    page_file.write_text(json.dumps(page_data, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page_data)
     print(f"Updated {page_file} with {name} weather")
 
 

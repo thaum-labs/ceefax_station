@@ -1,103 +1,21 @@
-import json
-import threading
-import time
+import warnings
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import requests
 
 from .compiler import PAGE_WIDTH
 
 
-WTTR_URL = "https://wttr.in/{location}?format=j1"
-_WTTR_CACHE_TTL_S = 10 * 60  # 10 minutes
-_WTTR_CACHE_LOCK = threading.Lock()
-_WTTR_CACHE_MEM: Dict[str, Dict[str, Any]] = {}
-
-
-def _cache_path() -> Path:
-    # ceefax/src -> ceefax/
-    ceefax_root = Path(__file__).resolve().parent.parent
-    d = ceefax_root / "cache"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "wttr_cache.json"
-
-
-def _load_cache_from_disk() -> None:
-    """
-    Best-effort load of disk cache into memory.
-
-    Cache format:
-      { "<location>": { "ts": <epoch_seconds>, "data": <wttr_json> }, ... }
-    """
-    p = _cache_path()
-    if not p.exists():
-        return
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return
-        with _WTTR_CACHE_LOCK:
-            for k, v in raw.items():
-                if isinstance(k, str) and isinstance(v, dict) and "data" in v and "ts" in v:
-                    _WTTR_CACHE_MEM[k] = v
-    except Exception:  # noqa: BLE001
-        return
-
-
-def _save_cache_to_disk() -> None:
-    """
-    Best-effort write of memory cache to disk.
-    """
-    p = _cache_path()
-    try:
-        with _WTTR_CACHE_LOCK:
-            # Keep disk file reasonably small by only persisting recent entries.
-            now = time.time()
-            pruned: Dict[str, Dict[str, Any]] = {}
-            for k, v in _WTTR_CACHE_MEM.items():
-                ts = float(v.get("ts") or 0)
-                if now - ts <= (_WTTR_CACHE_TTL_S * 2):
-                    pruned[k] = v
-        p.write_text(json.dumps(pruned, indent=2), encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        return
+OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
 
 def _normalize_location(location: str) -> str:
     loc = (location or "").strip()
-    # wttr.in prefers "UK" over "GB"
     if loc.endswith(",GB"):
         loc = loc[:-3] + ",UK"
     return loc
-
-
-def _cache_get(location: str) -> tuple[Optional[dict], bool]:
-    """
-    Returns (data, fresh) where fresh indicates TTL validity.
-    """
-    key = _normalize_location(location)
-    now = time.time()
-    with _WTTR_CACHE_LOCK:
-        v = _WTTR_CACHE_MEM.get(key)
-    if not v:
-        return None, False
-    try:
-        ts = float(v.get("ts") or 0)
-        data = v.get("data")
-        if not isinstance(data, dict):
-            return None, False
-        fresh = (now - ts) <= _WTTR_CACHE_TTL_S
-        return data, fresh
-    except Exception:  # noqa: BLE001
-        return None, False
-
-
-def _cache_set(location: str, data: dict) -> None:
-    key = _normalize_location(location)
-    with _WTTR_CACHE_LOCK:
-        _WTTR_CACHE_MEM[key] = {"ts": time.time(), "data": data}
 
 
 @dataclass
@@ -117,9 +35,154 @@ class WeatherSummary:
     tomorrow_desc: str = ""
 
 
+def weather_summary_to_dict(summary: WeatherSummary) -> Dict[str, str]:
+    return {
+        field: str(getattr(summary, field))
+        for field in WeatherSummary.__dataclass_fields__
+    }
+
+
+def weather_summary_from_dict(data: Dict[str, Any]) -> WeatherSummary:
+    return WeatherSummary(
+        **{
+            field: str(data.get(field, ""))
+            for field in WeatherSummary.__dataclass_fields__
+        }
+    )
+
+
+def _weather_description(code: int) -> str:
+    descriptions = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Freezing fog",
+        51: "Light drizzle",
+        53: "Drizzle",
+        55: "Heavy drizzle",
+        56: "Freezing drizzle",
+        57: "Heavy freezing drizzle",
+        61: "Light rain",
+        63: "Rain",
+        65: "Heavy rain",
+        66: "Freezing rain",
+        67: "Heavy freezing rain",
+        71: "Light snow",
+        73: "Snow",
+        75: "Heavy snow",
+        77: "Snow grains",
+        80: "Light rain showers",
+        81: "Rain showers",
+        82: "Heavy rain showers",
+        85: "Light snow showers",
+        86: "Heavy snow showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm with hail",
+        99: "Severe thunderstorm with hail",
+    }
+    return descriptions.get(int(code), "Unknown conditions")
+
+
+def _wind_direction(degrees: float) -> str:
+    points = ("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+              "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW")
+    return points[round(float(degrees) / 22.5) % 16]
+
+
+def _open_meteo_coordinates(location: str) -> tuple[float, float, str]:
+    parts = [part.strip() for part in location.split(",", 1)]
+    query = parts[0]
+    params: Dict[str, str | int] = {
+        "name": query,
+        "count": 1,
+        "language": "en",
+        "format": "json",
+    }
+    if len(parts) > 1 and parts[1]:
+        country = parts[1].upper()
+        params["countryCode"] = "GB" if country in {"UK", "GB"} else country
+    response = requests.get(
+        OPEN_METEO_GEOCODING_URL,
+        params=params,
+        timeout=10,
+        headers={"User-Agent": "CeefaxStation/1.0"},
+    )
+    response.raise_for_status()
+    results = response.json().get("results") or []
+    if not results:
+        raise ValueError(f"Open-Meteo could not locate {query!r}")
+    place = results[0]
+    return float(place["latitude"]), float(place["longitude"]), str(place.get("name") or query)
+
+
+def fetch_open_meteo(location: str) -> WeatherSummary:
+    """Fetch structured current and forecast weather from Open-Meteo."""
+    latitude, longitude, resolved_name = _open_meteo_coordinates(location)
+    response = requests.get(
+        OPEN_METEO_FORECAST_URL,
+        params={
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": (
+                "temperature_2m,apparent_temperature,weather_code,"
+                "wind_speed_10m,wind_direction_10m"
+            ),
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+            "timezone": "auto",
+            "forecast_days": 2,
+        },
+        timeout=10,
+        headers={"User-Agent": "CeefaxStation/1.0"},
+    )
+    response.raise_for_status()
+    payload = response.json()
+    current = payload.get("current") or {}
+    daily = payload.get("daily") or {}
+    daily_codes = daily.get("weather_code") or []
+    maximums = daily.get("temperature_2m_max") or []
+    minimums = daily.get("temperature_2m_min") or []
+    required = ("temperature_2m", "apparent_temperature", "weather_code",
+                "wind_speed_10m", "wind_direction_10m")
+    if any(key not in current for key in required) or not daily_codes:
+        raise ValueError("Open-Meteo response is missing required weather fields")
+
+    description = _weather_description(int(current["weather_code"]))
+    today_desc = _weather_description(int(daily_codes[0]))
+    tomorrow_desc = _weather_description(int(daily_codes[1])) if len(daily_codes) > 1 else ""
+    fmt = lambda value: f"{float(value):.0f}"  # noqa: E731
+    return WeatherSummary(
+        location=resolved_name,
+        temp_c=fmt(current["temperature_2m"]),
+        feels_like_c=fmt(current["apparent_temperature"]),
+        description=description,
+        wind_kph=fmt(current["wind_speed_10m"]),
+        wind_dir=_wind_direction(float(current["wind_direction_10m"])),
+        icon=_pick_icon(description),
+        today_max=fmt(maximums[0]) if maximums else "?",
+        today_min=fmt(minimums[0]) if minimums else "?",
+        today_desc=today_desc,
+        tonight_min=fmt(minimums[0]) if minimums else "?",
+        tonight_desc=today_desc,
+        tomorrow_desc=tomorrow_desc,
+    )
+
+
+def fetch_open_meteo_many(locations: List[str], *, max_workers: int = 6) -> Dict[str, WeatherSummary]:
+    """Fetch several Open-Meteo locations concurrently; fail if any is unavailable."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    normalized = list(dict.fromkeys(_normalize_location(item) for item in locations if item))
+    workers = max(1, min(int(max_workers), len(normalized)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        summaries = executor.map(fetch_open_meteo, normalized)
+        return dict(zip(normalized, summaries))
+
+
 def _pick_icon(desc: str) -> str:
     """
-    Map a free-text description from wttr.in to a simple Ceefax-style icon.
+    Map a free-text weather description to a simple Ceefax-style icon.
     """
     lower = desc.lower()
     if "sun" in lower or "clear" in lower:
@@ -136,158 +199,24 @@ def _pick_icon(desc: str) -> str:
 
 
 def fetch_wttr(location: str, max_retries: int = 3) -> WeatherSummary:
-    """
-    Fetch current weather and forecast for a location from wttr.in and normalise it.
-
-    This uses the same JSON endpoint as the ceefax-weather Rust project:
-    https://wttr.in/{location}?format=j1
-    
-    Args:
-        location: Location query string (e.g., "London,UK" or "New York,US")
-        max_retries: Maximum number of retry attempts (default: 3)
-    
-    Raises:
-        Exception: If all retry attempts fail
-    """
-    # Normalize location format - wttr.in prefers "UK" over "GB"
-    location = _normalize_location(location)
-
-    # Load disk cache lazily the first time we run.
-    if not _WTTR_CACHE_MEM:
-        _load_cache_from_disk()
-
-    cached, fresh = _cache_get(location)
-    if cached is not None and fresh:
-        data = cached
-    else:
-        data = None
-    
-    # URL-encode the location to handle spaces, commas, and special characters
-    from urllib.parse import quote
-    encoded_location = quote(location)
-    url = WTTR_URL.format(location=encoded_location)
-    
-    if data is None:
-        last_error = None
-        for attempt in range(max_retries):
-            try:
-                resp = requests.get(
-                    url,
-                    timeout=6,  # lower timeout; we parallelize + retry
-                    headers={"User-Agent": "CeefaxStation/1.0"},
-                    allow_redirects=True,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-                # Validate response has expected structure
-                if "current_condition" not in data or not data["current_condition"]:
-                    raise ValueError("Invalid response from wttr.in: missing current_condition")
-
-                _cache_set(location, data)
-                # Persist best-effort (don’t do this under lock)
-                _save_cache_to_disk()
-                break  # Success, exit retry loop
-            except Exception as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    # Wait before retry (exponential backoff)
-                    time.sleep(0.4 * (attempt + 1))
-                else:
-                    # If we have stale cache, use it as fallback rather than failing hard.
-                    stale, _fresh = _cache_get(location)
-                    if stale is not None:
-                        data = stale
-                        break
-                    raise Exception(
-                        f"Failed to fetch weather for '{location}' after {max_retries} attempts: {e}"
-                    ) from e
-
-    current = data["current_condition"][0]
-    desc = current["weatherDesc"][0]["value"]
-    
-    # Get forecast data (today, tonight, tomorrow)
-    weather = data.get("weather", [])
-    today_max = "?"
-    today_min = "?"
-    today_desc = ""
-    tonight_min = "?"
-    tonight_desc = ""
-    tomorrow_desc = ""
-    
-    if len(weather) > 0:
-        today = weather[0]
-        today_max = today.get("maxtempC", "?")
-        today_min = today.get("mintempC", "?")
-        # Get hourly data for today's description
-        hourly = today.get("hourly", [])
-        if len(hourly) > 0:
-            # Use midday forecast for today's description
-            midday_idx = min(3, len(hourly) - 1) if len(hourly) > 3 else 0
-            today_desc = hourly[midday_idx].get("weatherDesc", [{}])[0].get("value", "")
-            # Use evening forecast for tonight
-            if len(hourly) > 5:
-                tonight_desc = hourly[5].get("weatherDesc", [{}])[0].get("value", "")
-                tonight_min = hourly[5].get("tempC", "?")
-    
-    if len(weather) > 1:
-        tomorrow = weather[1]
-        hourly = tomorrow.get("hourly", [])
-        if len(hourly) > 0:
-            # Use midday forecast for tomorrow's description
-            midday_idx = min(3, len(hourly) - 1) if len(hourly) > 3 else 0
-            tomorrow_desc = hourly[midday_idx].get("weatherDesc", [{}])[0].get("value", "")
-
-    return WeatherSummary(
-        location=location.title(),
-        temp_c=current.get("temp_C", "?"),
-        feels_like_c=current.get("FeelsLikeC", "?"),
-        description=desc,
-        wind_kph=current.get("windspeedKmph", "?"),
-        wind_dir=current.get("winddir16Point", "?"),
-        icon=_pick_icon(desc),
-        today_max=today_max,
-        today_min=today_min,
-        today_desc=today_desc,
-        tonight_min=tonight_min,
-        tonight_desc=tonight_desc,
-        tomorrow_desc=tomorrow_desc,
+    """Deprecated compatibility wrapper for :func:`fetch_open_meteo`."""
+    del max_retries
+    warnings.warn(
+        "fetch_wttr() is deprecated; use fetch_open_meteo()",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    return fetch_open_meteo(location)
 
 
 def fetch_wttr_many(locations: List[str], *, max_workers: int = 6) -> Dict[str, WeatherSummary]:
-    """
-    Fetch many locations concurrently. Returns mapping {normalized_location: WeatherSummary}.
-
-    This dramatically speeds up pages that need multiple locations (UK weather + map).
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    # Normalize + de-dup
-    normed: List[str] = []
-    seen: set[str] = set()
-    for loc in locations:
-        k = _normalize_location(loc)
-        if k and k not in seen:
-            seen.add(k)
-            normed.append(k)
-
-    out: Dict[str, WeatherSummary] = {}
-    if not normed:
-        return out
-
-    workers = max(1, min(int(max_workers), len(normed)))
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_wttr, loc): loc for loc in normed}
-        for fut in as_completed(futs):
-            loc = futs[fut]
-            try:
-                out[loc] = fut.result()
-            except Exception:  # noqa: BLE001
-                # Caller decides how to handle missing entries.
-                continue
-
-    return out
+    """Deprecated compatibility wrapper for :func:`fetch_open_meteo_many`."""
+    warnings.warn(
+        "fetch_wttr_many() is deprecated; use fetch_open_meteo_many()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return fetch_open_meteo_many(locations, max_workers=max_workers)
 
 
 def build_ceefax_panel(summary: WeatherSummary) -> List[str]:
@@ -314,9 +243,7 @@ def build_ceefax_panel(summary: WeatherSummary) -> List[str]:
         pad(f"Wind {summary.wind_kph} km/h from {summary.wind_dir}")
     )
     lines.append(pad(""))
-    lines.append(
-        pad("Data source: wttr.in  (unofficial, may lag real MET data)")
-    )
+    lines.append(pad("Data source: Open-Meteo"))
 
     return lines
 
@@ -332,7 +259,13 @@ def build_ceefax_panel_for(location: str) -> List[str]:
         for l in lines:
             print(l)
     """
-    summary = fetch_wttr(location)
+    warnings.warn(
+        "build_ceefax_panel_for() is deprecated; fetch with Open-Meteo and "
+        "call build_ceefax_panel()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    summary = fetch_open_meteo(location)
     return build_ceefax_panel(summary)
 
 

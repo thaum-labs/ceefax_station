@@ -3,12 +3,18 @@ Update page 101 with UK weather for major cities.
 Also updates page 101_2 with additional cities.
 Uses same format as page 101.
 """
-import json
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
-from .weather_map import WeatherSummary, fetch_wttr, fetch_wttr_many
+from .providers import ProviderResult, atomic_write_json, resolve_provider
+from .weather_map import (
+    WeatherSummary,
+    fetch_open_meteo,
+    fetch_open_meteo_many,
+    weather_summary_from_dict,
+    weather_summary_to_dict,
+)
 
 
 def _pad(text: str) -> str:
@@ -123,13 +129,20 @@ UK_CITIES_SUB = [
 ]
 
 
-def build_single_location_weather_page(name: str, query: str, *, summary: WeatherSummary | None = None) -> List[str]:
+def build_single_location_weather_page(
+    name: str,
+    query: str,
+    *,
+    summary: WeatherSummary | None = None,
+    source_label: str = "Open-Meteo",
+    stale: bool = False,
+) -> List[str]:
     """Build a single location weather page with detailed forecast."""
     lines: List[str] = []
     
     try:
         if summary is None:
-            summary = fetch_wttr(query)
+            summary = fetch_open_meteo(query)
         icon_lines = _ascii_icon(summary.description)
 
         # Centered title
@@ -190,7 +203,7 @@ def build_single_location_weather_page(name: str, query: str, *, summary: Weathe
         print(f"  Warning: Failed to fetch weather for {name} using query '{query}': {e}")
 
     lines.append(_center_pad(""))
-    lines.append(_center_pad("Data source: wttr.in (unofficial)"))
+    lines.append(_center_pad(f"Source: {source_label}{' (STALE)' if stale else ''}"))
 
     return lines[:PAGE_HEIGHT]
 
@@ -206,24 +219,41 @@ def main() -> None:
     # Create one page per city - always start with London
     all_cities = UK_CITIES_MAIN + UK_CITIES_SUB
 
-    # Prefetch all cities in parallel (major speedup vs serial requests)
     queries = [q for _n, q in all_cities]
-    prefetched: Dict[str, WeatherSummary] = fetch_wttr_many(queries, max_workers=6)
+    result: ProviderResult[dict] = resolve_provider(
+        "weather-101-six-cities",
+        [
+            (
+                "Open-Meteo",
+                lambda: {
+                    query: weather_summary_to_dict(summary)
+                    for query, summary in fetch_open_meteo_many(queries, max_workers=6).items()
+                },
+            )
+        ],
+        is_valid=lambda data: isinstance(data, dict) and all(query in data for query in queries),
+    )
+    prefetched: Dict[str, WeatherSummary] = {
+        query: weather_summary_from_dict(data)
+        for query, data in result.data.items()
+    }
 
     for idx, (name, query) in enumerate(all_cities, start=1):
-        try:
-            summary = prefetched.get(query) or prefetched.get(query.replace(",GB", ",UK"))
-            page_lines = build_single_location_weather_page(name, query, summary=summary)
-            page_file = pages_dir / f"101{'_' + str(idx) if idx > 1 else ''}.json"
-            page_data = {
-                "page": "101",
-                "title": f"{name} Weather",
-                "timestamp": "From wttr.in (live)",
-                "subpage": idx,
-                "content": page_lines,
-            }
-            page_file.write_text(json.dumps(page_data, indent=2), encoding="utf-8")
-            print(f"Updated {page_file} with {name} weather")
-        except Exception as e:  # noqa: BLE001
-            print(f"Error updating weather for {name} ({query}): {e}")
-            # Continue with other cities even if one fails
+        summary = prefetched[query]
+        page_lines = build_single_location_weather_page(
+            name,
+            query,
+            summary=summary,
+            source_label=result.source,
+            stale=result.stale,
+        )
+        page_file = pages_dir / f"101{'_' + str(idx) if idx > 1 else ''}.json"
+        page_data = {
+            "page": "101",
+            "title": f"{name} Weather",
+            "timestamp": f"{result.source} - {result.status_label}",
+            "subpage": idx,
+            "content": page_lines,
+        }
+        atomic_write_json(page_file, page_data)
+        print(f"Updated {page_file} with {name} weather")

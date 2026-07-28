@@ -1,11 +1,10 @@
-import json
+import os
 from pathlib import Path
 from typing import List
 
-import requests
-import xml.etree.ElementTree as ET
-
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .news_providers import fetch_bbc_rss_headlines, fetch_guardian_headlines
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 BBC_SOMERSET_RSS = "https://feeds.bbci.co.uk/news/england/somerset/rss.xml"
@@ -17,36 +16,38 @@ def _pad(text: str) -> str:
 
 
 def fetch_headlines(limit: int = 6) -> List[str]:
-    """
-    Fetch top headlines from BBC Somerset RSS.
-    """
-    resp = requests.get(BBC_SOMERSET_RSS, timeout=10)
-    resp.raise_for_status()
-
-    root = ET.fromstring(resp.content)
-    items = root.findall("./channel/item/title")
-    titles: List[str] = []
-    for item in items[:limit]:
-        if item.text:
-            titles.append(item.text.strip())
-    return titles
+    """Fetch top headlines from BBC Somerset RSS (compatibility helper)."""
+    return fetch_bbc_rss_headlines(BBC_SOMERSET_RSS, limit=limit)
 
 
-def build_news_page() -> List[str]:
+def resolve_headlines(limit: int = 6) -> ProviderResult[List[str]]:
+    providers = []
+    if (os.environ.get("GUARDIAN_API_KEY") or "").strip():
+        providers.append(
+            (
+                "Guardian Open Platform",
+                lambda: fetch_guardian_headlines(
+                    section="uk-news",
+                    query="Somerset",
+                    limit=limit,
+                ),
+            )
+        )
+    providers.append(("BBC Somerset RSS", lambda: fetch_headlines(limit)))
+    return resolve_provider("news-200-somerset", providers)
+
+
+def build_news_page(result: ProviderResult[List[str]] | None = None) -> List[str]:
     lines: List[str] = []
     lines.append(_pad("NEWS HEADLINES"))
-
-    try:
-        headlines = fetch_headlines()
-    except Exception as exc:  # noqa: BLE001
-        lines.append(_pad("Error fetching headlines:"))
-        lines.append(_pad(str(exc)[: PAGE_WIDTH]))
-        return lines[:PAGE_HEIGHT]
+    result = result or resolve_headlines()
+    headlines = result.data
 
     # Simple horizontal separator line spanning the full page width
     sep = _pad("-" * PAGE_WIDTH)
     # Keep pages uniform: show the "blue line" directly under the top heading.
     lines.append(sep)
+    lines.append(_pad(f"{result.source}{' - STALE' if result.stale else ''}"))
 
     for title in headlines:
         wrapped = []
@@ -58,7 +59,7 @@ def build_news_page() -> List[str]:
         # Separator between stories
         lines.append(sep)
 
-    lines.append(_pad("Source: BBC Somerset RSS"))
+    lines.append(_pad(f"As of: {result.fetched_at}"))
 
     return lines[:PAGE_HEIGHT]
 
@@ -71,17 +72,18 @@ def main() -> None:
     pages_dir = root / "pages"
     page_file = pages_dir / "200.json"
 
-    content = build_news_page()
+    result = resolve_headlines()
+    content = build_news_page(result)
 
     page = {
         "page": "200",
         "title": "News Headlines",
-        "timestamp": "From BBC Somerset RSS (live)",
+        "timestamp": f"{result.source} - {result.status_label}",
         "subpage": 1,
         "content": content,
     }
 
-    page_file.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, page)
     print(f"Updated {page_file} with latest news headlines")
 
 
