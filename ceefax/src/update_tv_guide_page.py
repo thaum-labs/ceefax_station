@@ -1,14 +1,8 @@
 """
 Update page 503 with TV highlights over two subpages (503 and 503.2).
 
-Primary sources:
-- BBC One / BBC Two: BBC iPlayer Guide (scrape embedded JSON payload)
-- Channel 4: Channel 4 TV Guide JSON (`/tv-guide/api`)
-
-Fallback source (best-effort):
-- ITV1: TVMaze schedule (ITV blocks plain requests in some environments)
+Primary source: TVMaze's structured GB schedule API.
 """
-import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
 def _pad(text: str) -> str:
@@ -26,6 +21,9 @@ def _pad(text: str) -> str:
 
 
 POPULAR_CHANNELS: Tuple[str, ...] = ("BBC One", "BBC Two", "ITV1", "Channel 4")
+TVMAZE_SCHEDULE_URL = "https://api.tvmaze.com/schedule"
+TVMAZE_SOURCE = "TVMaze GB schedule"
+TVMAZE_USER_AGENT = "CeefaxStation/1.0 (non-commercial; contact via repository)"
 
 
 @dataclass(frozen=True)
@@ -51,193 +49,106 @@ def _parse_iso_utc(s: str | None) -> datetime | None:
         return None
 
 
-def _load_json_payload_from_script_tag(*, html: str, key_hint: str) -> dict | None:
-    """
-    BBC iPlayer guide embeds a large JSON blob in a script tag; this helper locates and parses it.
-    """
-    try:
-        soup = BeautifulSoup(html, "html.parser")
-        for sc in soup.find_all("script"):
-            txt = (sc.string or sc.get_text() or "").strip()
-            if not txt:
+def _canonical_channel(name: str) -> str | None:
+    normalized = " ".join(name.lower().replace("hd", "").split())
+    if normalized.startswith("bbc one") or normalized.startswith("bbc 1"):
+        return "BBC One"
+    if normalized.startswith("bbc two") or normalized.startswith("bbc 2"):
+        return "BBC Two"
+    if normalized.startswith("itv1") or normalized == "itv":
+        return "ITV1"
+    if normalized.startswith("channel 4") or normalized.startswith("channel4"):
+        return "Channel 4"
+    aliases = {
+        "bbc one": "BBC One",
+        "bbc 1": "BBC One",
+        "bbc two": "BBC Two",
+        "bbc 2": "BBC Two",
+        "itv": "ITV1",
+        "itv1": "ITV1",
+        "channel 4": "Channel 4",
+        "channel4": "Channel 4",
+    }
+    return aliases.get(normalized)
+
+
+def fetch_tvmaze_schedule(*, start_utc: datetime, end_utc: datetime) -> List[dict]:
+    """Fetch all four channels from TVMaze's structured GB schedule."""
+    dates = {
+        start_utc.astimezone(timezone.utc).date().isoformat(),
+        end_utc.astimezone(timezone.utc).date().isoformat(),
+    }
+    listings: List[dict] = []
+    for date in sorted(dates):
+        response = requests.get(
+            TVMAZE_SCHEDULE_URL,
+            params={"country": "GB", "date": date},
+            headers={"User-Agent": TVMAZE_USER_AGENT},
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("TVMaze returned a non-list schedule")
+        for item in payload:
+            if not isinstance(item, dict):
                 continue
-            if key_hint not in txt:
+            show = item.get("show") or {}
+            network = show.get("network") or {}
+            web_channel = show.get("webChannel") or {}
+            channel = _canonical_channel(str(network.get("name") or web_channel.get("name") or ""))
+            start = _parse_iso_utc(item.get("airstamp"))
+            if channel is None or start is None or not (start_utc <= start < end_utc):
                 continue
-            j0 = txt.find("{")
-            j1 = txt.rfind("}")
-            if j0 == -1 or j1 == -1 or j1 <= j0:
-                continue
-            try:
-                return json.loads(txt[j0 : j1 + 1])
-            except Exception:  # noqa: BLE001
-                continue
-    except Exception:  # noqa: BLE001
-        return None
-    return None
+            summary = show.get("summary") or item.get("summary") or ""
+            if summary:
+                summary = BeautifulSoup(str(summary), "html.parser").get_text(" ", strip=True)
+            runtime = item.get("runtime")
+            end = start + timedelta(minutes=int(runtime)) if runtime else None
+            listings.append(
+                {
+                    "channel": channel,
+                    "start_utc": start.isoformat(),
+                    "end_utc": end.isoformat() if end else None,
+                    "title": str(show.get("name") or "Unknown").strip(),
+                    "subtitle": str(item.get("name") or "").strip() or None,
+                    "synopsis": summary or None,
+                }
+            )
+    if not listings:
+        raise ValueError("TVMaze returned no listings for the selected channels")
+    covered = {str(item["channel"]) for item in listings}
+    missing = set(POPULAR_CHANNELS) - covered
+    if missing:
+        raise ValueError(f"TVMaze schedule is missing channels: {', '.join(sorted(missing))}")
+    return listings
 
 
-def fetch_bbc_iplayer_channel(
-    *,
-    channel_key: str,
-    channel_label: str,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> List[TvListing]:
-    """
-    Scrape BBC iPlayer guide for a single BBC channel.
-    """
-    url = f"https://www.bbc.co.uk/iplayer/guide/{channel_key}"
-    try:
-        html = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"}).text
-    except Exception:  # noqa: BLE001
-        return []
+def get_tv_schedule(*, start_utc: datetime, end_utc: datetime) -> ProviderResult[List[dict]]:
+    return resolve_provider(
+        "tv-503",
+        [(TVMAZE_SOURCE, lambda: fetch_tvmaze_schedule(start_utc=start_utc, end_utc=end_utc))],
+    )
 
-    data = _load_json_payload_from_script_tag(html=html, key_hint="scheduledStart")
-    if not data:
-        return []
 
-    schedule = (data.get("schedule") or {}) if isinstance(data, dict) else {}
-    items = schedule.get("items") or []
-    out: List[TvListing] = []
-
-    for it in items:
-        if not isinstance(it, dict):
+def _restore_listings(items: List[dict]) -> List[TvListing]:
+    restored: List[TvListing] = []
+    for item in items:
+        start = _parse_iso_utc(item.get("start_utc"))
+        if start is None:
             continue
-        props = it.get("props") or {}
-        meta = it.get("meta") or {}
-
-        st = _parse_iso_utc(meta.get("scheduledStart"))
-        en = _parse_iso_utc(meta.get("scheduledEnd"))
-        if not st:
-            continue
-        if st < start_utc or st >= end_utc:
-            continue
-
-        title = (props.get("title") or "").strip() or "Unknown"
-        subtitle = (props.get("subtitle") or "").strip() or None
-        synopsis = (props.get("synopsis") or "").strip() or None
-
-        out.append(
+        restored.append(
             TvListing(
-                channel=channel_label,
-                start_utc=st,
-                end_utc=en,
-                title=title,
-                subtitle=subtitle,
-                synopsis=synopsis,
-                source="BBC iPlayer",
+                channel=str(item.get("channel") or ""),
+                start_utc=start,
+                end_utc=_parse_iso_utc(item.get("end_utc")),
+                title=str(item.get("title") or "Unknown"),
+                subtitle=item.get("subtitle"),
+                synopsis=item.get("synopsis"),
+                source=TVMAZE_SOURCE,
             )
         )
-
-    out.sort(key=lambda x: x.start_utc)
-    return out
-
-
-def fetch_channel4(
-    *,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> List[TvListing]:
-    """
-    Fetch Channel 4 guide via their JSON endpoint.
-    """
-    day = start_utc.astimezone(timezone.utc).date().isoformat()
-    url = f"https://www.channel4.com/tv-guide/api/{day}"
-    try:
-        data = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"}).json()
-    except Exception:  # noqa: BLE001
-        return []
-
-    ch = ((data or {}).get("channels") or {}).get("C4") or {}
-    programmes = ch.get("programmes") or []
-    out: List[TvListing] = []
-
-    for p in programmes:
-        if not isinstance(p, dict):
-            continue
-        st = _parse_iso_utc(p.get("startDate"))
-        en = _parse_iso_utc(p.get("endDate"))
-        if not st:
-            continue
-        if st < start_utc or st >= end_utc:
-            continue
-
-        title = (p.get("title") or "").strip() or "Unknown"
-        synopsis = (p.get("summary") or "").strip() or None
-
-        out.append(
-            TvListing(
-                channel="Channel 4",
-                start_utc=st,
-                end_utc=en,
-                title=title,
-                synopsis=synopsis,
-                source="Channel4 TV Guide",
-            )
-        )
-
-    out.sort(key=lambda x: x.start_utc)
-    return out
-
-
-def fetch_itv1_tvmaze_fallback(
-    *,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> List[TvListing]:
-    """
-    Best-effort ITV1 listings from TVMaze (fallback only).
-
-    ITV frequently blocks automated scraping of itv.com. This keeps ITV1 in the 4-channel set.
-    """
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        url = f"https://api.tvmaze.com/schedule?date={today}&country=GB"
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception:  # noqa: BLE001
-        return []
-
-    out: List[TvListing] = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        # TVMaze airstamp -> UTC
-        st = _parse_iso_utc(item.get("airstamp"))
-        if not st:
-            continue
-        if st < start_utc or st >= end_utc:
-            continue
-
-        show = item.get("show") or {}
-        network = (show.get("network") or {}).get("name") or ""
-        web = (show.get("webChannel") or {}).get("name") or ""
-        ch = (network or web or "").strip().lower()
-        if "itv1" not in ch and ch != "itv":
-            continue
-
-        title = (show.get("name") or "").strip() or "Unknown"
-        episode = (item.get("name") or "").strip() or None
-        synopsis = (show.get("summary") or "").strip() or None
-        # Strip HTML tags from TVMaze summary (basic).
-        if synopsis and "<" in synopsis and ">" in synopsis:
-            synopsis = BeautifulSoup(synopsis, "html.parser").get_text(" ", strip=True)
-
-        out.append(
-            TvListing(
-                channel="ITV1",
-                start_utc=st,
-                end_utc=None,
-                title=title,
-                subtitle=episode,
-                synopsis=synopsis,
-                source="TVMaze (fallback)",
-            )
-        )
-
-    out.sort(key=lambda x: x.start_utc)
-    return out
+    return restored
 
 
 def _is_sports_listing(item: TvListing) -> bool:
@@ -529,7 +440,7 @@ def _write_page(*, page: str, title: str, content: List[str], subpage: int = 1) 
         "content": content[:PAGE_HEIGHT],
     }
 
-    page_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    atomic_write_json(page_file, payload)
     return page_file
 
 
@@ -545,19 +456,16 @@ def main() -> None:
     now_utc = datetime.now(timezone.utc)
     end_utc = now_utc + timedelta(hours=4)
 
-    listings: List[TvListing] = []
-    listings += fetch_bbc_iplayer_channel(channel_key="bbcone", channel_label="BBC One", start_utc=now_utc, end_utc=end_utc)
-    listings += fetch_bbc_iplayer_channel(channel_key="bbctwo", channel_label="BBC Two", start_utc=now_utc, end_utc=end_utc)
-    listings += fetch_channel4(start_utc=now_utc, end_utc=end_utc)
-    # ITV1: fallback for now; still keeps the 4-channel requirement satisfied.
-    listings += fetch_itv1_tvmaze_fallback(start_utc=now_utc, end_utc=end_utc)
+    result = get_tv_schedule(start_utc=now_utc, end_utc=end_utc)
+    listings = _restore_listings(result.data)
 
     listings.sort(key=lambda x: x.start_utc)
 
     # Sports highlights page removed; we exclude sports from both TV highlight subpages.
     non_sports = [x for x in listings if not _is_sports_listing(x)]
 
-    source_note = "Sources: BBC iPlayer, Channel4 TV Guide, ITV1 via TVMaze fallback"
+    state = "Stale/as-of" if result.stale else "As-of"
+    source_note = f"Source: TVMaze GB | {state} {result.fetched_at}"
 
     # Split into 2 subpages with the *same* capacity, distributing items evenly.
     # Each page layout is:
