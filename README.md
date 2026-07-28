@@ -20,256 +20,72 @@
 
 ## What is this?
 
-Remember old-school **Ceefax** on TV — the blocky pages for news, weather, and sport?
+Old-school **Ceefax** teletext pages — on your PC, and optionally over amateur radio.
 
-**Ceefax Station** brings that back on your computer, and (if you want) over amateur radio.
+With Ceefax Station you can:
 
-In plain English, it can:
+1. Browse live-style pages (weather, news, football, TV, lottery, …)
+2. Transmit those pages over radio (licensed operators)
+3. Receive pages from other stations
+4. Appear on the public map: [ceefaxstation.com](https://ceefaxstation.com)
 
-1. **Show teletext-style pages** on your screen (weather, news, football, TV, lottery, and more)
-2. **Send those pages over radio** as packet radio audio (for licensed amateur radio operators)
-3. **Receive pages** from other stations
-4. **Show who’s on air** on a public map: [ceefaxstation.com](https://ceefaxstation.com)
+**You do not need API keys.** Stations download a shared page pack from ceefaxstation.com automatically.  
+**You do not need a radio** just to try the viewer.
 
-You do **not** need a radio to try it. You can just install it and browse the pages.
-
-> This project is still **alpha** — it works, but things may change as we improve it.
+> Alpha software — it works, but things may still change.
 
 ---
 
-## What you’ll see
-
-### On your computer (the Ceefax viewer)
+## Screenshots
 
 <table>
   <tr>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-000.png" width="260" alt="Start page" />
-      <br/><sub>Start page</sub>
-    </td>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-101.png" width="260" alt="Weather" />
-      <br/><sub>Weather</sub>
-    </td>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-200.png" width="260" alt="News" />
-      <br/><sub>News</sub>
-    </td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-000.png" width="260" alt="Start" /><br/><sub>Start</sub></td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-101.png" width="260" alt="Weather" /><br/><sub>Weather</sub></td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-200.png" width="260" alt="News" /><br/><sub>News</sub></td>
   </tr>
   <tr>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-304.png" width="260" alt="Football" />
-      <br/><sub>Football</sub>
-    </td>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-402.png" width="260" alt="Lottery" />
-      <br/><sub>Lottery</sub>
-    </td>
-    <td align="center">
-      <img src="screenshots/ceefax-terminal/page-504.png" width="260" alt="Films" />
-      <br/><sub>Films</sub>
-    </td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-304.png" width="260" alt="Football" /><br/><sub>Football</sub></td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-402.png" width="260" alt="Lottery" /><br/><sub>Lottery</sub></td>
+    <td align="center"><img src="screenshots/ceefax-terminal/page-504.png" width="260" alt="Films" /><br/><sub>Films</sub></td>
   </tr>
 </table>
 
-### On the web (who is transmitting / receiving)
-
-![Map of stations](screenshots/desktop-main.png)
+![Station map](screenshots/desktop-main.png)
 
 ---
 
-## Quick start (easiest path)
+## Quick start (recommended)
 
-Best for most people: use the **Windows installer**.
-
-### You need
-
-- A **Windows** PC
-- About 10 minutes
-- (Optional later) a free Python install if you prefer running from source
-
-### Steps
-
-1. Open the [`installers/`](installers/) folder in this repo
-2. Download **`CeefaxStation-Setup-0.1.0.exe`**
-3. Run it and click through the installer
-4. From the Start Menu, open **Configure Station** and enter:
-   - your **callsign** (or a temporary name if you’re just testing on screen)
-   - your **frequency** (if you use radio)
-   - your **Maidenhead grid** (a short location code like `IO91WM` — used on the map)
-5. Start Ceefax Station and open the viewer
-
-That’s enough to browse pages on your PC.
-
-> Tip: the installer may be a little behind the newest code on GitHub. If you want the absolute latest, use the “From source” section below.
-
----
-
-## Try it without a radio
-
-Once installed, open a terminal in the Ceefax Station folder (or use the Start Menu shortcuts) and run:
-
-```bash
-ceefaxstation debug --refresh --view
-```
-
-What that means:
-
-- `--refresh` = download the latest weather/news/etc.
-- `--view` = open the Ceefax-style screen
-
-### How to move around the pages
-
-| Key | What it does |
-| --- | --- |
-| Type `101`, `200`, `304`… | Jump to that page (like old Ceefax) |
-| `n` or → | Next page |
-| `p` or ← | Previous page |
-| `F5` | Reload pages |
-| `t` | Transmit menu |
-| `r` | Receive menu |
-| `Esc` or `q` | Go back / quit |
-
----
-
-## Optional: make pages richer with free API keys
-
-Most stations **don’t need their own API keys**.
-
-By default (`CEEFAX_PAGES_SOURCE=auto`), Ceefax Station tries to download a shared **page pack** from [ceefaxstation.com](https://ceefaxstation.com) first. Your local weather (page 102) and callsign page (700) still update on your PC.
-
-```bash
-# Download shared pages from the hub now
-ceefaxstation pages pull
-
-# Or refresh as usual (hub first, then local fallback)
-ceefaxstation debug --refresh --view
-```
-
-| Mode (`CEEFAX_PAGES_SOURCE`) | Behaviour |
-| --- | --- |
-| `auto` (default) | Try hub pack, fall back to local refresh |
-| `hub` | Hub pack only (error if hub is down) |
-| `local` | Always refresh on this PC (needs keys for some pages) |
-
-If you run your **own** local refresh instead of the hub, a few pages are better with free keys:
-
-| What it’s for | Env variable name | Free? | Sign up |
-| --- | --- | --- | --- |
-| Better news | `GUARDIAN_API_KEY` | Yes | [Guardian Open Platform](https://openplatform.theguardian.com/) |
-| Football tables / scores | `FOOTBALL_DATA_API_KEY` | Yes | [football-data.org](https://www.football-data.org/client/register) |
-| Lottery | `LOTTERY_RESULTS_API_KEY` | Yes (100 calls/month) | [Lottery Results Feed](https://www.lotteryresultsfeed.com/) |
-| Film picks | `TMDB_API_KEY` | Yes | [TMDB](https://www.themoviedb.org/settings/api) |
-
-### How to add keys on Windows (only if using local refresh)
-
-1. Open **PowerShell**
-2. Paste these (put your real keys between the quotes):
-
-```powershell
-[Environment]::SetEnvironmentVariable("GUARDIAN_API_KEY", "paste-key-here", "User")
-[Environment]::SetEnvironmentVariable("FOOTBALL_DATA_API_KEY", "paste-key-here", "User")
-[Environment]::SetEnvironmentVariable("LOTTERY_RESULTS_API_KEY", "paste-key-here", "User")
-[Environment]::SetEnvironmentVariable("TMDB_API_KEY", "paste-key-here", "User")
-```
-
-3. **Close PowerShell and open a new one**
-4. Run a refresh again:
-
-```bash
-ceefaxstation debug --refresh --view
-```
-
-### How to add keys on a Mac
-
-```bash
-echo 'export GUARDIAN_API_KEY="paste-key-here"' >> ~/.zshrc
-echo 'export FOOTBALL_DATA_API_KEY="paste-key-here"' >> ~/.zshrc
-echo 'export LOTTERY_RESULTS_API_KEY="paste-key-here"' >> ~/.zshrc
-echo 'export TMDB_API_KEY="paste-key-here"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-**Never put your keys into GitHub or commit them into the project.**
-
-Lottery note: each live lottery update uses 2 API calls. Ceefax remembers the result for 24 hours so you don’t burn through the free monthly limit.
-
----
-
-## If you want to use radio
-
-You’ll need:
-
-- A valid **amateur radio licence** and to follow your local rules
-- A radio + audio interface into your PC
-- (For live receive decode) **[Dire Wolf](https://github.com/wb2osz/direwolf)**
-
-### Common commands
-
-```bash
-# Send pages once (plays audio)
-ceefaxstation tx now --play
-
-# Send automatically every hour
-ceefaxstation tx hourly --play
-
-# Decode the latest received audio file
-ceefaxstation rx latest
-
-# Listen live from your sound card
-ceefaxstation rx live
-```
-
-Hourly mode updates the pages shortly **before** the hour, then transmits on the hour.
-
-### Show up on the public map
-
-Run this on your station PC (no login token needed):
-
-```bash
-ceefaxstation upload
-```
-
-Or double-click / run:
-
-```powershell
-.\start_uploader.ps1
-```
-
-Then check [ceefaxstation.com](https://ceefaxstation.com).
-
-Your station needs a **grid square** in `ceefax/radio_config.json` to appear on the map.
-
----
-
-## Install from source (latest code)
-
-Use this if you want the newest GitHub version, or you’re comfortable with Python.
+Best way to get the **latest** version: install from GitHub (the Windows `.exe` installer can be older).
 
 ### 1. Install Python 3.11
 
-Download from [python.org](https://www.python.org/downloads/).  
-On Windows, tick **“Add Python to PATH”** during install.
+- Download: [python.org/downloads](https://www.python.org/downloads/)
+- On Windows: tick **Add Python to PATH**
 
-### 2. Download the project
+### 2. Download Ceefax Station
 
 ```bash
 git clone https://github.com/thaum-labs/ceefax_station.git
 cd ceefax_station
 ```
 
-Don’t have Git? You can also download the ZIP from the green **Code** button on GitHub and unzip it.
+No Git? On GitHub click the green **Code → Download ZIP**, then unzip.
 
-### 3. Install Python packages
+### 3. Install packages
 
 ```bash
 python -m pip install -r ceefax/requirements.txt
+```
+
+On Windows also run:
+
+```bash
 python -m pip install windows-curses
 ```
 
-(`windows-curses` is only needed on Windows — it makes the coloured Ceefax screen work.)
-
-### 4. Set your station details
+### 4. Set your station name
 
 Edit `ceefax/radio_config.json`:
 
@@ -281,36 +97,107 @@ Edit `ceefax/radio_config.json`:
 }
 ```
 
+- **callsign** — your amateur callsign, or any short name for testing  
+- **grid** — Maidenhead locator (e.g. `IO91WM`) so you can appear on the map  
+- **frequency** — only needed if you transmit
+
 ### 5. Run it
-
-```bash
-ceefaxstation debug --refresh --view
-```
-
-If that command isn’t found, try:
 
 ```bash
 python -m ceefaxstation debug --refresh --view
 ```
 
+That will:
+
+1. Download shared pages from [ceefaxstation.com](https://ceefaxstation.com) (no keys needed)
+2. Update your local weather / callsign pages
+3. Open the Ceefax viewer
+
 ---
 
-## What’s on the pages?
+## Using the viewer
 
-| Page range | Content |
+| Key | What it does |
+| --- | --- |
+| Type `101`, `200`, `304`… | Go to that page |
+| `n` or → | Next page |
+| `p` or ← | Previous page |
+| `F5` | Reload pages from disk |
+| `t` | Transmit menu |
+| `r` | Receive menu |
+| `Esc` or `q` | Back / quit |
+
+Useful pages: **101** weather · **200** news · **304** football · **402** lottery · **503** TV · **504** films
+
+---
+
+## Pages without doing anything fancy
+
+By default, refresh uses the **hub page pack**:
+
+```bash
+python -m ceefaxstation pages pull
+python -m ceefaxstation debug --refresh --view
+```
+
+| What | Where it comes from |
+| --- | --- |
+| News, sport, lottery, TV, films, UK weather… | Downloaded from ceefaxstation.com |
+| Local weather (102) | Updated on your PC |
+| Callsign / radio page (700) | Updated on your PC |
+
+If the hub is briefly down, Ceefax falls back to building pages on your PC (some pages then need API keys — usually you can ignore this).
+
+---
+
+## Optional: Windows installer
+
+There is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.0.exe`).
+
+It is the easiest install, but it **may be behind** the latest GitHub code. Prefer the Quick start above if you want hub page packs and newest features.
+
+---
+
+## Radio (TX / RX)
+
+You need a valid licence, a radio, and audio into the PC. For live receive decode, install [Dire Wolf](https://github.com/wb2osz/direwolf).
+
+```bash
+# Transmit once
+python -m ceefaxstation tx now --play
+
+# Transmit every hour (refreshes pages first)
+python -m ceefaxstation tx hourly --play
+
+# Receive latest WAV / live audio
+python -m ceefaxstation rx latest
+python -m ceefaxstation rx live
+```
+
+### Appear on the map
+
+```bash
+python -m ceefaxstation upload
+```
+
+Or on Windows: `.\start_uploader.ps1`
+
+Then open [ceefaxstation.com](https://ceefaxstation.com). Make sure your **grid** is set in `radio_config.json`.
+
+---
+
+## Page guide
+
+| Pages | Content |
 | --- | --- |
 | 101–103 | Weather + UK map |
 | 200–202 | News |
 | 300–305 | Sport / football |
 | 400–402 | Money, travel, lottery |
 | 500–504 | Facts, quotes, TV, films |
-| 600–602 | Jokes, ASCII art, quiz |
+| 600–602 | Jokes, art, quiz |
 | 700 | Radio / callsign activity |
 | 900 | About |
-
-If the internet blips, Ceefax usually **keeps the last good page** instead of going blank.
-
-More technical detail: see [`ceefax/README.md`](ceefax/README.md).
 
 ---
 
@@ -318,59 +205,41 @@ More technical detail: see [`ceefax/README.md`](ceefax/README.md).
 
 | Word | Meaning |
 | --- | --- |
-| **Ceefax / teletext** | Old TV information pages (blocky text + colours) |
-| **Callsign** | Your amateur radio ID (like `M7TJF`) |
-| **Grid / Maidenhead** | Short location code for maps (like `IO91WM`) |
-| **TX** | Transmit (send) |
-| **RX** | Receive |
-| **AX.25 / AFSK1200** | The packet-radio “language” used to send pages as audio |
-| **Dire Wolf** | Free software that helps decode packet radio audio |
-| **API key** | A free password from a website so Ceefax can fetch their data |
+| **Hub / page pack** | Shared pages hosted on ceefaxstation.com so stations don’t need API keys |
+| **Callsign** | Your amateur radio ID |
+| **Grid** | Short location code for the map (Maidenhead) |
+| **TX / RX** | Transmit / receive |
+| **AX.25** | Packet radio format used to send pages as audio |
 
 ---
 
 ## Helpful links
 
-- Live map: [ceefaxstation.com](https://ceefaxstation.com)
-- This project: [github.com/thaum-labs/ceefax_station](https://github.com/thaum-labs/ceefax_station)
-- DigitalOcean env vars: [DIGITALOCEAN.md](DIGITALOCEAN.md)
-- Licence: [MIT](LICENSE) (free to use)
+- Live map + hub: [ceefaxstation.com](https://ceefaxstation.com)
+- Hub pack status: [ceefaxstation.com/api/pages/manifest](https://ceefaxstation.com/api/pages/manifest)
+- Server setup (admins): [DIGITALOCEAN.md](DIGITALOCEAN.md)
+- Extra technical notes: [ceefax/README.md](ceefax/README.md)
+- Licence: [MIT](LICENSE)
 
 ---
 
 ## For developers
 
 <details>
-<summary>Click to expand project layout, tests, and screenshot tools</summary>
-
-### Folders
+<summary>Click to expand</summary>
 
 ```
-ceefax/           main station app + page updaters + viewer
-ceefaxstation/    command-line entrypoint
-ceefaxweb/        public tracker website/server code
-installers/       Windows setup .exe
-screenshots/      images used in this README
-scripts/          tools to regenerate screenshots
+ceefax/           station app, page updaters, viewer
+ceefaxstation/    CLI (`python -m ceefaxstation ...`)
+ceefaxweb/        public tracker + hub page pack API
+installers/       Windows setup .exe (may lag main)
 ```
-
-### Tests
 
 ```bash
 python -m pytest
 ```
 
-### Regenerate README screenshots
-
-```bash
-python -m pip install playwright
-python -m playwright install chromium
-python scripts/generate_ceefax_viewer_screenshots.py
-python scripts/generate_readme_logo.py
-python scripts/generate_tracker_screenshots.py
-```
-
-Version is tracked in `VERSION` and `CHANGELOG.json`.
+Server operators: see [DIGITALOCEAN.md](DIGITALOCEAN.md) for `.env` keys and the hub refresh timer.
 
 </details>
 
