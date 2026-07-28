@@ -61,8 +61,18 @@ jobs:
             echo ""
             echo "=== Delete and re-upload sample data (with correct frequency format) ==="
             cd "${REPO_DIR}"
-            echo "yes" | python3 -m ceefaxweb.scripts.delete_sample_data --confirm 2>&1 || echo "Sample data deletion completed (may have no sample data)"
-            python3 -m ceefaxweb.sample_data --ingest http://127.0.0.1:8088 2>&1 || echo "Sample data upload completed"
+            set -a
+            # shellcheck disable=SC1091
+            [ -f "${REPO_DIR}/.env" ] && . "${REPO_DIR}/.env"
+            set +a
+            if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+              PY="${REPO_DIR}/venv/bin/python"
+            else
+              PY="python3"
+            fi
+            echo "Using DB=${CEEFAXWEB_DB:-"(default)"}"
+            echo "yes" | "${PY}" -m ceefaxweb.scripts.delete_sample_data --confirm 2>&1 || echo "Sample data deletion completed (may have no sample data)"
+            "${PY}" -m ceefaxweb.sample_data --ingest http://127.0.0.1:8088 2>&1 || echo "Sample data upload completed"
 
             echo ""
             echo "=== Install / refresh hub page pack timer ==="

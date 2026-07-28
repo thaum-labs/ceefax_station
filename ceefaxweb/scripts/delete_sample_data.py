@@ -160,6 +160,20 @@ def main() -> int:
     args = ap.parse_args()
     
     root = Path(__file__).resolve().parent.parent.parent
+
+    # Load repo .env if present so CEEFAXWEB_DB matches the live service.
+    env_path = root / ".env"
+    if env_path.exists() and not os.environ.get("CEEFAXWEB_DB"):
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip("'").strip('"')
+            if key and key not in os.environ:
+                os.environ[key] = val
+
     if args.db:
         db_path = Path(args.db).expanduser()
     elif os.environ.get("CEEFAXWEB_DB"):
