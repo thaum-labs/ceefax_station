@@ -214,12 +214,17 @@ def _tx_hourly(
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
+    # Double-click / Start Menu launch with no args → open the viewer.
+    if not argv:
+        argv = ["debug", "--refresh", "--view"]
+
     parser = argparse.ArgumentParser(
         prog="ceefaxstation",
         formatter_class=argparse.RawTextHelpFormatter,
         description=(
             "Ceefax Station CLI\n\n"
             "Examples:\n"
+            "  ceefaxstation                 (same as: debug --refresh --view)\n"
             "  ceefaxstation debug --refresh --view\n"
             "  ceefaxstation rx latest --listener M7TJF\n"
             "  ceefaxstation rx live --device USB --listener M7TJF\n"

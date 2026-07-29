@@ -381,7 +381,7 @@ def _draw_footer(
     _init_ui_colors()
 
     if mode == "viewer":
-        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  F5: RELOAD  ESC: EXIT"
+        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  S: SETUP  F5: RELOAD  ESC: EXIT"
     elif mode == "rx":
         controls = "LEFT/RIGHT: RECEIVED PAGES  3 DIGITS: PAGE  ESC: RETURN"
     else:
@@ -1312,7 +1312,13 @@ def _draw_rx_screen(
     )
 
 
-def _edit_text_value(value: str, ch: int, *, max_length: int = 12) -> tuple[str, bool, bool]:
+def _edit_text_value(
+    value: str,
+    ch: int,
+    *,
+    max_length: int = 12,
+    allow: str = "alnum",
+) -> tuple[str, bool, bool]:
     """Apply one curses key to a short text value; returns value, submit, cancel."""
     if ch == 27:
         return (value, False, True)
@@ -1321,8 +1327,16 @@ def _edit_text_value(value: str, ch: int, *, max_length: int = 12) -> tuple[str,
     if ch in (curses.KEY_BACKSPACE, 8, 127):
         return (value[:-1], False, False)
     if 0 <= ch <= 255:
-        char = chr(ch).upper()
-        if (char.isalnum() or char in "-/") and len(value) < max_length:
+        char = chr(ch)
+        if allow == "upper":
+            char = char.upper()
+            ok = (char.isalnum() or char in "-/") and len(value) < max_length
+        elif allow == "freq":
+            ok = (char.isalnum() or char in " .-()/+") and len(value) < max_length
+        else:
+            char = char.upper()
+            ok = (char.isalnum() or char in "-/") and len(value) < max_length
+        if ok:
             return (value + char, False, False)
     return (value, False, False)
 
@@ -1342,7 +1356,7 @@ def _prompt_callsign_in_tui(stdscr: "curses._CursesWindow") -> str | None:
             footer_status="TYPE CALLSIGN  ENTER: SAVE  ESC: CANCEL",
         )
         ch = stdscr.getch()
-        value, submit, cancel = _edit_text_value(value, ch)
+        value, submit, cancel = _edit_text_value(value, ch, allow="upper")
         if cancel:
             return None
         if submit and value:
@@ -1350,6 +1364,95 @@ def _prompt_callsign_in_tui(stdscr: "curses._CursesWindow") -> str | None:
 
             persist_radio_config(value)
             return value
+
+
+def _station_setup_incomplete(radio: dict | None = None) -> bool:
+    """True when callsign/frequency/grid still need configuring."""
+    from .hub_pages import _needs_station_setup
+
+    data = radio if isinstance(radio, dict) else _load_radio_config()
+    callsign = str(data.get("callsign") or "").strip()
+    frequency = str(data.get("frequency") or "").strip()
+    grid = str(data.get("grid") or "").strip()
+    return _needs_station_setup(callsign) or (not frequency) or (not grid)
+
+
+def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False) -> bool:
+    """
+    Station setup in the curses UI (callsign, frequency, grid).
+
+    Shows automatically when incomplete, or when force=True (viewer S key).
+    Returns True if settings were saved.
+    """
+    from .hub_pages import _needs_station_setup
+    from .update_all import persist_radio_config
+
+    radio = _load_radio_config()
+    if not force and not _station_setup_incomplete(radio):
+        return True
+
+    callsign = str(radio.get("callsign") or "").strip().upper()
+    if _needs_station_setup(callsign):
+        callsign = ""
+    frequency = str(radio.get("frequency") or "").strip()
+    grid = str(radio.get("grid") or "").strip().upper()
+    field = 0  # 0=callsign, 1=frequency, 2=grid
+    labels = ("Callsign", "Frequency", "Grid")
+    stdscr.nodelay(False)
+    stdscr.keypad(True)
+
+    while True:
+        values = [callsign, frequency, grid]
+        fields: list[tuple[str, str]] = []
+        for i, label in enumerate(labels):
+            raw = values[i]
+            if i == field:
+                disp = (raw + "_") if raw else "_"
+            else:
+                disp = raw or ("(required)" if i == 0 else "(optional)")
+            fields.append((label, disp))
+
+        _draw_mode_screen(
+            stdscr,
+            mode="TX",
+            title="Station setup",
+            status="Configure callsign, frequency, and grid",
+            fields=fields,
+            message="Examples: M7TJF · 144.800 MHz (2m) · IO91WM",
+            footer_status="TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL",
+        )
+        ch = stdscr.getch()
+        if ch == 27:
+            return False
+        if ch in (9, curses.KEY_DOWN):
+            field = (field + 1) % 3
+            continue
+        if ch in (curses.KEY_BTAB, curses.KEY_UP):
+            field = (field - 1) % 3
+            continue
+        if ch in (10, 13, curses.KEY_ENTER):
+            if callsign.strip():
+                persist_radio_config(
+                    callsign.strip().upper(),
+                    frequency=(frequency.strip() or None),
+                    grid=(grid.strip().upper() or None),
+                )
+                return True
+            field = 0
+            continue
+
+        if field == 0:
+            callsign, _submit, cancel = _edit_text_value(
+                callsign, ch, max_length=12, allow="upper"
+            )
+        elif field == 1:
+            frequency, _submit, cancel = _edit_text_value(
+                frequency, ch, max_length=28, allow="freq"
+            )
+        else:
+            grid, _submit, cancel = _edit_text_value(grid, ch, max_length=8, allow="upper")
+        if cancel:
+            return False
 
 
 def _confirm_tx(
@@ -1546,8 +1649,8 @@ def _tx_generate_wav(
     *,
     cfg,
     src: str,
-) -> str:
-    """Build a single-loop AX.25 WAV (played 3× by the TX loop)."""
+) -> tuple[str, List[str]]:
+    """Build a single-loop AX.25 WAV (played 3× by the TX loop). Returns (wav, page_ids)."""
     from ceefax.src.ax25_audio import build_ax25_audio_plan, write_ax25_audio_wav_and_or_stdout
 
     _draw_tx_screen(
@@ -1591,31 +1694,69 @@ def _tx_generate_wav(
     )
     stdscr.refresh()
     time.sleep(0.3)
-    return wav
+    return wav, list(plan.page_ids)
 
 
-def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
-    """Play the WAV three times. Returns False if cancelled with ESC."""
+def _wav_duration_seconds(path: str) -> float:
+    """Best-effort WAV duration in seconds (PCM)."""
+    try:
+        import wave
+
+        with wave.open(path, "rb") as wf:
+            rate = int(wf.getframerate() or 0)
+            frames = int(wf.getnframes() or 0)
+            if rate > 0 and frames > 0:
+                return frames / float(rate)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        # Fallback: assume 48 kHz 16-bit mono PCM payload roughly file_size/rate/2
+        return max(1.0, os.path.getsize(path) / (48000.0 * 2.0))
+    except Exception:  # noqa: BLE001
+        return 30.0
+
+
+def _estimate_tx_page(
+    page_ids: List[str],
+    *,
+    loop_elapsed: float,
+    loop_duration: float,
+) -> tuple[str, int, int]:
+    """
+    Estimate which page is on-air within one carousel loop.
+
+    Returns (page_id, page_index_1based, page_count).
+    """
+    ids = [str(p) for p in (page_ids or []) if str(p).strip()]
+    n = len(ids) or 1
+    if not ids:
+        ids = ["?"]
+    if loop_duration <= 0:
+        return ids[0], 1, n
+    frac = max(0.0, min(0.999999, float(loop_elapsed) / float(loop_duration)))
+    idx = min(n - 1, int(frac * n))
+    return ids[idx], idx + 1, n
+
+
+def _tx_play_three_loops(
+    stdscr: "curses._CursesWindow",
+    wav: str,
+    *,
+    page_ids: List[str] | None = None,
+) -> bool:
+    """Play the WAV three times with estimated per-page progress. ESC cancels."""
     from ceefax.src.playback import play_wav_file
 
+    pages_in_loop = [str(p) for p in (page_ids or []) if str(p).strip()]
+    loop_duration = _wav_duration_seconds(wav)
     stdscr.nodelay(True)
-    for tx_num in range(1, 4):
-        status = f"Transmitting (loop {tx_num}/3)..."
-        progress = (tx_num - 1) / 3.0
-        _draw_tx_screen(
-            stdscr,
-            status,
-            progress,
-            f"Transmission {tx_num}/3",
-            show_logo=True,
-            footer_status="TRANSMITTING  ESC: STOP",
-        )
-        stdscr.refresh()
 
+    for tx_num in range(1, 4):
         playback_done = threading.Event()
         playback_stop = threading.Event()
         playback_err: dict = {"err": None}
         playback_proc: dict = {"proc": None}
+        loop_started = time.monotonic()
 
         def _playback_worker() -> None:
             try:
@@ -1642,13 +1783,8 @@ def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
                         import winsound
 
                         winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                        try:
-                            file_size = os.path.getsize(wav)
-                            estimated_duration = file_size / (48000 * 2)
-                        except Exception:  # noqa: BLE001
-                            estimated_duration = 30
                         elapsed = 0.0
-                        while elapsed < estimated_duration and not playback_stop.is_set():
+                        while elapsed < loop_duration and not playback_stop.is_set():
                             time.sleep(0.1)
                             elapsed += 0.1
                 else:
@@ -1676,7 +1812,7 @@ def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
                 _draw_tx_screen(
                     stdscr,
                     "Transmission cancelled",
-                    progress,
+                    (tx_num - 1) / 3.0,
                     f"Transmission {tx_num}/3",
                     message="Returning to viewer.",
                     footer_status="TRANSMITTING  ESC: STOP",
@@ -1684,7 +1820,36 @@ def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
                 stdscr.refresh()
                 time.sleep(1.0)
                 return False
-            time.sleep(0.1)
+
+            loop_elapsed = max(0.0, time.monotonic() - loop_started)
+            page_id, page_i, page_n = _estimate_tx_page(
+                pages_in_loop,
+                loop_elapsed=loop_elapsed,
+                loop_duration=loop_duration,
+            )
+            loop_frac = (
+                max(0.0, min(1.0, loop_elapsed / loop_duration)) if loop_duration > 0 else 0.0
+            )
+            overall = ((tx_num - 1) + loop_frac) / 3.0
+            remain = max(0.0, (3.0 - ((tx_num - 1) + loop_frac)) * loop_duration)
+            remain_m = int(remain // 60)
+            remain_s = int(remain % 60)
+            _draw_tx_screen(
+                stdscr,
+                f"Transmitting page {page_id} (est.)",
+                overall,
+                f"Loop {tx_num}/3",
+                show_logo=True,
+                fields=[
+                    ("Loop", f"{tx_num}/3"),
+                    ("Page", f"{page_id} ({page_i}/{page_n})"),
+                    ("Pages left", str(max(0, page_n - page_i))),
+                    ("Est. left", f"{remain_m:02d}:{remain_s:02d}"),
+                ],
+                footer_status="TRANSMITTING  ESC: STOP  (page progress estimated)",
+            )
+            stdscr.refresh()
+            time.sleep(0.15)
 
         progress = tx_num / 3.0
         if playback_err["err"] is not None:
@@ -1759,7 +1924,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         if not _tx_refresh_pages(stdscr, pages, src=src, page_dir=cfg.general.page_dir):
             return
 
-        wav = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
+        wav, tx_page_ids = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
         frequency_info, data_frequency = _tx_frequency_labels(config_file)
         if not _confirm_tx(
             stdscr,
@@ -1771,7 +1936,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         ):
             return
 
-        if not _tx_play_three_loops(stdscr, wav):
+        if not _tx_play_three_loops(stdscr, wav, page_ids=tx_page_ids):
             return
 
         # --- Hourly cycles until ESC ---
@@ -1820,7 +1985,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             ):
                 return
 
-            wav = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
+            wav, tx_page_ids = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
 
             now2 = datetime.now()
             if now2 < hour:
@@ -1853,7 +2018,7 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                 stdscr.refresh()
                 time.sleep(0.5)
 
-            if not _tx_play_three_loops(stdscr, wav):
+            if not _tx_play_three_loops(stdscr, wav, page_ids=tx_page_ids):
                 return
 
     except Exception as e:  # noqa: BLE001
@@ -1986,6 +2151,9 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             if new_pages:
                 pages[:] = new_pages
                 matrices[:] = compile_all()
+        elif ch in (ord("s"), ord("S")):
+            saved = _station_setup_in_tui(stdscr, force=True)
+            notice = "STATION SETTINGS SAVED" if saved else "STATION SETUP CANCELLED"
 
 
 def _rx_viewer_loop_from_wav(
@@ -2389,6 +2557,7 @@ def main() -> None:
                 listener_callsign=listener,
             )
         else:
+            _station_setup_in_tui(stdscr)
             pages = load_all_pages(config.general.page_dir)
             _viewer_loop(stdscr, pages)
 

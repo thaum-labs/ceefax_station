@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +92,13 @@ def _needs_station_setup(callsign: str | None) -> bool:
     return value in {"", "TEST", "N0CALL", "N0CALL-1", "YOUR_CALLSIGN", "YOURCALL"}
 
 
+def _stdin_is_interactive() -> bool:
+    try:
+        return bool(sys.stdin and sys.stdin.isatty())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def refresh_station_pages(
     *,
     callsign: str | None = None,
@@ -135,15 +143,18 @@ def refresh_station_pages(
     effective_frequency = frequency if frequency is not None else saved_frequency
 
     if _needs_station_setup(effective_callsign):
-        print()
-        print("Station setup required (callsign not configured).")
-        prompted_cs, prompted_freq = get_user_callsign_and_frequency()
-        if prompted_cs:
-            effective_callsign = prompted_cs
-        if prompted_freq:
-            effective_frequency = prompted_freq
-        if location is None:
-            location = get_user_location()
+        if _stdin_is_interactive():
+            print()
+            print("Station setup required (callsign not configured).")
+            prompted_cs, prompted_freq = get_user_callsign_and_frequency()
+            if prompted_cs:
+                effective_callsign = prompted_cs
+            if prompted_freq:
+                effective_frequency = prompted_freq
+            if location is None:
+                location = get_user_location()
+        else:
+            print("Station setup deferred to viewer (no interactive console).")
 
     prime_user_settings(
         callsign=effective_callsign,
