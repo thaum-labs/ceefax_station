@@ -4,7 +4,8 @@ This directory contains Windows installer executables for Ceefax Station.
 
 ## Current Installer
 
-- **CeefaxStation-Setup-0.1.1.exe** - Version 0.1.1-alpha (built from current repo)
+- **CeefaxStation-Setup-0.1.2.exe** - Version 0.1.2-alpha (bundles Dire Wolf 1.8.1 for live RX)
+- **CeefaxStation-Setup-0.1.1.exe** - Version 0.1.1-alpha (previous)
 - **CeefaxStation-Setup-0.1.0.exe** - Version 0.1.0-alpha (previous)
 
 ## Building New Installers
@@ -20,6 +21,8 @@ When you want to create a new installer for a new version:
    cd "C:\Users\tobot\Documents\Ceefax Station App\ceefax-installer-build"
    .\build_installer.ps1 -RepoRoot "C:\Users\tobot\Documents\GitHub\ceefax_station"
    ```
+
+   The build script downloads Dire Wolf (Windows x64) into `vendor\direwolf` and Inno Setup installs it to `{app}\ceefax\tools\direwolf`.
 
 3. **Output locations**:
    - Build output: `...\ceefax-installer-build\dist\CeefaxStation-Setup-X.X.X.exe`
@@ -40,6 +43,6 @@ When you want to create a new installer for a new version:
 ## Notes
 
 - Installers are built using PyInstaller and Inno Setup
-- The installer bundles all dependencies into a single executable
+- The installer bundles the app EXE (Python runtime) plus Dire Wolf for live RX
 - Installers may lag behind the latest code on GitHub
 - Users can always use the manual installation method for the latest code

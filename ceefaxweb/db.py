@@ -206,7 +206,11 @@ def ingest_log(
     if payload.get("kind") == "ceefax_tx_report" and payload.get("tx_id") and payload.get("station_callsign"):
         tx_id = str(payload.get("tx_id"))
         tx_cs = str(payload.get("station_callsign")).strip().upper()
-        gen = _parse_iso(str(payload.get("generated_at") or "")) or datetime.now(timezone.utc)
+        gen = (
+            _parse_iso(str(payload.get("completed_at") or ""))
+            or _parse_iso(str(payload.get("generated_at") or ""))
+            or datetime.now(timezone.utc)
+        )
         gen_iso = gen.isoformat().replace("+00:00", "Z")
         tx_freq = (str(payload.get("frequency") or payload.get("freq") or "").strip() or None)
 

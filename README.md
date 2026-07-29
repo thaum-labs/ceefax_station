@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/version-0.1.1--alpha-orange" alt="Version 0.1.1-alpha" />
+  <img src="https://img.shields.io/badge/version-0.1.2--alpha-orange" alt="Version 0.1.2-alpha" />
   <img src="https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
   <br/>
   <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
@@ -152,15 +152,15 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 ## Optional: Windows installer
 
-There is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.0.exe`).
+There is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.2.exe`).
 
-It is the easiest install, but it **may be behind** the latest GitHub code. Prefer the Quick start above if you want hub page packs and newest features.
+It is the easiest install (bundles the app **and Dire Wolf** for live RX), but it **may be behind** the latest GitHub code. Prefer the Quick start above if you want the newest features.
 
 ---
 
 ## Radio (TX / RX)
 
-You need a valid licence, a radio, and audio into the PC. For live receive decode, install [Dire Wolf](https://github.com/wb2osz/direwolf).
+You need a valid licence, a radio, and audio into the PC. For live receive decode you need [Dire Wolf](https://github.com/wb2osz/direwolf) — the Windows installer bundles it under `ceefax/tools/direwolf`. Manual installs should put `direwolf.exe` on `PATH` or in that folder.
 
 ```bash
 # Transmit once

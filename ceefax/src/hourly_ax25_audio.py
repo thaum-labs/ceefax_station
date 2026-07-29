@@ -177,3 +177,10 @@ def run_hourly_ax25_audio(
                 )
             except Exception as exc:  # noqa: BLE001
                 logging.exception("Playback failed (continuing scheduler): %s", exc)
+
+        try:
+            from .ax25_audio import finalize_tx_report
+
+            finalize_tx_report(wav_path)
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("TX report finalize/upload failed: %s", exc)

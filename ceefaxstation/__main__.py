@@ -171,6 +171,13 @@ def _tx_now(
             print(f"Playback failed: {exc}", file=sys.stderr)
             return 3
 
+    try:
+        from ceefax.src.ax25_audio import finalize_tx_report
+
+        finalize_tx_report(wav)
+    except Exception as exc:  # noqa: BLE001
+        print(f"TX report upload failed: {exc}", file=sys.stderr)
+
     return 0
 
 

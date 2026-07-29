@@ -931,6 +931,24 @@
           .replace(/'/g, '&#39;');
       }
 
+      function formatLocalSeen(iso) {
+        if (!iso) return '-';
+        try {
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return String(iso);
+          return d.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+        } catch (e) {
+          return String(iso);
+        }
+      }
+
       // Animated "flow" links (GridTracker-ish direction indicator)
       let flowLinks = []; // { el, offset, speed }
       let flowRaf = null;
@@ -1069,7 +1087,7 @@
             const safeGridDisplay = escapeHtml(gridDisplay);
             const safeRole = escapeHtml(role);
             const safeStatus = escapeHtml(s.status || '-');
-            const safeLast = escapeHtml(s.last_seen_utc || '-');
+            const safeLast = escapeHtml(formatLocalSeen(s.last_seen_utc));
             const popupHtml = `<b>${safeCall}${safeGridDisplay}</b><br/>Grid: ${safeGrid}<br/>Role: ${safeRole}<br/>Status: ${safeStatus}<br/><span class="muted">Last seen: ${safeLast}</span>`;
             for (const l of layers) l.bindPopup(popupHtml);
             for (const l of layers) l.bindTooltip(`${s.callsign}${gridDisplay}`, { sticky: true });

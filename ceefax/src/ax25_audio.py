@@ -5,7 +5,7 @@ import sys
 import json
 import wave
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
 from uuid import UUID, uuid4
@@ -31,11 +31,22 @@ class Ax25AudioPlan:
     page_ids: List[str]
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _tx_log_dir() -> Path:
     # Store TX logs under ceefax/logs_tx/
     from .paths import ceefax_root
 
     return ceefax_root() / "logs_tx"
+
+
+def _tx_log_path_for_wav(wav_path: str | Path) -> Path:
+    p = Path(wav_path)
+    out = _tx_log_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    return out / f"{p.stem}.json"
 
 
 def _load_radio_config() -> dict:
@@ -56,12 +67,13 @@ def _load_radio_config() -> dict:
 
 def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
     """
-    Write a transmitter-side report that describes what was sent.
+    Write a transmitter-side report for a prepared WAV.
+
+    Does not upload yet — call finalize_tx_report() after playback so the map
+    "last seen" time reflects end of TX, not WAV build time.
     """
     p = Path(wav_path)
-    out = _tx_log_dir()
-    out.mkdir(parents=True, exist_ok=True)
-    log_path = out / f"{p.stem}.json"
+    log_path = _tx_log_path_for_wav(p)
 
     rcfg = _load_radio_config()
     freq = (rcfg.get("frequency") or "").strip() if isinstance(rcfg, dict) else ""
@@ -77,7 +89,7 @@ def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
         "frequency": freq or None,
         "wav_name": p.name,
         "wav_path": str(p),
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": _utc_now_iso(),
         "loops": plan.loops,
         "page_ids": plan.page_ids,
         "page_count": len(plan.page_ids),
@@ -85,6 +97,27 @@ def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
         "ui_frames_total": len(plan.ui_frames),
     }
     log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return str(log_path)
+
+
+def finalize_tx_report(wav_path: str | Path | None) -> str | None:
+    """
+    Stamp completed_at (UTC) on the TX log and upload it to the hub.
+    """
+    if not wav_path:
+        return None
+    log_path = _tx_log_path_for_wav(wav_path)
+    if not log_path.is_file():
+        return None
+    try:
+        data = json.loads(log_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        data["completed_at"] = _utc_now_iso()
+        log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        return None
+
     try:
         from ceefaxstation.uploader import auto_upload_log
 

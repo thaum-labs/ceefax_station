@@ -1,7 +1,20 @@
 {
-  "current_version": "0.1.1-alpha",
+  "current_version": "0.1.2-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-07-29",
+      "version": "0.1.2-alpha",
+      "changes": [
+        "Windows installer now bundles Dire Wolf 1.8.1 under ceefax/tools/direwolf for live RX",
+        "Viewer finds the bundled Dire Wolf from the install directory (Program Files) as well as LocalAppData",
+        "TX logs upload after transmission finishes so map last seen matches end of TX (UTC)",
+        "Map popup shows last seen in the browser local timezone",
+        "GUI TX mode stays armed and retransmits automatically each hour until ESC",
+        "Automatic upload of TX/RX logs to the public map after each session",
+        "Writable LocalAppData runtime paths for Program Files installs"
+      ]
+    },
     {
       "date": "2026-07-28",
       "version": "0.1.1-alpha",

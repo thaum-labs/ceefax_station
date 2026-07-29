@@ -203,15 +203,31 @@ def _compiled_bytes_to_matrix_and_page(page: str, subpage: int, compiled: bytes)
 def _find_direwolf_exe(explicit: str | None = None) -> str:
     """
     Find bundled direwolf.exe or fall back to PATH.
+
+    Prefer the writable user data tree, then the install directory (Program Files
+    for the Windows installer), then PATH.
     """
     if explicit:
         return explicit
 
-    # Prefer bundled path: ceefax/tools/direwolf/direwolf.exe
-    ceefax_root = Path(__file__).resolve().parent.parent
-    candidate = ceefax_root / "tools" / "direwolf" / "direwolf.exe"
-    if candidate.exists():
-        return str(candidate)
+    try:
+        from .paths import ceefax_root, install_root
+
+        candidates = [
+            ceefax_root() / "tools" / "direwolf" / "direwolf.exe",
+            install_root() / "ceefax" / "tools" / "direwolf" / "direwolf.exe",
+        ]
+    except Exception:  # noqa: BLE001
+        candidates = [
+            Path(__file__).resolve().parent.parent / "tools" / "direwolf" / "direwolf.exe",
+        ]
+
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return str(candidate)
+        except Exception:  # noqa: BLE001
+            continue
 
     return "direwolf.exe"
 
@@ -1692,6 +1708,12 @@ def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
             )
             stdscr.refresh()
             time.sleep(0.3)
+    try:
+        from ceefax.src.ax25_audio import finalize_tx_report
+
+        finalize_tx_report(wav)
+    except Exception:  # noqa: BLE001
+        pass
     return True
 
 
