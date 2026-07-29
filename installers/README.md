@@ -33,39 +33,31 @@ When you want to create a new installer for a new version:
    Remove-Item "installers\CeefaxStation-Setup-OLD_VERSION.exe"
    ```
 
-5. **Commit and push** (only when you intend to publish):
+5. **Commit and push** (publishes the release automatically):
    ```bash
-   git add installers/
-   git commit -m "Add installer for version X.X.X"
+   git add installers/ VERSION CHANGELOG.json
+   git commit -m "Ship installer for version X.X.X"
    git push
    ```
 
-6. **Publish a GitHub Release** (required for the website Download button):
+   Pushing a new `installers/CeefaxStation-Setup-*.exe` (or `VERSION` / changelog) to `main`
+   runs **Publish Windows installer release**, which creates/updates the GitHub Release with:
 
-   The site path `/download` redirects to:
+   - `CeefaxStation-Setup-X.Y.Z.exe`
+   - `CeefaxStation-Setup.exe` (stable alias)
 
-   `https://github.com/thaum-labs/ceefax_station/releases/latest/download/CeefaxStation-Setup.exe`
+   That alias is what `https://ceefaxstation.com/download` redirects to
+   (`…/releases/latest/download/CeefaxStation-Setup.exe`).
 
-   So each release must include a **stable-named** asset as well as the versioned one:
-
-   ```powershell
-   $ver = "0.1.2"   # match the Setup filename / tag without -alpha
-   $setup = "installers\CeefaxStation-Setup-$ver.exe"
-   Copy-Item $setup "$env:TEMP\CeefaxStation-Setup.exe" -Force
-
-   gh release create "v$ver" $setup "$env:TEMP\CeefaxStation-Setup.exe" `
-     --title "$ver-alpha" `
-     --notes "Windows installer for Ceefax Station $ver-alpha." `
-     --target main
-   ```
-
-   If the release already exists, upload/replace the alias:
+   Manual / local publish (same script CI uses):
 
    ```powershell
-   gh release upload "v$ver" "$env:TEMP\CeefaxStation-Setup.exe" --clobber
+   python scripts/publish_github_release.py
+   # or
+   python scripts/publish_github_release.py --version 0.1.2-alpha
    ```
 
-   Without `CeefaxStation-Setup.exe` on the **latest** release, **Download app** on ceefaxstation.com will 404.
+   Or run the workflow from GitHub Actions → **Publish Windows installer release** → Run workflow.
 
 ## Notes
 
@@ -74,3 +66,4 @@ When you want to create a new installer for a new version:
 - Installers may lag behind the latest code on GitHub
 - Users can always use the manual installation method for the latest code
 - Website download always uses the latest GitHub release’s `CeefaxStation-Setup.exe` alias (not a file served from the droplet)
+- Do **not** skip the GitHub Release step: without the stable alias on the latest release, **Download app** on ceefaxstation.com will 404

@@ -1,0 +1,52 @@
+name: Publish Windows installer release
+
+# Keeps ceefaxstation.com/download working by publishing:
+#   - CeefaxStation-Setup-X.Y.Z.exe
+#   - CeefaxStation-Setup.exe  (stable alias on the latest release)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "installers/CeefaxStation-Setup-*.exe"
+      - "VERSION"
+      - "CHANGELOG.json"
+      - "scripts/publish_github_release.py"
+      - ".github/workflows/release-installer.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional VERSION label override (e.g. 0.1.2-alpha). Default: VERSION file."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-installer-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION_ARG=""
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION_ARG="--version ${{ github.event.inputs.version }}"
+          fi
+          python scripts/publish_github_release.py ${VERSION_ARG}
