@@ -17,7 +17,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 BRANDING = ROOT / "branding"
 LOGO = BRANDING / "logo.png"
-ICO = BRANDING / "ceefaxstation.ico"
+FAVICON_ICO = BRANDING / "favicon.ico"
 
 
 def knockout_black(im: Image.Image, threshold: int = 18) -> Image.Image:
@@ -46,12 +46,12 @@ def main() -> None:
         transparent.save(dest, format="PNG", optimize=True)
         print(f"Wrote {dest.relative_to(ROOT)}")
 
-    if ICO.exists():
+    if FAVICON_ICO.exists():
         fav = ROOT / "ceefaxweb" / "static" / "favicon.ico"
-        fav.write_bytes(ICO.read_bytes())
+        fav.write_bytes(FAVICON_ICO.read_bytes())
         print(f"Wrote {fav.relative_to(ROOT)}")
     else:
-        print(f"WARNING: missing {ICO.relative_to(ROOT)}; favicon not updated")
+        print(f"WARNING: missing {FAVICON_ICO.relative_to(ROOT)}; favicon not updated")
 
 
 if __name__ == "__main__":

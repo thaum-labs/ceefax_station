@@ -6,6 +6,7 @@ Master logo assets for Ceefax Station.
 |------|-----|
 | `logo.png` | Master artwork (opaque black background) |
 | `logo-transparent.png` | Optional derived copy with black knocked out |
+| `favicon-bars.png` / `favicon.ico` | Website favicon (color bars only) |
 | `ceefaxstation.ico` | Windows EXE icon, installer wizard icon, Start Menu / desktop shortcuts |
 
 Derived UI copies (transparent bg so they blend on `#0b0b0b` / GitHub):
