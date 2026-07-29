@@ -26,7 +26,7 @@ async def main() -> None:
         )
         await page.goto(URL, wait_until="networkidle", timeout=60000)
         await page.wait_for_timeout(2500)
-        await page.screenshot(path=str(out_dir / "desktop-main.png"), full_page=False)
+        await page.screenshot(path=str(out_dir / "desktop-map.png"), full_page=False)
 
         # Desktop with detail panel preference (same viewport; capture after a short wait)
         await page.screenshot(path=str(out_dir / "desktop-with-detail.png"), full_page=False)

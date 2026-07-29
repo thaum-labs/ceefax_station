@@ -51,7 +51,7 @@ With Ceefax Station you can:
   </tr>
 </table>
 
-![Station map](screenshots/desktop-main.png)
+![Station map](screenshots/desktop-map.png)
 
 ---
 
