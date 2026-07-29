@@ -40,9 +40,37 @@ When you want to create a new installer for a new version:
    git push
    ```
 
+6. **Publish a GitHub Release** (required for the website Download button):
+
+   The site path `/download` redirects to:
+
+   `https://github.com/thaum-labs/ceefax_station/releases/latest/download/CeefaxStation-Setup.exe`
+
+   So each release must include a **stable-named** asset as well as the versioned one:
+
+   ```powershell
+   $ver = "0.1.2"   # match the Setup filename / tag without -alpha
+   $setup = "installers\CeefaxStation-Setup-$ver.exe"
+   Copy-Item $setup "$env:TEMP\CeefaxStation-Setup.exe" -Force
+
+   gh release create "v$ver" $setup "$env:TEMP\CeefaxStation-Setup.exe" `
+     --title "$ver-alpha" `
+     --notes "Windows installer for Ceefax Station $ver-alpha." `
+     --target main
+   ```
+
+   If the release already exists, upload/replace the alias:
+
+   ```powershell
+   gh release upload "v$ver" "$env:TEMP\CeefaxStation-Setup.exe" --clobber
+   ```
+
+   Without `CeefaxStation-Setup.exe` on the **latest** release, **Download app** on ceefaxstation.com will 404.
+
 ## Notes
 
 - Installers are built using PyInstaller and Inno Setup
 - The installer bundles the app EXE (Python runtime) plus Dire Wolf for live RX
 - Installers may lag behind the latest code on GitHub
 - Users can always use the manual installation method for the latest code
+- Website download always uses the latest GitHub release’s `CeefaxStation-Setup.exe` alias (not a file served from the droplet)

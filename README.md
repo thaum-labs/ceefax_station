@@ -154,6 +154,8 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 There is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.2.exe`).
 
+The website **Download app** button (`https://ceefaxstation.com/download`) always redirects to the GitHub **latest** release asset named `CeefaxStation-Setup.exe`. When publishing a new build, create/update a GitHub release and upload **both** the versioned file and that stable alias — see [`installers/README.md`](installers/README.md).
+
 It is the easiest install (bundles the app **and Dire Wolf** for live RX), but it **may be behind** the latest GitHub code. Prefer the Quick start above if you want the newest features.
 
 ---
