@@ -381,7 +381,7 @@ def _draw_footer(
     _init_ui_colors()
 
     if mode == "viewer":
-        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  S: SETUP  F5: RELOAD  ESC: EXIT"
+        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  S: SETUP  F5: REFRESH  ESC: EXIT"
     elif mode == "rx":
         controls = "LEFT/RIGHT: RECEIVED PAGES  3 DIGITS: PAGE  ESC: RETURN"
     else:
@@ -1643,23 +1643,28 @@ def _tx_refresh_pages(
     page_dir: str,
     stage_label: str = "1 of 3",
 ) -> bool:
-    """Refresh hub/local pages. Returns False if cancelled with ESC."""
+    """
+    Check hub for a newer pack (apply + rebuild when newer), refresh local pages.
+    Returns False if cancelled with ESC.
+    """
     from ceefax.src.hub_pages import refresh_station_pages
 
     _draw_tx_screen(
         stdscr,
-        "Refreshing page feeds",
+        "Checking hub pack / refreshing pages",
         fields=[("Stage", stage_label), ("Callsign", src), ("Pages loaded", str(len(pages)))],
-        footer_status="TRANSMIT MODE  ESC: CANCEL",
+        message="Downloads only when the website pack is newer.",
+        footer_status="REFRESH  ESC: CANCEL",
     )
     stdscr.refresh()
 
     refresh_done = threading.Event()
     refresh_err: dict = {"err": None}
+    refresh_result: dict = {"result": None}
 
     def _refresh_worker() -> None:
         try:
-            refresh_station_pages(
+            refresh_result["result"] = refresh_station_pages(
                 callsign=src,
                 frequency="",
                 auto_location=True,
@@ -1678,15 +1683,16 @@ def _tx_refresh_pages(
                 stdscr,
                 "Refresh cancelled (finishing in background)...",
                 message="Returning to viewer.",
-                footer_status="TRANSMIT MODE  ESC: CANCEL",
+                footer_status="REFRESH  ESC: CANCEL",
             )
             time.sleep(1.0)
             return False
         _draw_tx_screen(
             stdscr,
-            "Refreshing page feeds",
+            "Checking hub pack / refreshing pages",
             fields=[("Stage", stage_label), ("Callsign", src), ("Pages loaded", str(len(pages)))],
-            footer_status="TRANSMIT MODE  ESC: CANCEL",
+            message="Downloads only when the website pack is newer.",
+            footer_status="REFRESH  ESC: CANCEL",
         )
         stdscr.refresh()
         time.sleep(0.1)
@@ -2148,9 +2154,9 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
                 mode="--",
                 title="Page viewer",
                 status="No pages loaded",
-                fields=[("Action", "Press F5 to reload")],
-                message="Generate or receive pages, then reload the viewer.",
-                footer_status="NO PAGES  F5: RELOAD  ESC: EXIT",
+                fields=[("Action", "Press F5 to refresh")],
+                message="Generate or receive pages, then refresh the viewer.",
+                footer_status="NO PAGES  F5: REFRESH  ESC: EXIT",
                 footer_mode="viewer",
             )
         else:
@@ -2182,14 +2188,34 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
             if pages:
                 idx = (idx - 1) % len(pages)
         elif ch == curses.KEY_F5:
-            # Reload pages from disk (F5)
+            # Check hub for a newer pack, rebuild pages, then reload viewer.
             cfg = load_config()
+            rcfg = _load_radio_config()
+            src = ""
+            if isinstance(rcfg, dict):
+                src = str(rcfg.get("callsign") or "").strip().upper()
+            try:
+                ok = _tx_refresh_pages(
+                    stdscr,
+                    pages,
+                    src=src or "N0CALL",
+                    page_dir=cfg.general.page_dir,
+                    stage_label="F5 refresh",
+                )
+            except Exception as exc:  # noqa: BLE001
+                notice = f"REFRESH FAILED: {exc}"
+                continue
+            if not ok:
+                notice = "REFRESH CANCELLED"
+                continue
             new_pages = load_all_pages(cfg.general.page_dir)
             if new_pages:
                 pages[:] = new_pages
                 matrices[:] = compile_all()
-                idx = 0
-                notice = f"RELOADED {len(pages)} PAGES"
+                idx = min(idx, len(pages) - 1)
+                notice = f"REFRESHED {len(pages)} PAGES"
+            else:
+                notice = "REFRESHED (NO PAGES FOUND)"
         elif ch in (ord("r"), ord("R")):
             # Enter RX mode
             _rx_mode_loop(stdscr, pages)

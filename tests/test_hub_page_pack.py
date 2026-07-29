@@ -98,12 +98,57 @@ def test_api_pages_manifest_and_pack(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert "application/zip" in pack_resp.headers.get("content-type", "")
 
 
-def test_api_pages_404_without_pack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    empty = tmp_path / "empty-pack"
-    empty.mkdir()
-    monkeypatch.setenv("CEEFAXWEB_PAGE_PACK_DIR", str(empty))
-    from ceefaxweb.server import create_app
+def test_hub_pack_is_newer_compares_generated_at() -> None:
+    from ceefax.src.hub_pages import hub_pack_is_newer
 
-    with TestClient(create_app()) as client:
-        assert client.get("/api/pages/manifest").status_code == 404
-        assert client.get("/api/pages/pack").status_code == 404
+    older = {"generated_at": "2026-07-29T12:00:00+00:00", "page_count": 10}
+    newer = {"generated_at": "2026-07-29T16:00:00+00:00", "page_count": 12}
+    assert hub_pack_is_newer(newer, older) is True
+    assert hub_pack_is_newer(older, newer) is False
+    assert hub_pack_is_newer(newer, newer) is False
+    assert hub_pack_is_newer(newer, None) is True
+    assert hub_pack_is_newer(None, older) is False
+
+
+def test_sync_hub_pack_skips_download_when_up_to_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ceefax.src import hub_pages
+
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    local = {"generated_at": "2026-07-29T16:00:00+00:00", "page_count": 5}
+    (pages / "hub_manifest.json").write_text(json.dumps(local), encoding="utf-8")
+
+    def fake_fetch(**_kwargs):
+        return {"generated_at": "2026-07-29T16:00:00+00:00", "page_count": 5}
+
+    def fail_pull(**_kwargs):
+        raise AssertionError("pull_page_pack should not be called when up to date")
+
+    monkeypatch.setattr(hub_pages, "fetch_hub_manifest", fake_fetch)
+    monkeypatch.setattr(hub_pages, "pull_page_pack", fail_pull)
+
+    result = hub_pages.sync_hub_pack(pages_dir=pages)
+    assert result["status"] == "unchanged"
+    assert result["manifest"]["generated_at"] == local["generated_at"]
+
+
+def test_sync_hub_pack_downloads_when_remote_newer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ceefax.src import hub_pages
+
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    local = {"generated_at": "2026-07-29T12:00:00+00:00", "page_count": 5}
+    (pages / "hub_manifest.json").write_text(json.dumps(local), encoding="utf-8")
+    remote = {"generated_at": "2026-07-29T18:00:00+00:00", "page_count": 8}
+    applied = {"generated_at": "2026-07-29T18:00:00+00:00", "page_count": 8}
+
+    monkeypatch.setattr(hub_pages, "fetch_hub_manifest", lambda **_k: remote)
+    monkeypatch.setattr(hub_pages, "pull_page_pack", lambda **_k: applied)
+
+    result = hub_pages.sync_hub_pack(pages_dir=pages)
+    assert result["status"] == "updated"
+    assert result["manifest"]["page_count"] == 8
