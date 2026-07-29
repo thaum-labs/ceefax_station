@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .page_pack import format_hub_pack_stamp, load_station_hub_manifest
 from .paths import pages_dir, repo_root
 from .providers import atomic_write_json
 
@@ -77,6 +78,7 @@ def build_about_page() -> List[str]:
     platform_name = detect_platform()
     python_version = get_python_version()
     version = get_app_version()
+    pack_stamp = format_hub_pack_stamp(load_station_hub_manifest())
     sep = "-" * PAGE_WIDTH
 
     lines = [
@@ -94,14 +96,14 @@ def build_about_page() -> List[str]:
         "PAGES FROM",
         sep,
         "Hub pack: ceefaxstation.com",
-        "Local: weather 102, callsign 700",
+        f"Pack time: {pack_stamp}",
+        "Local: 000, 102, 700, 900",
         "",
         "TRY",
         sep,
         "000 Start  100 Index  101 Weather",
         "200 News   300 Sport  900 About",
         "n/p browse   t TX   r RX   Esc quit",
-        "",
         "Created by M7TJF",
     ]
     return [_pad(line) for line in lines[:PAGE_HEIGHT]]

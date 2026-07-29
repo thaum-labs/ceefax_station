@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .page_pack import format_hub_pack_stamp, load_station_hub_manifest
+from .paths import pages_dir as resolve_pages_dir
 from .providers import atomic_write_json
 
 
@@ -73,6 +75,7 @@ def build_system_status_page(
     last_update_hhmmss: str,
     pages_loaded: int,
     os_uptime_s: Optional[int],
+    hub_pack_stamp: str | None = None,
 ) -> List[str]:
     failing = [k for k, (ok, _) in feed_status.items() if not ok]
     cached = [k for k, (ok, detail) in feed_status.items() if ok and detail == "STALE"]
@@ -82,6 +85,9 @@ def build_system_status_page(
         summary = f"Operating with cached data: {len(cached)}"
     else:
         summary = "All systems operational"
+
+    if hub_pack_stamp is None:
+        hub_pack_stamp = format_hub_pack_stamp(load_station_hub_manifest())
 
     lines: List[str] = [
         _pad("SYSTEM STATUS"),
@@ -128,6 +134,7 @@ def build_system_status_page(
     lines.append(_pad(f"OS Uptime:         {_fmt_duration(os_uptime_s)}"))
     lines.append(_pad(f"Pages Loaded:      {pages_loaded}"))
     lines.append(_pad(f"Last Update:       {last_update_hhmmss}"))
+    lines.append(_pad(f"Hub Pack:          {hub_pack_stamp}"))
     return lines[:PAGE_HEIGHT]
 
 
@@ -135,8 +142,7 @@ def write_system_status_page(
     feed_status: Dict[str, Tuple[bool, str]],
     last_update_iso: str,
 ) -> None:
-    root = Path(__file__).resolve().parent.parent
-    pages_dir = root / "pages"
+    pages_dir = resolve_pages_dir()
     page_file = pages_dir / "901.json"
 
     # HH:MM:SS in local-ish display (use ISO for parsing)

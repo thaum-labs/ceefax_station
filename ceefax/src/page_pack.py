@@ -134,6 +134,48 @@ def load_manifest(pack_dir: Path) -> dict[str, Any]:
     return data
 
 
+def load_station_hub_manifest(pages: Path | None = None) -> dict[str, Any] | None:
+    """Return the last pulled hub pack manifest from the station pages dir, if any."""
+    if pages is None:
+        from .paths import pages_dir as resolve_pages_dir
+
+        pages = resolve_pages_dir()
+    path = pages / "hub_manifest.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def format_hub_pack_stamp(manifest: dict[str, Any] | None, *, with_count: bool = True) -> str:
+    """Human-readable hub pack identity, e.g. '2026-07-29 15:54 UTC (30 pages)'."""
+    if not manifest:
+        return "not pulled yet"
+    raw = str(manifest.get("generated_at") or "").strip()
+    stamp = "unknown time"
+    if raw:
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            stamp = parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        except ValueError:
+            stamp = raw[:19]
+    if not with_count:
+        return stamp
+    count = manifest.get("page_count")
+    try:
+        n = int(count) if count is not None else 0
+    except (TypeError, ValueError):
+        n = 0
+    if n > 0:
+        return f"{stamp} ({n} pages)"
+    return stamp
+
+
 def apply_pack_bytes(*, pack_bytes: bytes, pages_dir: Path) -> dict[str, Any]:
     """
     Extract a hub zip into pages_dir without touching local-only pages.

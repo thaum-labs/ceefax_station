@@ -131,6 +131,7 @@ def test_system_status_displays_cached_provider_state() -> None:
     statuses = {label: (True, "OK") for label in labels}
     statuses["Weather (Open-Meteo)"] = (True, "STALE")
 
-    lines = build_system_status_page(statuses, "20:00:00", 30, 60)
+    lines = build_system_status_page(statuses, "20:00:00", 30, 60, hub_pack_stamp="2026-07-29 15:54 UTC (30 pages)")
     assert any("Weather (Open-Meteo)" in line and "CACHED" in line for line in lines)
     assert any("Operating with cached data" in line for line in lines)
+    assert any("Hub Pack:" in line and "2026-07-29 15:54 UTC" in line for line in lines)
