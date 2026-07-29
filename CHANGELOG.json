@@ -6,6 +6,10 @@
       "date": "2026-07-29",
       "version": "0.1.2-alpha",
       "changes": [
+        "Website Download app always gets the latest Windows installer; pushing a new Setup exe to GitHub publishes the release automatically",
+        "Stations only download a new hub page pack when the website version is newer, then rebuild pages (startup and F5)",
+        "About page shows the hub pack time the station is using",
+        "New Ceefax Station logo on the website, README, favicon, and Windows app/installer icons",
         "TX mode shows estimated per-page progress while each carousel loop plays",
         "Bare EXE / Start Menu launch defaults to the viewer (no missing cmd error)",
         "First-run station setup runs in the viewer UI when console prompts are unavailable",
