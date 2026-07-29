@@ -1377,10 +1377,24 @@ def _station_setup_incomplete(radio: dict | None = None) -> bool:
     return _needs_station_setup(callsign) or (not frequency) or (not grid)
 
 
+def _frequency_choices() -> list[str]:
+    """Preset packet/data frequencies from the station band list."""
+    from .update_all import AMATEUR_BANDS, AMATEUR_BAND_RECOMMENDED_FREQ
+
+    choices: list[str] = []
+    for group in ("HF", "VHF", "UHF"):
+        for band in AMATEUR_BANDS.get(group, []):
+            label = AMATEUR_BAND_RECOMMENDED_FREQ.get(band)
+            if label:
+                choices.append(str(label))
+    return choices
+
+
 def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False) -> bool:
     """
-    Station setup in the curses UI (callsign, frequency, grid).
+    Station setup in the curses UI (callsign, selectable frequency, grid).
 
+    Frequency is chosen from the recommended band list (LEFT/RIGHT), not typed.
     Shows automatically when incomplete, or when force=True (viewer S key).
     Returns True if settings were saved.
     """
@@ -1396,21 +1410,46 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
         callsign = ""
     frequency = str(radio.get("frequency") or "").strip()
     grid = str(radio.get("grid") or "").strip().upper()
+
+    freq_choices = _frequency_choices()
+    if not freq_choices:
+        freq_choices = ["144.800 MHz (2m)"]
+    try:
+        freq_idx = freq_choices.index(frequency)
+    except ValueError:
+        # Prefer 2m if current value isn't in the list.
+        freq_idx = next(
+            (i for i, v in enumerate(freq_choices) if "(2m)" in v),
+            0,
+        )
+        if frequency and frequency not in freq_choices:
+            # Keep unknown saved value visible until user changes selection.
+            freq_choices = [frequency, *freq_choices]
+            freq_idx = 0
+    frequency = freq_choices[freq_idx]
+
     field = 0  # 0=callsign, 1=frequency, 2=grid
-    labels = ("Callsign", "Frequency", "Grid")
     stdscr.nodelay(False)
     stdscr.keypad(True)
 
     while True:
-        values = [callsign, frequency, grid]
-        fields: list[tuple[str, str]] = []
-        for i, label in enumerate(labels):
-            raw = values[i]
-            if i == field:
-                disp = (raw + "_") if raw else "_"
-            else:
-                disp = raw or ("(required)" if i == 0 else "(optional)")
-            fields.append((label, disp))
+        freq_disp = frequency
+        if field == 1:
+            freq_disp = f"< {frequency} >  ({freq_idx + 1}/{len(freq_choices)})"
+        fields = [
+            ("Callsign", (callsign + "_") if field == 0 else (callsign or "(required)")),
+            ("Frequency", freq_disp if field == 1 else (frequency or "(required)")),
+            ("Grid", (grid + "_") if field == 2 else (grid or "(optional)")),
+        ]
+        if field == 1:
+            msg = "LEFT/RIGHT selects a recommended band frequency."
+            footer = "LEFT/RIGHT: BAND  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
+        elif field == 0:
+            msg = "Type your callsign. TAB moves to frequency list."
+            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
+        else:
+            msg = "Maidenhead grid e.g. IO91WM (optional but needed for the map)."
+            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
 
         _draw_mode_screen(
             stdscr,
@@ -1418,41 +1457,59 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
             title="Station setup",
             status="Configure callsign, frequency, and grid",
             fields=fields,
-            message="Examples: M7TJF · 144.800 MHz (2m) · IO91WM",
-            footer_status="TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL",
+            message=msg,
+            footer_status=footer,
         )
         ch = stdscr.getch()
         if ch == 27:
             return False
-        if ch in (9, curses.KEY_DOWN):
+        if ch in (9,):  # TAB
             field = (field + 1) % 3
             continue
-        if ch in (curses.KEY_BTAB, curses.KEY_UP):
+        if ch == curses.KEY_BTAB:
             field = (field - 1) % 3
             continue
         if ch in (10, 13, curses.KEY_ENTER):
-            if callsign.strip():
+            if callsign.strip() and frequency.strip():
                 persist_radio_config(
                     callsign.strip().upper(),
-                    frequency=(frequency.strip() or None),
+                    frequency=frequency.strip(),
                     grid=(grid.strip().upper() or None),
                 )
                 return True
-            field = 0
+            if not callsign.strip():
+                field = 0
+            elif not frequency.strip():
+                field = 1
+            continue
+
+        if field == 1:
+            if ch in (curses.KEY_LEFT, curses.KEY_UP, ord("-")):
+                freq_idx = (freq_idx - 1) % len(freq_choices)
+                frequency = freq_choices[freq_idx]
+            elif ch in (curses.KEY_RIGHT, curses.KEY_DOWN, ord("+"), ord("=")):
+                freq_idx = (freq_idx + 1) % len(freq_choices)
+                frequency = freq_choices[freq_idx]
             continue
 
         if field == 0:
+            if ch in (curses.KEY_DOWN,):
+                field = 1
+                continue
             callsign, _submit, cancel = _edit_text_value(
                 callsign, ch, max_length=12, allow="upper"
             )
-        elif field == 1:
-            frequency, _submit, cancel = _edit_text_value(
-                frequency, ch, max_length=28, allow="freq"
-            )
+            if cancel:
+                return False
         else:
+            if ch in (curses.KEY_UP,):
+                field = 1
+                continue
+            if ch in (curses.KEY_DOWN,):
+                continue
             grid, _submit, cancel = _edit_text_value(grid, ch, max_length=8, allow="upper")
-        if cancel:
-            return False
+            if cancel:
+                return False
 
 
 def _confirm_tx(

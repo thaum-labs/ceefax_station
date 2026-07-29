@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Changelog - Ceefax Station</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/static/logo.png" sizes="1024x1024" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <style>
       * { box-sizing: border-box; }
       html, body { 
@@ -25,16 +28,13 @@
         border-bottom: 2px solid #2a2a2a;
       }
       .logo {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        white-space: pre;
-        line-height: 1.05;
-        color: #ffd34d;
+        display: block;
+        width: min(140px, 100%);
+        height: auto;
         margin: 0 0 16px 0;
-        padding: 12px 16px;
         border: 1px solid #2a2a2a;
         border-radius: 6px;
-        background: #0f0f0f;
-        width: fit-content;
+        background: #000;
       }
       h1 {
         margin: 0 0 8px 0;
@@ -133,9 +133,7 @@
     <div class="container">
       <div class="header">
         <div style="display: flex; justify-content: center; margin-bottom: 16px;">
-          <pre class="logo" style="margin: 0; font-size: 14px; line-height: 1.2;">░█▀▀░█░█░█▀█░█▀█░█▀▀░█▀▀░█░░░█▀█░█▀▀
-░█░░░█▀█░█▀█░█░█░█░█░█▀▀░█░░░█░█░█░█
-░▀▀▀░▀░▀░▀░▀░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀</pre>
+          <img class="logo" src="/static/logo.png" width="140" height="140" alt="Ceefax Station" style="margin: 0;" />
         </div>
         <div class="version-info">
           Current version: <span id="currentVersion">Loading...</span>

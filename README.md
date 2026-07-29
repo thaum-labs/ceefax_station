@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="screenshots/readme-logo.png" alt="Ceefax Station" width="260" />
+  <img src="screenshots/readme-logo.png" alt="Ceefax Station" width="200" />
 </p>
 
 # Ceefax Station

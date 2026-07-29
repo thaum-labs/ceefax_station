@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Ceefax Station</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/static/logo.png" sizes="1024x1024" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -153,23 +156,20 @@
         }
       }
 
-      /* Sidebar logo (matches page 000 text-art) */
+      /* Sidebar logo */
       .logo-wrap {
         display: flex;
         justify-content: center;
         margin: 0 0 8px 0;
       }
       .logo {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        white-space: pre;
-        line-height: 1.05;
-        color: #ffd34d;
+        display: block;
+        width: min(220px, 100%);
+        height: auto;
         margin: 0;
-        padding: 6px 8px;
         border: 1px solid #2a2a2a;
         border-radius: 6px;
-        background: #0f0f0f;
-        width: fit-content;
+        background: #000;
       }
 
       /* Improve click affordance on map paths */
@@ -620,12 +620,7 @@
           <button type="button" class="mobile-side-close" id="sidebarClose">back to map</button>
         </div>
         <div class="logo-wrap">
-          <pre class="logo" role="img" aria-label="Ceefax Station">  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
-  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
-  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
-░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
-░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀</pre>
+          <img class="logo" src="/static/logo.png" width="220" height="220" alt="Ceefax Station" />
         </div>
         <p class="alpha-note">Alpha — features may change</p>
         <h1 class="visually-hidden">Ceefax Station tracker</h1>

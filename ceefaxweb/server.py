@@ -116,6 +116,13 @@ def create_app() -> FastAPI:
         html = about_path.read_text(encoding="utf-8")
         return HTMLResponse(content=html, headers=_NO_CACHE_HEADERS)
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        ico = static_dir / "favicon.ico"
+        if not ico.exists():
+            raise HTTPException(status_code=404, detail="Favicon not found")
+        return FileResponse(ico, media_type="image/x-icon")
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/api/map")

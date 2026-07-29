@@ -1,79 +1,45 @@
 #!/usr/bin/env python3
 """
-Generate a README logo image that renders consistently on GitHub.
+Refresh README / website logo assets from the master branding image.
 
-Creates:
-  - screenshots/readme-logo.png (transparent background, yellow text)
+Copies:
+  - branding/logo.png → screenshots/readme-logo.png
+  - branding/logo.png → ceefaxweb/static/logo.png
+  - branding/ceefaxstation.ico → ceefaxweb/static/favicon.ico
 """
 
 from __future__ import annotations
 
-import asyncio
+import shutil
 from pathlib import Path
 
 
-LOGO_TEXT = """  ░█▀▀░█▀▀░█▀▀░█▀▀░█▀█░█░█░░
-  ░█░░░█▀▀░█▀▀░█▀▀░█▀█░▄▀▄░░
-  ░▀▀▀░▀▀▀░▀▀▀░▀░░░▀░▀░▀░▀░░
-░█▀▀░▀█▀░█▀█░▀█▀░▀█▀░█▀█░█▀█
-░▀▀█░░█░░█▀█░░█░░░█░░█░█░█░█
-░▀▀▀░░▀░░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀"""
+ROOT = Path(__file__).resolve().parents[1]
+BRANDING = ROOT / "branding"
+LOGO = BRANDING / "logo.png"
+ICO = BRANDING / "ceefaxstation.ico"
 
 
-HTML = f"""<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      html, body {{
-        margin: 0;
-        background: transparent;
-      }}
-      body {{
-        display: inline-block;
-        padding: 8px 12px;
-      }}
-      pre {{
-        margin: 0;
-        color: #ffd34d;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        font-size: 20px;
-        line-height: 1.05;
-        white-space: pre;
-        text-shadow: 0 0 8px rgba(255, 211, 77, 0.12);
-      }}
-    </style>
-  </head>
-  <body>
-    <pre id="logo">{LOGO_TEXT}</pre>
-  </body>
-</html>
-"""
+def main() -> None:
+    if not LOGO.exists():
+        raise SystemExit(f"Missing master logo: {LOGO}")
 
+    targets = [
+        ROOT / "screenshots" / "readme-logo.png",
+        ROOT / "ceefaxweb" / "static" / "logo.png",
+    ]
+    for dest in targets:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(LOGO, dest)
+        print(f"Wrote {dest.relative_to(ROOT)}")
 
-async def main() -> None:
-    from playwright.async_api import async_playwright
-
-    out_dir = Path("screenshots")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "readme-logo.png"
-
-    tmp = Path("screenshots/.tmp-readme-logo.html")
-    tmp.write_text(HTML, encoding="utf-8")
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(viewport={"width": 1200, "height": 400}, device_scale_factor=2)
-        await page.goto(tmp.resolve().as_uri())
-        el = page.locator("#logo")
-        await el.screenshot(path=str(out_path), omit_background=True)
-        await browser.close()
-
-    tmp.unlink(missing_ok=True)
-    print(f"Wrote {out_path}")
+    if ICO.exists():
+        fav = ROOT / "ceefaxweb" / "static" / "favicon.ico"
+        shutil.copy2(ICO, fav)
+        print(f"Wrote {fav.relative_to(ROOT)}")
+    else:
+        print(f"WARNING: missing {ICO.relative_to(ROOT)}; favicon not updated")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
-
+    main()

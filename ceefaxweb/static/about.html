@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>About - Ceefax Station</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/static/logo.png" sizes="1024x1024" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
     <style>
       * { box-sizing: border-box; }
       html, body { 
@@ -26,16 +29,13 @@
         border-bottom: 2px solid #2a2a2a;
       }
       .logo {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        white-space: pre;
-        line-height: 1.05;
-        color: #ffd34d;
+        display: block;
+        width: min(180px, 100%);
+        height: auto;
         margin: 0 0 16px 0;
-        padding: 12px 16px;
         border: 1px solid #2a2a2a;
         border-radius: 6px;
-        background: #0f0f0f;
-        width: fit-content;
+        background: #000;
       }
       .logo-wrap {
         display: flex;
@@ -173,9 +173,7 @@
     <div class="container">
       <div class="header">
         <div class="logo-wrap">
-          <pre class="logo">░█▀█░█▀▄░█▀█░█░█░▀█▀
-░█▀█░█▀▄░█░█░█░█░░█░
-░▀░▀░▀▀░░▀▀▀░▀▀▀░░▀</pre>
+          <img class="logo" src="/static/logo.png" width="180" height="180" alt="Ceefax Station" />
         </div>
         <h1>About Ceefax Station</h1>
         <a href="/" class="back-link">← Back to Tracker</a>
