@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
-from .installer_download import latest_installer
 from .page_pack_api import RateLimiter, default_pack_dir, get_pack_manifest, pack_zip_path
 
 
@@ -125,27 +124,17 @@ def create_app() -> FastAPI:
         return FileResponse(ico, media_type="image/x-icon")
 
     @app.get("/download")
-    def download_app() -> FileResponse | RedirectResponse:
-        """
-        Always serve the newest Windows installer from installers/.
-
-        Falls back to the GitHub latest release page if no installer is present
-        on this host (e.g. a thin checkout).
-        """
-        path = latest_installer(_repo_root() / "installers")
-        if path is None or not path.is_file():
-            return RedirectResponse(
-                url="https://github.com/thaum-labs/ceefax_station/releases/latest",
-                status_code=302,
-            )
-        return FileResponse(
-            path=str(path),
-            media_type="application/octet-stream",
-            filename=path.name,
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Content-Disposition": f'attachment; filename="{path.name}"',
-            },
+    def download_app() -> RedirectResponse:
+        """Always redirect to the newest Windows installer on GitHub Releases."""
+        # Use the stable asset name CeefaxStation-Setup.exe on the latest release
+        # (upload that alias whenever a new Setup-x.y.z.exe is published).
+        # Streaming the ~60MB EXE from the droplet 502s under nginx.
+        return RedirectResponse(
+            url=(
+                "https://github.com/thaum-labs/ceefax_station/"
+                "releases/latest/download/CeefaxStation-Setup.exe"
+            ),
+            status_code=302,
         )
 
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
