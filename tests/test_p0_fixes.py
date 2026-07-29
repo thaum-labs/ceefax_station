@@ -139,6 +139,63 @@ def test_ingest_accepts_public_upload_without_token(tmp_path: Path, monkeypatch:
         assert resp2.json()["ok"] is True
 
 
+def test_upload_log_file_posts_once_and_skips_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ceefaxstation import uploader as up
+
+    root = tmp_path
+    (root / "ceefax" / "logs_tx").mkdir(parents=True)
+    (root / "ceefax" / "cache").mkdir(parents=True)
+    log_path = root / "ceefax" / "logs_tx" / "tx.json"
+    log_path.write_text(json.dumps({"schema": 1, "kind": "ceefax_tx_report"}), encoding="utf-8")
+
+    monkeypatch.setattr(up, "_repo_root", lambda: root)
+    posts: list[dict] = []
+
+    class Ok:
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_post(_url: str, **kwargs):
+        posts.append(kwargs.get("json") or {})
+        return Ok()
+
+    monkeypatch.setattr(up.requests, "post", fake_post)
+
+    assert up.upload_log_file(
+        log_path,
+        server_url="https://example.test",
+        uploader_callsign="M7TJF",
+        uploader_grid="IO91WM",
+        wait_stable=False,
+    )
+    assert len(posts) == 1
+    assert posts[0]["uploader"]["callsign"] == "M7TJF"
+
+    assert up.upload_log_file(
+        log_path,
+        server_url="https://example.test",
+        uploader_callsign="M7TJF",
+        uploader_grid="IO91WM",
+        wait_stable=False,
+    )
+    assert len(posts) == 1  # duplicate content skipped
+
+
+def test_auto_upload_log_respects_disable_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ceefaxstation import uploader as up
+
+    called: list[Path] = []
+    monkeypatch.setenv("CEEFAX_AUTO_UPLOAD", "0")
+    monkeypatch.setattr(up, "upload_log_file", lambda path, **_k: called.append(Path(path)) or True)
+
+    up.auto_upload_log(tmp_path / "x.json")
+    assert called == []
+
+
 def test_uploader_scan_continues_after_http_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from ceefaxstation import uploader as up
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import sys
 import time
 import io
+import os
 import contextlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,7 @@ from . import (
     update_other_sports_page,
     update_quote_page,
     update_quiz_page,
+    update_start_page,
     update_travel_page,
     update_tv_guide_page,
     update_uk_news_page,
@@ -51,6 +53,7 @@ from . import (
     update_system_status_page,
 )
 from .providers import clear_provider_activity, provider_activity_snapshot
+from .paths import ceefax_root
 
 
 MAX_RETRIES = 2
@@ -142,7 +145,7 @@ def persist_radio_config(
         import json
         from pathlib import Path
 
-        root = Path(__file__).resolve().parent.parent
+        root = ceefax_root()
         config_file = Path(config_path) if config_path is not None else (root / "radio_config.json")
 
         existing_data: dict = {}
@@ -202,7 +205,7 @@ def auto_detect_location_silent() -> Tuple[str, str]:
                 try:
                     import json
                     from pathlib import Path as PathLib
-                    root = PathLib(__file__).resolve().parent.parent
+                    root = ceefax_root()
                     config_file = root / "radio_config.json"
                     if config_file.exists():
                         config_data = json.loads(config_file.read_text(encoding="utf-8"))
@@ -744,6 +747,20 @@ def update_all() -> None:
     def update_local_weather_with_location():
         update_weather_page.main(user_location=user_loc)
 
+    def _skip_football_data_pages() -> None:
+        # Keep existing hub/local pages on disk when stations have no football-data key.
+        print("Skipped (no FOOTBALL_DATA_API_KEY; using hub/local pages on disk)")
+
+    football_key = (os.environ.get("FOOTBALL_DATA_API_KEY") or "").strip()
+    if football_key:
+        football_tables = update_football_page.main
+        football_scores = update_football_scores_page.main
+        football_fixtures = update_fixtures_page.main
+    else:
+        football_tables = _skip_football_data_pages
+        football_scores = _skip_football_data_pages
+        football_fixtures = _skip_football_data_pages
+
     updates = [
         ("UK Weather (101)", update_uk_weather_page.main),
         ("Local Weather (102)", update_local_weather_with_location),
@@ -751,9 +768,9 @@ def update_all() -> None:
         ("News Headlines (200)", update_news_page.main),
         ("World News (201)", update_world_news_page.main),
         ("UK News (202)", update_uk_news_page.main),
-        ("Sports Headlines (300) & League Tables (302, 303)", update_football_page.main),
-        ("Football Live Scores (301)", update_football_scores_page.main),
-        ("Fixtures & Results (304)", update_fixtures_page.main),
+        ("Sports Headlines (300) & League Tables (302, 303)", football_tables),
+        ("Football Live Scores (301)", football_scores),
+        ("Fixtures & Results (304)", football_fixtures),
         ("Other Sports (305)", update_other_sports_page.main),
         ("Exchange Rates (400)", update_exchange_rates_page.main),
         ("Travel Info (401)", update_travel_page.main),
@@ -767,6 +784,7 @@ def update_all() -> None:
         ("Callsign Info (700)", update_callsign_page.main),
         ("ASCII Art (601)", update_ascii_art_page.main),
         ("Daily Quiz (602)", update_quiz_page.main),
+        ("Start Page (000)", update_start_page.main),
         ("About (900)", update_about_page.main),
     ]
 

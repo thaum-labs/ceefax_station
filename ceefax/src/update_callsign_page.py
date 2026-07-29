@@ -12,6 +12,7 @@ from typing import List, Dict, Optional
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .paths import ceefax_root, pages_dir
 from .providers import ProviderResult, atomic_write_json, resolve_provider
 
 
@@ -23,8 +24,7 @@ def _pad(text: str) -> str:
 def get_callsign_from_config() -> Optional[str]:
     """Get callsign from radio_config.json."""
     try:
-        root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
+        config_file = ceefax_root() / "radio_config.json"
         if config_file.exists():
             config_data = json.loads(config_file.read_text(encoding="utf-8"))
             return config_data.get("callsign")
@@ -36,8 +36,7 @@ def get_callsign_from_config() -> Optional[str]:
 def get_grid_from_config() -> Optional[str]:
     """Get Maidenhead grid square from radio_config.json."""
     try:
-        root = Path(__file__).resolve().parent.parent
-        config_file = root / "radio_config.json"
+        config_file = ceefax_root() / "radio_config.json"
         if config_file.exists():
             config_data = json.loads(config_file.read_text(encoding="utf-8"))
             grid = config_data.get("grid")
@@ -403,9 +402,7 @@ def build_callsign_page(
 
 def main() -> None:
     """Update page 700 with callsign information."""
-    root = Path(__file__).resolve().parent.parent
-    pages_dir = root / "pages"
-    page_file = pages_dir / "700.json"
+    page_file = pages_dir() / "700.json"
     
     # Get callsign from config
     callsign = get_callsign_from_config()

@@ -9,6 +9,7 @@ from typing import Any
 import requests
 
 from .page_pack import apply_pack_bytes
+from .paths import pages_dir as default_pages_dir
 
 
 DEFAULT_HUB_URL = "https://ceefaxstation.com"
@@ -24,10 +25,6 @@ def pages_source(override: str | None = None) -> str:
 
 def hub_base_url(override: str | None = None) -> str:
     return (override or os.environ.get("CEEFAX_PAGES_HUB_URL") or DEFAULT_HUB_URL).strip().rstrip("/")
-
-
-def default_pages_dir() -> Path:
-    return Path(__file__).resolve().parent.parent / "pages"
 
 
 def pull_page_pack(
@@ -60,9 +57,14 @@ def pull_page_pack(
 
 def refresh_local_only_pages(*, user_location: tuple[str, str] | None = None) -> None:
     """Refresh station-specific pages after a hub pull."""
-    from . import update_callsign_page, update_weather_page
+    from . import update_about_page, update_callsign_page, update_start_page, update_weather_page
     from . import update_all as update_all_mod
     from .update_all import auto_detect_location_silent
+
+    try:
+        update_start_page.main()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Start page (000) refresh failed: {exc}")
 
     loc = user_location or getattr(update_all_mod, "_user_location", None)
     if loc is None:
@@ -78,6 +80,16 @@ def refresh_local_only_pages(*, user_location: tuple[str, str] | None = None) ->
     except Exception as exc:  # noqa: BLE001
         print(f"Callsign page (700) refresh failed: {exc}")
 
+    try:
+        update_about_page.main()
+    except Exception as exc:  # noqa: BLE001
+        print(f"About page (900) refresh failed: {exc}")
+
+
+def _needs_station_setup(callsign: str | None) -> bool:
+    value = (callsign or "").strip().upper()
+    return value in {"", "TEST", "N0CALL", "N0CALL-1", "YOUR_CALLSIGN", "YOURCALL"}
+
 
 def refresh_station_pages(
     *,
@@ -92,15 +104,50 @@ def refresh_station_pages(
     """
     Refresh pages according to CEEFAX_PAGES_SOURCE (default: auto).
 
-    auto/hub: pull shared pack from hub, then refresh local-only 102/700
+    auto/hub: pull shared pack from hub, then refresh local-only pages
     local: run full update_all() with local API keys / free sources
     auto falls back to local if hub pull fails
     """
-    from .update_all import prime_user_settings, update_all
+    from .paths import ceefax_root
+    from .update_all import (
+        get_user_callsign_and_frequency,
+        get_user_location,
+        prime_user_settings,
+        update_all,
+    )
+
+    # Prefer an already-saved callsign unless the caller overrode it.
+    saved_callsign = None
+    saved_frequency = None
+    try:
+        import json
+
+        cfg_path = ceefax_root() / "radio_config.json"
+        if cfg_path.exists():
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                saved_callsign = str(data.get("callsign") or "").strip().upper() or None
+                saved_frequency = str(data.get("frequency") or "").strip() or None
+    except Exception:  # noqa: BLE001
+        pass
+
+    effective_callsign = (callsign.strip().upper() if callsign else None) or saved_callsign
+    effective_frequency = frequency if frequency is not None else saved_frequency
+
+    if _needs_station_setup(effective_callsign):
+        print()
+        print("Station setup required (callsign not configured).")
+        prompted_cs, prompted_freq = get_user_callsign_and_frequency()
+        if prompted_cs:
+            effective_callsign = prompted_cs
+        if prompted_freq:
+            effective_frequency = prompted_freq
+        if location is None:
+            location = get_user_location()
 
     prime_user_settings(
-        callsign=(callsign.strip().upper() if callsign else None),
-        frequency=frequency,
+        callsign=effective_callsign,
+        frequency=effective_frequency,
         location=location,
         auto_location=auto_location,
     )
@@ -116,7 +163,7 @@ def refresh_station_pages(
                 f"Hub pack OK: {manifest.get('page_count')} pages "
                 f"(generated {manifest.get('generated_at')})"
             )
-            print("Refreshing local-only pages (102, 700) ...")
+            print("Refreshing local-only pages (000, 102, 700, 900) ...")
             refresh_local_only_pages()
             return {"mode": "hub", "manifest": manifest}
         except Exception as exc:  # noqa: BLE001

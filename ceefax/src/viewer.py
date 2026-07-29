@@ -1,12 +1,14 @@
 import argparse
 import curses
 import json
+import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
 from uuid import UUID
@@ -244,8 +246,9 @@ def _prompt_callsign() -> str:
 
 def _log_dir() -> Path:
     # Store RX logs under ceefax/logs_rx/
-    ceefax_root = Path(__file__).resolve().parent.parent
-    return ceefax_root / "logs_rx"
+    from .paths import ceefax_root
+
+    return ceefax_root() / "logs_rx"
 
 
 def _log_path_for_wav(wav_path: str) -> Path:
@@ -256,6 +259,14 @@ def _log_path_for_wav(wav_path: str) -> Path:
 def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Auto-upload RX tracker logs after each write (best-effort, background).
+    try:
+        if path.parent.name == "logs_rx" and path.suffix.lower() == ".json":
+            from ceefaxstation.uploader import auto_upload_log
+
+            auto_upload_log(path, wait_stable=False)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _load_radio_config() -> dict:
@@ -264,8 +275,9 @@ def _load_radio_config() -> dict:
     metadata for the web tracker.
     """
     try:
-        ceefax_root = Path(__file__).resolve().parent.parent
-        p = ceefax_root / "radio_config.json"
+        from .paths import ceefax_root
+
+        p = ceefax_root() / "radio_config.json"
         if not p.exists():
             return {}
         return json.loads(p.read_text(encoding="utf-8"))
@@ -1204,6 +1216,7 @@ def _draw_tx_screen(
     show_logo: bool = False,
     *,
     fields: list[tuple[str, str]] | None = None,
+    footer_status: str = "TRANSMIT MODE  ENTER: START  ESC: RETURN",
 ) -> None:
     if fields is None:
         radio = _load_radio_config()
@@ -1221,7 +1234,7 @@ def _draw_tx_screen(
         progress_label=progress_label,
         countdown=countdown,
         message=message,
-        footer_status="TRANSMIT MODE  ENTER: START  ESC: RETURN",
+        footer_status=footer_status,
     )
 
 
@@ -1340,6 +1353,7 @@ def _confirm_tx(
         ("Data freq", data_frequency or "Use configured frequency"),
         ("Pages", str(page_count)),
         ("Repetitions", str(repetitions)),
+        ("Schedule", "Retransmits automatically each hour"),
         ("Radio", "Enable VOX before starting"),
     ]
     while True:
@@ -1349,7 +1363,7 @@ def _confirm_tx(
             title="Transmission ready",
             status="Check radio configuration",
             fields=fields,
-            message="ENTER starts audio transmission. ESC cancels.",
+            message="ENTER starts now; stays armed for hourly TX. ESC cancels.",
             footer_status="TRANSMISSION READY  ENTER: START  ESC: CANCEL",
         )
         ch = stdscr.getch()
@@ -1359,335 +1373,467 @@ def _confirm_tx(
             return False
 
 
+def _next_hour_local(now: datetime) -> datetime:
+    return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+
+
+def _format_countdown(remaining: timedelta) -> str:
+    total_seconds = max(0, int(remaining.total_seconds()))
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _tx_frequency_labels(config_file: Path) -> tuple[str, str]:
+    """Return (configured frequency label, suggested data frequency)."""
+    frequency_info = ""
+    data_frequency = ""
+    if not config_file.exists():
+        return frequency_info, data_frequency
+    try:
+        config_data = json.loads(config_file.read_text(encoding="utf-8"))
+        freq_str = str(config_data.get("frequency") or "")
+        if not freq_str:
+            return frequency_info, data_frequency
+        frequency_info = freq_str
+        band_match = re.search(r"(\d+[mc]m?|6m|10m|12m|15m|17m|20m|30m|40m|80m)", freq_str, re.I)
+        if band_match:
+            band = band_match.group(1).lower()
+            data_freq_map = {
+                "80m": "3.580 MHz",
+                "40m": "7.040 MHz",
+                "30m": "10.147 MHz",
+                "20m": "14.105 MHz",
+                "17m": "18.105 MHz",
+                "15m": "21.105 MHz",
+                "12m": "24.930 MHz",
+                "10m": "28.120 MHz",
+                "6m": "50.200 MHz",
+                "2m": "144.800 MHz",
+                "70cm": "433.500 MHz",
+            }
+            data_frequency = data_freq_map.get(band, "")
+        else:
+            mhz_match = re.search(r"(\d+\.?\d*)\s*MHz", freq_str, re.I)
+            if mhz_match:
+                data_frequency = f"{mhz_match.group(1)} MHz"
+    except Exception:  # noqa: BLE001
+        pass
+    return frequency_info, data_frequency
+
+
+def _tx_wait_until(
+    stdscr: "curses._CursesWindow",
+    until: datetime,
+    *,
+    countdown_to: datetime,
+    status: str,
+    message: str,
+    fields: list[tuple[str, str]] | None = None,
+) -> bool:
+    """
+    Wait until `until`, redrawing a countdown to `countdown_to`.
+    Returns False if the user presses ESC.
+    """
+    stdscr.nodelay(True)
+    footer = "HOURLY TX ARMED  ESC: STOP SCHEDULE"
+    while True:
+        now = datetime.now()
+        if now >= until:
+            return True
+        ch = stdscr.getch()
+        if ch == 27:
+            return False
+        _draw_tx_screen(
+            stdscr,
+            status,
+            1.0,
+            "Next TX",
+            _format_countdown(countdown_to - now),
+            message,
+            fields=fields,
+            footer_status=footer,
+        )
+        stdscr.refresh()
+        time.sleep(0.25)
+
+
+def _tx_refresh_pages(
+    stdscr: "curses._CursesWindow",
+    pages: List[Page],
+    *,
+    src: str,
+    page_dir: str,
+    stage_label: str = "1 of 3",
+) -> bool:
+    """Refresh hub/local pages. Returns False if cancelled with ESC."""
+    from ceefax.src.hub_pages import refresh_station_pages
+
+    _draw_tx_screen(
+        stdscr,
+        "Refreshing page feeds",
+        fields=[("Stage", stage_label), ("Callsign", src), ("Pages loaded", str(len(pages)))],
+        footer_status="TRANSMIT MODE  ESC: CANCEL",
+    )
+    stdscr.refresh()
+
+    refresh_done = threading.Event()
+    refresh_err: dict = {"err": None}
+
+    def _refresh_worker() -> None:
+        try:
+            refresh_station_pages(
+                callsign=src,
+                frequency="",
+                auto_location=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            refresh_err["err"] = e
+        finally:
+            refresh_done.set()
+
+    threading.Thread(target=_refresh_worker, daemon=True).start()
+    stdscr.nodelay(True)
+    while not refresh_done.is_set():
+        ch = stdscr.getch()
+        if ch == 27:
+            _draw_tx_screen(
+                stdscr,
+                "Refresh cancelled (finishing in background)...",
+                message="Returning to viewer.",
+                footer_status="TRANSMIT MODE  ESC: CANCEL",
+            )
+            time.sleep(1.0)
+            return False
+        _draw_tx_screen(
+            stdscr,
+            "Refreshing page feeds",
+            fields=[("Stage", stage_label), ("Callsign", src), ("Pages loaded", str(len(pages)))],
+            footer_status="TRANSMIT MODE  ESC: CANCEL",
+        )
+        stdscr.refresh()
+        time.sleep(0.1)
+
+    if refresh_err["err"] is not None:
+        raise refresh_err["err"]
+
+    new_pages = load_all_pages(page_dir)
+    if new_pages:
+        pages[:] = new_pages
+    return True
+
+
+def _tx_generate_wav(
+    stdscr: "curses._CursesWindow",
+    pages: List[Page],
+    *,
+    cfg,
+    src: str,
+) -> str:
+    """Build a single-loop AX.25 WAV (played 3× by the TX loop)."""
+    from ceefax.src.ax25_audio import build_ax25_audio_plan, write_ax25_audio_wav_and_or_stdout
+
+    _draw_tx_screen(
+        stdscr,
+        "Generating transmission file",
+        fields=[("Stage", "2 of 3"), ("Callsign", src), ("Pages", str(len(pages)))],
+        footer_status="TRANSMIT MODE  ESC: CANCEL",
+    )
+    stdscr.refresh()
+
+    plan = build_ax25_audio_plan(
+        pages=pages,
+        loops=1,
+        dest_callsign=cfg.ax25.dest_callsign,
+        src_callsign=src,
+        max_info_bytes=cfg.ax25.max_info_bytes,
+    )
+    wav = write_ax25_audio_wav_and_or_stdout(
+        plan=plan,
+        sample_rate=cfg.audio.sample_rate,
+        symbol_rate=cfg.audio.symbol_rate,
+        frequency_mark=cfg.audio.frequency_mark,
+        frequency_space=cfg.audio.frequency_space,
+        amplitude=cfg.audio.amplitude,
+        preamble_flags=cfg.ax25.preamble_flags,
+        inter_frame_flags=cfg.ax25.inter_frame_flags,
+        postamble_flags=cfg.ax25.postamble_flags,
+        output_dir=cfg.general.output_dir,
+        output_mode=cfg.audio.output,
+    )
+    _draw_tx_screen(
+        stdscr,
+        "Transmission file ready",
+        fields=[
+            ("Stage", "2 of 3"),
+            ("Callsign", src),
+            ("Pages", str(len(pages))),
+            ("Fragments", str(plan.fragments)),
+        ],
+        footer_status="TRANSMIT MODE  ESC: CANCEL",
+    )
+    stdscr.refresh()
+    time.sleep(0.3)
+    return wav
+
+
+def _tx_play_three_loops(stdscr: "curses._CursesWindow", wav: str) -> bool:
+    """Play the WAV three times. Returns False if cancelled with ESC."""
+    from ceefax.src.playback import play_wav_file
+
+    stdscr.nodelay(True)
+    for tx_num in range(1, 4):
+        status = f"Transmitting (loop {tx_num}/3)..."
+        progress = (tx_num - 1) / 3.0
+        _draw_tx_screen(
+            stdscr,
+            status,
+            progress,
+            f"Transmission {tx_num}/3",
+            show_logo=True,
+            footer_status="TRANSMITTING  ESC: STOP",
+        )
+        stdscr.refresh()
+
+        playback_done = threading.Event()
+        playback_stop = threading.Event()
+        playback_err: dict = {"err": None}
+        playback_proc: dict = {"proc": None}
+
+        def _playback_worker() -> None:
+            try:
+                if sys.platform.startswith("win"):
+                    try:
+                        wav_escaped = wav.replace("'", "''")
+                        proc = subprocess.Popen(
+                            [
+                                "powershell",
+                                "-Command",
+                                f"(New-Object Media.SoundPlayer '{wav_escaped}').PlaySync()",
+                            ],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            creationflags=(
+                                subprocess.CREATE_NO_WINDOW
+                                if hasattr(subprocess, "CREATE_NO_WINDOW")
+                                else 0
+                            ),
+                        )
+                        playback_proc["proc"] = proc
+                        proc.wait()
+                    except Exception:  # noqa: BLE001
+                        import winsound
+
+                        winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                        try:
+                            file_size = os.path.getsize(wav)
+                            estimated_duration = file_size / (48000 * 2)
+                        except Exception:  # noqa: BLE001
+                            estimated_duration = 30
+                        elapsed = 0.0
+                        while elapsed < estimated_duration and not playback_stop.is_set():
+                            time.sleep(0.1)
+                            elapsed += 0.1
+                else:
+                    play_wav_file(wav, loops=1)
+            except Exception as e:  # noqa: BLE001
+                playback_err["err"] = e
+            finally:
+                playback_done.set()
+
+        threading.Thread(target=_playback_worker, daemon=True).start()
+
+        while not playback_done.is_set():
+            ch = stdscr.getch()
+            if ch == 27:
+                playback_stop.set()
+                if playback_proc["proc"]:
+                    try:
+                        playback_proc["proc"].terminate()
+                        playback_proc["proc"].wait(timeout=0.5)
+                    except Exception:  # noqa: BLE001
+                        try:
+                            playback_proc["proc"].kill()
+                        except Exception:  # noqa: BLE001
+                            pass
+                _draw_tx_screen(
+                    stdscr,
+                    "Transmission cancelled",
+                    progress,
+                    f"Transmission {tx_num}/3",
+                    message="Returning to viewer.",
+                    footer_status="TRANSMITTING  ESC: STOP",
+                )
+                stdscr.refresh()
+                time.sleep(1.0)
+                return False
+            time.sleep(0.1)
+
+        progress = tx_num / 3.0
+        if playback_err["err"] is not None:
+            _draw_tx_screen(
+                stdscr,
+                f"Transmission {tx_num}/3 failed: {str(playback_err['err'])[:40]}",
+                progress,
+                f"Transmission {tx_num}/3",
+                footer_status="TRANSMITTING  ESC: STOP",
+            )
+            stdscr.refresh()
+            time.sleep(2)
+        else:
+            _draw_tx_screen(
+                stdscr,
+                f"Transmission {tx_num}/3 complete",
+                progress,
+                f"Transmission {tx_num}/3",
+                show_logo=True,
+                footer_status="TRANSMITTING  ESC: STOP",
+            )
+            stdscr.refresh()
+            time.sleep(0.3)
+    return True
+
+
 def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     """
-    TX mode: Generate WAV, transmit 3 times, show countdown to next hour.
+    TX mode: transmit now (3 loops), then stay armed and retransmit each hour.
+
+    First cycle asks for confirmation. Later hourly cycles refresh/build near the
+    hour and transmit without re-confirming. ESC leaves TX mode at any wait/play.
     """
-    import sys
-    from datetime import datetime, timedelta
-    from ceefax.src.ax25_audio import build_ax25_audio_plan, write_ax25_audio_wav_and_or_stdout
     from ceefax.src.config import load_config
-    from ceefax.src.playback import play_wav_file
-    from pathlib import Path
-    import json
-    
+
     curses.curs_set(0)
-    stdscr.nodelay(True)  # Non-blocking for countdown updates
+    stdscr.nodelay(True)
     stdscr.keypad(True)
-    
+
     cfg = load_config()
-    
-    # Get callsign from config or prompt
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    config_file = repo_root / "ceefax" / "radio_config.json"
+    from .paths import ceefax_root
+
+    config_file = ceefax_root() / "radio_config.json"
     callsign = None
-    
     if config_file.exists():
         try:
             config_data = json.loads(config_file.read_text(encoding="utf-8"))
-            callsign = config_data.get("callsign", "").strip().upper()
+            callsign = str(config_data.get("callsign") or "").strip().upper()
         except Exception:  # noqa: BLE001
             pass
-    
+
     if not callsign:
         callsign = _prompt_callsign_in_tui(stdscr)
         if not callsign:
             return
-    
+
     src = callsign or cfg.ax25.callsign or "N0CALL"
-    # Note: We generate WAV with loops=1, then play it 3 times in the transmission loop
-    # This avoids double-looping (WAV already containing 3 loops, then playing 3 times = 9 loops)
-    loops_in_wav = 1  # Generate single loop, we'll play it multiple times
-    
-    # Step 1: Refresh pages first (run in background so ESC is responsive)
-    _draw_tx_screen(
-        stdscr,
-        "Refreshing page feeds",
-        fields=[("Stage", "1 of 3"), ("Callsign", src), ("Pages loaded", str(len(pages)))],
+    lead = max(0, int(getattr(cfg.ax25, "refresh_lead_seconds", 180) or 180))
+    map_message = (
+        "Visit https://ceefaxstation.com to see your station on the map. "
+        "Hourly TX armed — ESC stops the schedule."
     )
-    stdscr.refresh()
 
     try:
-        from ceefax.src.update_all import prime_user_settings, update_all
+        # --- First (on-demand) cycle: refresh → build → confirm → TX ---
+        if not _tx_refresh_pages(stdscr, pages, src=src, page_dir=cfg.general.page_dir):
+            return
 
-        # Prevent update_all() from prompting for input while curses owns the terminal.
-        prime_user_settings(callsign=src, frequency="", auto_location=True)
-
-        refresh_done = threading.Event()
-        refresh_err: dict = {"err": None}
-
-        def _refresh_worker() -> None:
-            try:
-                update_all()
-            except Exception as e:  # noqa: BLE001
-                refresh_err["err"] = e
-            finally:
-                refresh_done.set()
-
-        t_refresh = threading.Thread(target=_refresh_worker, daemon=True)
-        t_refresh.start()
-
-        while not refresh_done.is_set():
-            ch = stdscr.getch()
-            if ch == 27:  # ESC
-                _draw_tx_screen(
-                    stdscr,
-                    "Refresh cancelled (finishing current tasks in background)...",
-                    0.0,
-                    "Refreshing",
-                    "",
-                    "Returning to viewer. You can retry TX after refresh completes.",
-                )
-                time.sleep(1.0)
-                return
-
-            _draw_tx_screen(
-                stdscr,
-                "Refreshing page feeds",
-                fields=[("Stage", "1 of 3"), ("Callsign", src), ("Pages loaded", str(len(pages)))],
-            )
-            stdscr.refresh()
-            time.sleep(0.1)
-
-        if refresh_err["err"] is not None:
-            raise refresh_err["err"]
-        
-        # Reload pages after refresh
-        new_pages = load_all_pages(cfg.general.page_dir)
-        if new_pages:
-            pages[:] = new_pages
-        
-        # Step 2: Generate WAV file
-        _draw_tx_screen(
-            stdscr,
-            "Generating transmission file",
-            fields=[("Stage", "2 of 3"), ("Callsign", src), ("Pages", str(len(pages)))],
-        )
-        stdscr.refresh()
-        
-        plan = build_ax25_audio_plan(
-            pages=pages,
-            loops=max(1, loops_in_wav),
-            dest_callsign=cfg.ax25.dest_callsign,
-            src_callsign=src,
-            max_info_bytes=cfg.ax25.max_info_bytes,
-        )
-        
-        wav = write_ax25_audio_wav_and_or_stdout(
-            plan=plan,
-            sample_rate=cfg.audio.sample_rate,
-            symbol_rate=cfg.audio.symbol_rate,
-            frequency_mark=cfg.audio.frequency_mark,
-            frequency_space=cfg.audio.frequency_space,
-            amplitude=cfg.audio.amplitude,
-            preamble_flags=cfg.ax25.preamble_flags,
-            inter_frame_flags=cfg.ax25.inter_frame_flags,
-            postamble_flags=cfg.ax25.postamble_flags,
-            output_dir=cfg.general.output_dir,
-            output_mode=cfg.audio.output,
-        )
-        
-        _draw_tx_screen(
-            stdscr,
-            "Transmission file ready",
-            fields=[
-                ("Stage", "2 of 3"),
-                ("Callsign", src),
-                ("Pages", str(len(pages))),
-                ("Fragments", str(plan.fragments)),
-            ],
-        )
-        stdscr.refresh()
-        time.sleep(0.5)
-        
-        # Step 1.5: Pre-transmission confirmation with VOX and frequency info
-        # Get frequency from config
-        frequency_info = ""
-        data_frequency = ""
-        if config_file.exists():
-            try:
-                config_data = json.loads(config_file.read_text(encoding="utf-8"))
-                freq_str = config_data.get("frequency", "")
-                if freq_str:
-                    frequency_info = freq_str
-                    # Extract band and suggest typical data frequency.
-                    # Supported formats include:
-                    # - "144.800 MHz (2m)" (preferred)
-                    # - "2m (...)" (legacy)
-                    # - "144.800 MHz"
-                    import re
-                    # Try to extract band name (2m, 70cm, etc.)
-                    band_match = re.search(r'(\d+[mc]m?|6m|10m|12m|15m|17m|20m|30m|40m|80m)', freq_str, re.I)
-                    if band_match:
-                        band = band_match.group(1).lower()
-                        # Map bands to typical packet/data frequencies (UK amateur radio)
-                        data_freq_map = {
-                            "80m": "3.580 MHz",
-                            "40m": "7.040 MHz",
-                            "30m": "10.147 MHz",
-                            "20m": "14.105 MHz",
-                            "17m": "18.105 MHz",
-                            "15m": "21.105 MHz",
-                            "12m": "24.930 MHz",
-                            "10m": "28.120 MHz",
-                            "6m": "50.200 MHz",
-                            "2m": "144.800 MHz",
-                            "70cm": "433.500 MHz",
-                        }
-                        data_frequency = data_freq_map.get(band, "")
-                    else:
-                        # Try to extract MHz value for custom frequencies
-                        mhz_match = re.search(r'(\d+\.?\d*)\s*MHz', freq_str, re.I)
-                        if mhz_match:
-                            data_frequency = f"{mhz_match.group(1)} MHz"
-            except Exception:  # noqa: BLE001
-                pass
-        
-        # Show the responsive pre-transmission safety summary.
-        confirmation_shown = _confirm_tx(
+        wav = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
+        frequency_info, data_frequency = _tx_frequency_labels(config_file)
+        if not _confirm_tx(
             stdscr,
             callsign=src,
             frequency=frequency_info,
             data_frequency=data_frequency,
             page_count=len(pages),
             repetitions=3,
-        )
-        if not confirmation_shown:
+        ):
             return
 
-        stdscr.nodelay(True)  # Back to non-blocking for transmission
+        if not _tx_play_three_loops(stdscr, wav):
+            return
 
-        # Step 2: Transmit 3 times
-        for tx_num in range(1, 4):
-            status = f"Transmitting (loop {tx_num}/3)..."
-            progress = (tx_num - 1) / 3.0
-            _draw_tx_screen(stdscr, status, progress, f"Transmission {tx_num}/3", show_logo=True)
-            stdscr.refresh()
-            
-            # Run playback in background thread so we can check for ESC
-            playback_done = threading.Event()
-            playback_stop = threading.Event()
-            playback_err: dict = {"err": None}
-            playback_proc = {"proc": None}  # Store subprocess for termination
-            
-            def _playback_worker() -> None:
-                try:
-                    import subprocess
-                    import sys
-                    if sys.platform.startswith("win"):
-                        # On Windows, use PowerShell subprocess so we can terminate it
-                        try:
-                            # Escape the path for PowerShell
-                            wav_escaped = wav.replace("'", "''")
-                            proc = subprocess.Popen(
-                                ["powershell", "-Command", f"(New-Object Media.SoundPlayer '{wav_escaped}').PlaySync()"],
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-                            )
-                            playback_proc["proc"] = proc
-                            proc.wait()
-                        except Exception as e:  # noqa: BLE001
-                            # Fallback to winsound if PowerShell fails
-                            import winsound
-                            # Use async mode and poll for stop
-                            winsound.PlaySound(wav, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                            # Poll until stop is requested or sound finishes (rough estimate)
-                            import time
-                            import os
-                            # Estimate duration from file size (rough: 1 second per ~96KB for 16-bit 48kHz mono)
-                            try:
-                                file_size = os.path.getsize(wav)
-                                estimated_duration = file_size / (48000 * 2)  # 48kHz, 16-bit (2 bytes)
-                            except Exception:
-                                estimated_duration = 30  # Default fallback
-                            
-                            elapsed = 0.0
-                            while elapsed < estimated_duration and not playback_stop.is_set():
-                                time.sleep(0.1)
-                                elapsed += 0.1
-                    else:
-                        # For non-Windows, use the original play_wav_file
-                        play_wav_file(wav, loops=1)
-                except Exception as e:  # noqa: BLE001
-                    playback_err["err"] = e
-                finally:
-                    playback_done.set()
-            
-            t_playback = threading.Thread(target=_playback_worker, daemon=True)
-            t_playback.start()
-            
-            # Poll for ESC while playback runs
-            while not playback_done.is_set():
-                ch = stdscr.getch()
-                if ch == 27:  # ESC
-                    # Stop playback
-                    playback_stop.set()
-                    if playback_proc["proc"]:
-                        try:
-                            playback_proc["proc"].terminate()
-                            playback_proc["proc"].wait(timeout=0.5)
-                        except Exception:  # noqa: BLE001
-                            try:
-                                playback_proc["proc"].kill()
-                            except Exception:  # noqa: BLE001
-                                pass
-                    _draw_tx_screen(
-                        stdscr,
-                        "Transmission cancelled",
-                        progress,
-                        f"Transmission {tx_num}/3",
-                        "",
-                        "Returning to viewer.",
-                    )
-                    stdscr.refresh()
-                    time.sleep(1.0)
-                    return  # Exit TX mode immediately
-                time.sleep(0.1)  # Small delay to avoid busy-waiting
-            
-            # Check if playback had an error
-            if playback_err["err"] is not None:
-                progress = tx_num / 3.0
-                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 failed: {str(playback_err['err'])[:40]}", progress, f"Transmission {tx_num}/3")
-                stdscr.refresh()
-                time.sleep(2)
-            else:
-                # Show completion
-                progress = tx_num / 3.0
-                _draw_tx_screen(stdscr, f"Transmission {tx_num}/3 complete", progress, f"Transmission {tx_num}/3", show_logo=True)
-                stdscr.refresh()
-                time.sleep(0.3)
-        
-        # Step 4: Show countdown and website message
-        message = "Visit https://ceefaxstation.com to see your station on the map and view reception data"
-        
+        # --- Hourly cycles until ESC ---
         while True:
-            # Check for ESC key
-            ch = stdscr.getch()
-            if ch == 27:  # ESC key
-                break
-            
-            # Calculate time until next hour
             now = datetime.now()
-            next_hour = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
-            remaining = next_hour - now
-            total_seconds = int(remaining.total_seconds())
-            hours = total_seconds // 3600
-            minutes = (total_seconds % 3600) // 60
-            seconds = total_seconds % 60
-            countdown_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            
+            hour = _next_hour_local(now)
+            refresh_at = hour - timedelta(seconds=lead)
+            hour_label = hour.strftime("%H:00")
+            wait_fields = [
+                ("Callsign", src),
+                ("Next TX", hour_label),
+                ("Prepare at", refresh_at.strftime("%H:%M:%S")),
+                ("Status", "Waiting"),
+            ]
+
+            if now < refresh_at:
+                if not _tx_wait_until(
+                    stdscr,
+                    refresh_at,
+                    countdown_to=hour,
+                    status=f"Next transmission at {hour_label}",
+                    message=map_message,
+                    fields=wait_fields,
+                ):
+                    return
+
+            prep_fields = [
+                ("Callsign", src),
+                ("Next TX", hour_label),
+                ("Status", "Preparing"),
+            ]
             _draw_tx_screen(
                 stdscr,
-                "All transmissions complete",
-                1.0,
-                "Status",
-                countdown_str,
-                message
+                f"Preparing hourly TX for {hour_label}",
+                fields=prep_fields,
+                footer_status="HOURLY TX ARMED  ESC: STOP SCHEDULE",
             )
             stdscr.refresh()
-            time.sleep(1)
-            
+
+            if not _tx_refresh_pages(
+                stdscr,
+                pages,
+                src=src,
+                page_dir=cfg.general.page_dir,
+                stage_label="hourly",
+            ):
+                return
+
+            wav = _tx_generate_wav(stdscr, pages, cfg=cfg, src=src)
+
+            now2 = datetime.now()
+            if now2 < hour:
+                if not _tx_wait_until(
+                    stdscr,
+                    hour,
+                    countdown_to=hour,
+                    status=f"Ready — starting at {hour_label}",
+                    message=map_message,
+                    fields=[
+                        ("Callsign", src),
+                        ("Next TX", hour_label),
+                        ("Pages", str(len(pages))),
+                        ("Status", "Armed"),
+                    ],
+                ):
+                    return
+            else:
+                _draw_tx_screen(
+                    stdscr,
+                    f"Hour boundary passed — transmitting now ({hour_label})",
+                    fields=[
+                        ("Callsign", src),
+                        ("Target", hour_label),
+                        ("Pages", str(len(pages))),
+                        ("Status", "Starting"),
+                    ],
+                    footer_status="HOURLY TX ARMED  ESC: STOP SCHEDULE",
+                )
+                stdscr.refresh()
+                time.sleep(0.5)
+
+            if not _tx_play_three_loops(stdscr, wav):
+                return
+
     except Exception as e:  # noqa: BLE001
         _draw_tx_screen(stdscr, f"Error: {str(e)[:50]}", 0.0, "Error")
         stdscr.refresh()
@@ -1712,8 +1858,9 @@ def _rx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     device = None
     
     # Get listener callsign from config or use default
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    config_file = repo_root / "ceefax" / "radio_config.json"
+    from .paths import ceefax_root
+
+    config_file = ceefax_root() / "radio_config.json"
     listener = None
     
     if config_file.exists():
@@ -1994,8 +2141,9 @@ def _rx_viewer_loop_live(
 
     # Create a stable log path for the session.
     live_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ceefax_root = Path(__file__).resolve().parent.parent
-    log_path = (ceefax_root / "logs_rx" / f"ceefax_ax25_live_{live_ts}.json")
+    from .paths import ceefax_root
+
+    log_path = (ceefax_root() / "logs_rx" / f"ceefax_ax25_live_{live_ts}.json")
 
     stats: dict = {
         "schema": 1,

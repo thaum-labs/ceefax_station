@@ -45,7 +45,9 @@ def _utcnow_iso() -> str:
 
 
 def _ceefax_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    from .paths import ceefax_root
+
+    return ceefax_root()
 
 
 def provider_cache_dir() -> Path:

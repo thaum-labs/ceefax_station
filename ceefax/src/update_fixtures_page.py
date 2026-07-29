@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, List
 
 from .compiler import PAGE_HEIGHT, PAGE_WIDTH
+from .paths import pages_dir
 from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider, FRESH_FOOTBALL_SECONDS
 
 
@@ -123,7 +123,7 @@ def build_fixtures_page() -> List[str]:
 
 
 def main() -> None:
-    page_file = Path(__file__).resolve().parent.parent / "pages" / "304.json"
+    page_file = pages_dir() / "304.json"
     content = build_fixtures_page()
     atomic_write_json(
         page_file,

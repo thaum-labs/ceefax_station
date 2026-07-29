@@ -33,8 +33,9 @@ class Ax25AudioPlan:
 
 def _tx_log_dir() -> Path:
     # Store TX logs under ceefax/logs_tx/
-    ceefax_root = Path(__file__).resolve().parent.parent
-    return ceefax_root / "logs_tx"
+    from .paths import ceefax_root
+
+    return ceefax_root() / "logs_tx"
 
 
 def _load_radio_config() -> dict:
@@ -43,8 +44,9 @@ def _load_radio_config() -> dict:
     metadata in TX logs for the web tracker.
     """
     try:
-        ceefax_root = Path(__file__).resolve().parent.parent
-        p = ceefax_root / "radio_config.json"
+        from .paths import ceefax_root
+
+        p = ceefax_root() / "radio_config.json"
         if not p.exists():
             return {}
         return json.loads(p.read_text(encoding="utf-8"))
@@ -83,6 +85,12 @@ def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
         "ui_frames_total": len(plan.ui_frames),
     }
     log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        from ceefaxstation.uploader import auto_upload_log
+
+        auto_upload_log(log_path, wait_stable=False)
+    except Exception:  # noqa: BLE001
+        pass
     return str(log_path)
 
 

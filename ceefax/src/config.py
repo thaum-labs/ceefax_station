@@ -1,4 +1,3 @@
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,26 +58,33 @@ class AppConfig:
     carousel: CarouselConfig
 
 
-def load_config(path: str = "config.toml") -> AppConfig:
-    config_path = Path(path)
+def load_config(path: str | None = None) -> AppConfig:
+    from .paths import ceefax_root, config_path, pages_dir
 
-    # Convenience: when running from repo root, prefer `ceefax/config.toml`.
-    if not config_path.exists() and path == "config.toml":
-        candidate = Path(__file__).resolve().parent.parent / "config.toml"
-        if candidate.exists():
-            config_path = candidate
+    if path is None:
+        config_path_obj = config_path()
+        if not config_path_obj.exists():
+            candidate = Path(__file__).resolve().parent.parent / "config.toml"
+            if candidate.exists():
+                config_path_obj = candidate
+    else:
+        config_path_obj = Path(path)
+        if not config_path_obj.exists() and path == "config.toml":
+            candidate = Path(__file__).resolve().parent.parent / "config.toml"
+            if candidate.exists():
+                config_path_obj = candidate
 
-    if not config_path.exists():
-        print(f"Config file not found: {path}", file=sys.stderr)
+    if not config_path_obj.exists():
+        print(f"Config file not found: {config_path_obj}", file=sys.stderr)
         sys.exit(1)
 
-    with open(config_path, "rb") as f:
+    with open(config_path_obj, "rb") as f:
         data = tomllib.load(f)
 
     def get(section: str, key: str, default=None):
         return data.get(section, {}).get(key, default)
 
-    base_dir = config_path.parent
+    base_dir = config_path_obj.parent
 
     def resolve_path(p: str) -> str:
         pp = Path(p)
@@ -86,11 +92,20 @@ def load_config(path: str = "config.toml") -> AppConfig:
             return str(pp)
         return str((base_dir / pp).resolve())
 
+    # Always use the writable pages directory. Relative config paths still work
+    # for output_dir under the same data root.
+    page_dir_value = str(pages_dir())
+    output_raw = str(get("general", "output_dir", "out"))
+    if getattr(sys, "frozen", False) and not Path(output_raw).is_absolute():
+        output_dir_value = str((ceefax_root() / output_raw).resolve())
+    else:
+        output_dir_value = resolve_path(output_raw)
+
     general = GeneralConfig(
         mode=get("general", "mode", "audio"),
-        page_dir=resolve_path(str(get("general", "page_dir", "pages"))),
+        page_dir=page_dir_value,
         log_level=get("general", "log_level", "INFO"),
-        output_dir=resolve_path(str(get("general", "output_dir", "out"))),
+        output_dir=output_dir_value,
     )
 
     audio = AudioConfig(
@@ -130,5 +145,3 @@ def load_config(path: str = "config.toml") -> AppConfig:
         ax25=ax25,
         carousel=carousel,
     )
-
-

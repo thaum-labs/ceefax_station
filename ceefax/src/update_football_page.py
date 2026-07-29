@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from pathlib import Path
 from typing import Any, List
 
 import requests
 
 from .compiler import PAGE_HEIGHT, PAGE_WIDTH
+from .paths import pages_dir
 from .providers import ProviderResult, atomic_write_json, fetch_football_data, resolve_provider, FRESH_FOOTBALL_SECONDS
 
 
@@ -146,10 +146,10 @@ def build_championship_table_page() -> List[str]:
 
 def main() -> None:
     """Build all content before atomically replacing any page."""
-    pages_dir = Path(__file__).resolve().parent.parent / "pages"
+    target = pages_dir()
     pages = [
         (
-            pages_dir / "300.json",
+            target / "300.json",
             {
                 "page": "300",
                 "title": "Sports Headlines",
@@ -159,7 +159,7 @@ def main() -> None:
             },
         ),
         (
-            pages_dir / "302.json",
+            target / "302.json",
             {
                 "page": "302",
                 "title": "Premier League Table",
@@ -169,7 +169,7 @@ def main() -> None:
             },
         ),
         (
-            pages_dir / "303.json",
+            target / "303.json",
             {
                 "page": "303",
                 "title": "Championship Table",

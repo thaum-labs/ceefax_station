@@ -2,33 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import requests
 
+DEFAULT_HUB_URL = "https://ceefaxstation.com"
+
 
 def _repo_root() -> Path:
-    """Get repository root, handling both development and PyInstaller bundle."""
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        # In PyInstaller, the executable is in the app directory
-        # Data files are extracted to sys._MEIPASS
-        exe_dir = Path(sys.executable).parent
-        # Check if we're in a standard installation (Program Files)
-        if (exe_dir / "ceefax").exists():
-            return exe_dir
-        # Otherwise, data is in _MEIPASS during extraction
-        if hasattr(sys, '_MEIPASS'):
-            meipass = Path(sys._MEIPASS)
-            # Data files are extracted to _MEIPASS root
-            if (meipass / "ceefax").exists():
-                return meipass
-        return exe_dir
-    # Development mode
-    return Path(__file__).resolve().parent.parent
+    """Writable app root (LocalAppData when frozen; never Program Files / _MEIPASS)."""
+    from ceefax.src.paths import repo_root
+
+    return repo_root()
 
 
 def _state_path() -> Path:
@@ -71,10 +61,10 @@ def _read_radio_config() -> tuple[str | None, str | None]:
         return (None, None)
 
 
-def _normalize_server_url(server_url: str) -> str:
-    s = (server_url or "").strip()
+def _normalize_server_url(server_url: str | None = None) -> str:
+    s = (server_url or os.environ.get("CEEFAX_PAGES_HUB_URL") or DEFAULT_HUB_URL).strip()
     if not s:
-        return "https://ceefaxstation.com"
+        return DEFAULT_HUB_URL
     if "://" not in s:
         s = "https://" + s
     return s.rstrip("/")
@@ -110,6 +100,100 @@ def _wait_file_stable(path: Path, *, stable_for_s: float = 0.5, timeout_s: float
         time.sleep(0.1)
 
 
+def upload_log_file(
+    path: Path | str,
+    *,
+    server_url: str | None = None,
+    token: str | None = None,
+    uploader_callsign: str | None = None,
+    uploader_grid: str | None = None,
+    wait_stable: bool = True,
+) -> bool:
+    """
+    Upload one TX/RX JSON log to the hub tracker.
+
+    Returns True if uploaded (or already uploaded with same content), False on skip/failure.
+    Never raises for normal network/file errors.
+    """
+    try:
+        path = Path(path)
+        if not path.is_file() or path.suffix.lower() != ".json":
+            return False
+
+        if wait_stable:
+            _wait_file_stable(path)
+
+        root = _repo_root()
+        try:
+            rel = str(path.resolve().relative_to(root.resolve())).replace("\\", "/")
+        except ValueError:
+            # Log outside the app root — still upload with absolute-ish source path.
+            rel = path.name
+
+        if uploader_callsign is None or uploader_grid is None:
+            cs2, grid2 = _read_radio_config()
+            uploader_callsign = uploader_callsign or cs2
+            uploader_grid = uploader_grid or grid2
+
+        # Without identity the map cannot place the station usefully.
+        if not uploader_callsign:
+            return False
+
+        b = path.read_bytes()
+        sha = _sha256_bytes(b)
+        state = _load_state()
+        files_state: dict[str, Any] = state.get("files") if isinstance(state.get("files"), dict) else {}
+        prev = files_state.get(rel) or {}
+        if isinstance(prev, dict) and prev.get("sha256") == sha:
+            return True
+
+        try:
+            log = json.loads(b.decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return False
+
+        ingest_url = _normalize_server_url(server_url) + "/api/ingest/log"
+        body = {
+            "token": token or "",
+            "uploader": {"callsign": uploader_callsign or "", "grid": uploader_grid or ""},
+            "source_path": rel,
+            "log": log,
+        }
+        try:
+            response = requests.post(ingest_url, json=body, timeout=20)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            print(f"Upload failed for {rel}: {exc}", file=sys.stderr)
+            return False
+
+        files_state[rel] = {"sha256": sha, "uploaded_at": time.time()}
+        state["files"] = files_state
+        _save_state(state)
+        print(f"Uploaded {rel}")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"Upload skipped for {path}: {exc}", file=sys.stderr)
+        return False
+
+
+def auto_upload_log(path: Path | str, *, wait_stable: bool = False) -> None:
+    """
+    Best-effort background upload after a TX/RX log write.
+
+    Disable with environment variable CEEFAX_AUTO_UPLOAD=0.
+    """
+    flag = (os.environ.get("CEEFAX_AUTO_UPLOAD") or "1").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return
+
+    log_path = Path(path)
+
+    def _worker() -> None:
+        upload_log_file(log_path, wait_stable=wait_stable)
+
+    threading.Thread(target=_worker, name="ceefax-auto-upload", daemon=True).start()
+
+
 def upload_logs(
     *,
     server_url: str,
@@ -128,9 +212,6 @@ def upload_logs(
     tx_dir = root / "ceefax" / "logs_tx"
     rx_dir = root / "ceefax" / "logs_rx"
 
-    state = _load_state()
-    files_state: dict[str, Any] = state.get("files") if isinstance(state.get("files"), dict) else {}
-
     if uploader_callsign is None or uploader_grid is None:
         cs2, grid2 = _read_radio_config()
         uploader_callsign = uploader_callsign or cs2
@@ -140,38 +221,14 @@ def upload_logs(
     ingest_url = server_url + "/api/ingest/log"
 
     def scan_one(path: Path) -> None:
-        if not path.is_file() or path.suffix.lower() != ".json":
-            return
-        _wait_file_stable(path)
-        rel = str(path.relative_to(root)).replace("\\", "/")
-        b = path.read_bytes()
-        sha = _sha256_bytes(b)
-        prev = files_state.get(rel) or {}
-        if isinstance(prev, dict) and prev.get("sha256") == sha:
-            return
-
-        try:
-            log = json.loads(b.decode("utf-8"))
-        except Exception:  # noqa: BLE001
-            return
-
-        body = {
-            "token": token or "",
-            "uploader": {"callsign": uploader_callsign or "", "grid": uploader_grid or ""},
-            "source_path": rel,
-            "log": log,
-        }
-        try:
-            r = requests.post(ingest_url, json=body, timeout=20)
-            r.raise_for_status()
-        except requests.RequestException as exc:
-            print(f"Upload failed for {rel}: {exc}")
-            return
-
-        files_state[rel] = {"sha256": sha, "uploaded_at": time.time()}
-        state["files"] = files_state
-        _save_state(state)
-        print(f"Uploaded {rel}")
+        upload_log_file(
+            path,
+            server_url=server_url,
+            token=token,
+            uploader_callsign=uploader_callsign,
+            uploader_grid=uploader_grid,
+            wait_stable=True,
+        )
 
     print(f"Uploading logs to {ingest_url}")
     print(f"Uploader: callsign={uploader_callsign or '-'} grid={uploader_grid or '-'}")
@@ -211,5 +268,3 @@ def upload_logs(
                 time.sleep(max(0.2, float(poll_seconds)))
     except KeyboardInterrupt:
         print("Uploader stopped.")
-
-

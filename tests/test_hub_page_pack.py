@@ -18,9 +18,12 @@ from ceefaxweb.page_pack_api import RateLimiter
 def test_shared_vs_local_page_classification() -> None:
     assert is_shared_page("101.json")
     assert is_shared_page("503_2.json")
+    assert is_local_only_page("000.json")
     assert is_local_only_page("102.json")
     assert is_local_only_page("700.json")
+    assert is_local_only_page("900.json")
     assert not is_shared_page("102.json")
+    assert not is_shared_page("000.json")
     assert not is_shared_page("readme.txt")
 
 

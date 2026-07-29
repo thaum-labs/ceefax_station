@@ -10,6 +10,7 @@ from typing import List, Tuple, Optional
 import requests
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
+from .paths import ceefax_root, pages_dir
 from .providers import ProviderResult, atomic_write_json, resolve_provider, FRESH_OPEN_METEO_SECONDS
 from .weather_map import (
     WeatherSummary,
@@ -464,8 +465,8 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
         user_location: Optional tuple of (name, query) for user's manually entered location.
                       If provided, this will be used instead of IP detection.
     """
-    root = Path(__file__).resolve().parent.parent
-    pages_dir = root / "pages"
+    root = ceefax_root()
+    target_pages = pages_dir()
 
     # Determine user's location
     if user_location:
@@ -583,7 +584,7 @@ def main(user_location: Optional[Tuple[str, str]] = None) -> None:
         source_label=result.source,
         stale=result.stale,
     )
-    page_file = pages_dir / "102.json"
+    page_file = target_pages / "102.json"
     page_data = {
         "page": "102",
         "title": f"{name} Weather",

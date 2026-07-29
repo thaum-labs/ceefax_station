@@ -174,7 +174,13 @@ python -m ceefaxstation rx latest
 python -m ceefaxstation rx live
 ```
 
+In the interactive viewer, **T** transmits now (3 loops) and then **stays armed**: it refreshes before the next hour and retransmits at `:00` until you press ESC.
+
 ### Appear on the map
+
+After a TX or RX session, Ceefax Station **automatically uploads** the new log to [ceefaxstation.com](https://ceefaxstation.com) (needs `callsign` + `grid` in `radio_config.json`).
+
+You can still run a background watcher if you prefer:
 
 ```bash
 python -m ceefaxstation upload
@@ -182,7 +188,7 @@ python -m ceefaxstation upload
 
 Or on Windows: `.\start_uploader.ps1`
 
-Then open [ceefaxstation.com](https://ceefaxstation.com). Make sure your **grid** is set in `radio_config.json`.
+Disable automatic uploads with environment variable `CEEFAX_AUTO_UPLOAD=0`.
 
 ---
 

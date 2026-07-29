@@ -7,24 +7,17 @@ from pathlib import Path
 
 
 def _repo_root() -> Path:
-    """Get repository root, handling both development and PyInstaller bundle."""
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        # In PyInstaller, the executable is in the app directory
-        # Data files are extracted to sys._MEIPASS
-        exe_dir = Path(sys.executable).parent
-        # Check if we're in a standard installation (Program Files)
-        if (exe_dir / "ceefax").exists():
-            return exe_dir
-        # Otherwise, data is in _MEIPASS during extraction
-        if hasattr(sys, '_MEIPASS'):
-            meipass = Path(sys._MEIPASS)
-            # Data files are extracted to _MEIPASS root
-            if (meipass / "ceefax").exists():
-                return meipass
-        return exe_dir
-    # Development mode
-    return Path(__file__).resolve().parent.parent
+    """Writable app root (LocalAppData when frozen; never Program Files / _MEIPASS)."""
+    from ceefax.src.paths import repo_root
+
+    return repo_root()
+
+
+def _install_root() -> Path:
+    """Directory containing the EXE / repo (may be read-only when installed)."""
+    from ceefax.src.paths import install_root
+
+    return install_root()
 
 
 def _run_module(mod: str, argv: list[str]) -> int:
@@ -102,7 +95,7 @@ def _refresh_pages(
         auto_location=auto_location,
         source=pages_source,
         hub_url=hub_url,
-        pages_dir=_repo_root() / "ceefax" / "pages",
+        pages_dir=None,  # default: writable ceefax/pages (LocalAppData when frozen)
     )
 
 
@@ -123,8 +116,9 @@ def _tx_now(
     from ceefax.src.compiler import load_all_pages
     from ceefax.src.config import load_config
     from ceefax.src.playback import play_wav_file
+    from ceefax.src.paths import config_path
 
-    cfg = load_config(str(_repo_root() / "ceefax" / "config.toml"))
+    cfg = load_config(str(config_path()))
 
     if refresh:
         _refresh_pages(
@@ -192,8 +186,9 @@ def _tx_hourly(
 ) -> int:
     from ceefax.src.config import load_config
     from ceefax.src.hourly_ax25_audio import run_hourly_ax25_audio
+    from ceefax.src.paths import config_path
 
-    cfg = load_config(str(_repo_root() / "ceefax" / "config.toml"))
+    cfg = load_config(str(config_path()))
     if callsign:
         cfg.ax25.callsign = callsign.strip().upper()
 
@@ -430,9 +425,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "pages":
         if args.pages_cmd == "pull":
             from ceefax.src.hub_pages import pull_page_pack, refresh_local_only_pages
+            from ceefax.src.paths import pages_dir as default_pages_dir
             from ceefax.src.update_all import prime_user_settings
 
-            pages_dir = Path(args.pages_dir).expanduser() if args.pages_dir else (_repo_root() / "ceefax" / "pages")
+            pages_dir = Path(args.pages_dir).expanduser() if args.pages_dir else default_pages_dir()
             try:
                 manifest = pull_page_pack(pages_dir=pages_dir, hub_url=args.server)
             except Exception as exc:  # noqa: BLE001

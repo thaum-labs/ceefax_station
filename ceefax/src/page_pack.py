@@ -19,7 +19,7 @@ PACK_FORMAT_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 
 # Station-specific pages that must never be overwritten by a hub pack.
-LOCAL_ONLY_PAGE_PREFIXES: tuple[str, ...] = ("102", "700")
+LOCAL_ONLY_PAGE_PREFIXES: tuple[str, ...] = ("000", "102", "700", "900")
 
 _PAGE_FILE_RE = re.compile(r"^(\d{3})(?:_(\d+))?\.json$")
 
