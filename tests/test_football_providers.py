@@ -95,6 +95,112 @@ def test_standings_use_codes_auth_header_and_normalize(
     assert any("football-data.org" in line and "CURRENT" in line for line in championship)
 
 
+def _empty_table_payload(*, season_start: str, teams: list[str]) -> dict[str, Any]:
+    return {
+        "filters": {"season": season_start[:4]},
+        "season": {"startDate": season_start, "endDate": f"{int(season_start[:4]) + 1}-05-01"},
+        "standings": [
+            {
+                "type": "TOTAL",
+                "table": [
+                    {
+                        "position": 1,
+                        "team": {"shortName": name},
+                        "playedGames": 0,
+                        "won": 0,
+                        "draw": 0,
+                        "lost": 0,
+                        "goalsFor": 0,
+                        "goalsAgainst": 0,
+                        "goalDifference": 0,
+                        "points": 0,
+                    }
+                    for name in teams
+                ],
+            }
+        ],
+    }
+
+
+def test_standings_fall_back_to_previous_season_when_current_is_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from ceefax.src import update_football_page as football
+
+    calls: list[dict[str, Any]] = []
+    empty = _empty_table_payload(
+        season_start="2026-08-01",
+        teams=["Swansea", "Norwich"],
+    )
+    previous = {
+        "filters": {"season": "2025"},
+        "season": {"startDate": "2025-08-01", "endDate": "2026-05-01"},
+        "standings": [
+            {
+                "type": "TOTAL",
+                "table": [
+                    {
+                        "position": 1,
+                        "team": {"shortName": "Leeds United"},
+                        "playedGames": 46,
+                        "won": 29,
+                        "draw": 10,
+                        "lost": 7,
+                        "goalsFor": 90,
+                        "goalsAgainst": 40,
+                        "goalDifference": 50,
+                        "points": 97,
+                    }
+                ],
+            }
+        ],
+    }
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        calls.append({"url": url, **kwargs})
+        params = kwargs.get("params") or {}
+        if params.get("season") == "2025":
+            return FakeResponse(previous)
+        return FakeResponse(empty)
+
+    monkeypatch.setenv("FOOTBALL_DATA_API_KEY", "test-token")
+    monkeypatch.setenv("CEEFAX_PROVIDER_CACHE", str(tmp_path))
+    monkeypatch.setattr(providers.requests, "get", fake_get)
+
+    rows = football.fetch_league_rows("ELC")
+    assert rows[0][1] == "Leeds United"
+    assert rows[0][2] == "46"
+    assert len(calls) == 2
+    assert (calls[1].get("params") or {}).get("season") == "2025"
+
+    page = football.build_championship_table_page()
+    assert any("Leeds United" in line for line in page)
+    assert not any("Season not started yet." in line for line in page)
+
+
+def test_standings_show_preseason_notice_when_no_played_games(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from ceefax.src import update_football_page as football
+
+    empty = _empty_table_payload(
+        season_start="2026-08-01",
+        teams=["Swansea", "Norwich"],
+    )
+
+    def fake_get(url: str, **kwargs: Any) -> FakeResponse:
+        return FakeResponse(empty)
+
+    monkeypatch.setenv("FOOTBALL_DATA_API_KEY", "test-token")
+    monkeypatch.setenv("CEEFAX_PROVIDER_CACHE", str(tmp_path))
+    monkeypatch.setattr(providers.requests, "get", fake_get)
+
+    page = football.build_championship_table_page()
+    assert any("Season not started yet." in line for line in page)
+    assert any("matchday 1" in line for line in page)
+    assert all(len(line) == 50 for line in page)
+
+
 def test_scores_and_fixtures_use_expected_utc_windows(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

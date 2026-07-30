@@ -92,12 +92,55 @@ def _normalize_standings(payload: dict[str, Any], limit: int = 20) -> List[List[
     return rows
 
 
+def _has_played_games(rows: List[List[str]]) -> bool:
+    """True when at least one side has contested a match."""
+    for row in rows:
+        try:
+            if int(row[2] or "0") > 0:
+                return True
+        except (TypeError, ValueError, IndexError):
+            continue
+    return False
+
+
+def _season_start_year(payload: dict[str, Any]) -> int | None:
+    season = payload.get("season")
+    if isinstance(season, dict):
+        start = str(season.get("startDate") or "")
+        if len(start) >= 4 and start[:4].isdigit():
+            return int(start[:4])
+    filters = payload.get("filters")
+    if isinstance(filters, dict):
+        value = filters.get("season")
+        if value is not None and str(value).isdigit():
+            return int(value)
+    return None
+
+
 def fetch_league_rows(code: str, limit: int = 20) -> List[List[str]]:
-    """Fetch and normalize a football-data.org competition table."""
-    return _normalize_standings(
-        fetch_football_data(f"competitions/{code}/standings"),
-        limit=limit,
+    """Fetch and normalize a football-data.org competition table.
+
+    Between seasons the API often returns the new roster with every side on
+    0 played / 0 points. Prefer the previous completed season when that
+    happens so Ceefax pages keep a real league table.
+    """
+    payload = fetch_football_data(f"competitions/{code}/standings")
+    rows = _normalize_standings(payload, limit=limit)
+    if _has_played_games(rows):
+        return rows
+
+    season_year = _season_start_year(payload)
+    if season_year is None:
+        return rows
+
+    prev_payload = fetch_football_data(
+        f"competitions/{code}/standings",
+        params={"season": str(season_year - 1)},
     )
+    prev_rows = _normalize_standings(prev_payload, limit=limit)
+    if _has_played_games(prev_rows):
+        return prev_rows
+    return rows
 
 
 def _league_table(code: str) -> ProviderResult[List[List[str]]]:
@@ -123,6 +166,17 @@ def build_football_page() -> List[str]:
 
 def _build_table_page(title: str, code: str) -> List[str]:
     result = _league_table(code)
+    if not _has_played_games(result.data):
+        lines = [
+            title,
+            "-" * PAGE_WIDTH,
+            "Season not started yet.",
+            "Table will appear after matchday 1.",
+            "",
+            _as_of(result),
+        ]
+        return _page(lines)
+
     lines = [
         title,
         f"{'Pos':>2} {'Team':<25} {'P':>2} {'W':>2} {'D':>2} {'L':>2} {'GD':>3} {'Pts':>3}",
