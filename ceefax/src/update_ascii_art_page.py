@@ -51,90 +51,105 @@ def _center_art_block(art: List[str], width: int = PAGE_WIDTH) -> List[str]:
 def get_ascii_art() -> List[str]:
     """
     Get ASCII art based on day of week (rotates through different art).
-    Improved artwork with better detail.
+
+    Pieces are sized for the Ceefax page: PAGE_WIDTH (50) by at most
+    PAGE_HEIGHT - 6 (~17) lines after header/footer chrome.
     """
     day_of_week = datetime.now().weekday()
-    
-    # Different ASCII art for each day - improved versions
+
+    # Different ASCII art for each day — denser detail, still pure ASCII.
+    # Keep each piece within PAGE_WIDTH and PAGE_HEIGHT-6 so it is not clipped.
     art_collection = [
-        # Monday - Cat (improved)
+        # Monday - Cat
         [
-            "     /\\_/\\",
-            "    ( o.o )",
-            "     > ^ <",
-            "    /     \\",
-            "   (       )"
+            "      |\\      _,,,---,,_",
+            "ZZZzz /,`.-'`'    -.  ;-;;,_",
+            "     |,4-  ) )-,_. ,\\ (  `'-'",
+            "    '---''(_/--'  `-'\\_)",
         ],
-        # Tuesday - Dog (improved)
+        # Tuesday - Dog
         [
-            "    __      __",
-            "   (  )    (  )",
-            "   |  |    |  |",
-            "   |__|    |__|",
-            "    ||      ||"
+            "         ,-.___,-.",
+            "        /  .   .  \\",
+            "       /     Y     \\",
+            "      |   \\  ^  /   |",
+            "       \\   `---'   /",
+            "        `--.   .--'",
+            "           |   |",
+            "          /|   |\\",
+            "         (_|___|_)",
         ],
-        # Wednesday - Star (improved)
+        # Wednesday - Star
         [
-            "        *",
-            "       ***",
-            "      *****",
-            "     *******",
-            "    *********",
-            "     *******",
-            "      *****",
-            "       ***",
-            "        *"
+            "              .",
+            "             ,O,",
+            "            ,OOO,",
+            "      'oooooOOOOOooooo'",
+            "        `OOOOOOOOOOO`",
+            "          `OOOOOOO`",
+            "          OOO` `OOO",
+            "         OOO'   `OOO",
+            "        OOO'     `OOO",
+            "       O'           `O",
         ],
-        # Thursday - Heart (improved)
+        # Thursday - Heart
         [
-            "   ***     ***",
-            " ******   ******",
-            "******** ********",
-            " ***************",
-            "  *************",
-            "   ***********",
-            "    *********",
-            "     *******",
-            "      *****",
-            "       ***",
-            "        *"
+            "       .:::.   .:::. ",
+            "     .:::::::.:::::::. ",
+            "    ::::::::::::::::::: ",
+            "    ':::::::::::::::::' ",
+            "      ':::::::::::::' ",
+            "        ':::::::::' ",
+            "          ':::::' ",
+            "            ':' ",
         ],
-        # Friday - Tree (improved)
+        # Friday - Tree
         [
-            "       *",
-            "      ***",
-            "     *****",
-            "    *******",
-            "   *********",
-            "  ***********",
-            " *************",
-            "      |||",
-            "      |||"
+            "            /\\",
+            "           /\\*\\",
+            "          /\\O\\*\\",
+            "         /*/\\/\\/\\",
+            "        /\\O\\/\\*\\/\\",
+            "       /\\*\\/\\*\\/\\/\\",
+            "      /\\O\\/\\/*/\\/O/\\",
+            "     /\\/*/\\O\\/\\*/\\/\\",
+            "    /\\O\\/\\/*/\\/\\/O/\\",
+            "            ||",
+            "           /||\\",
+            "          ////\\\\\\",
         ],
-        # Saturday - Rocket (replaces Moon)
+        # Saturday - Rocket
         [
-            "        /\\",
-            "       /  \\",
-            "       |  |",
-            "       |  |",
-            "      /____\\",
-            "      |    |",
-            "      |____|",
-            "       /\\/\\",
-            "      /_||_\\"
+            "             /\\",
+            "            //\\\\",
+            "           ///\\\\\\",
+            "           |||||",
+            "           |[o]|",
+            "           |||||",
+            "          /|||||\\",
+            "         //|||||\\\\",
+            "        ///|||||\\\\\\",
+            "           |||||",
+            "          /\\/|\\/\\",
+            "         /__/|\\__\\",
+            "            /|\\",
+            "           / | \\",
+            "          '  |  '",
         ],
-        # Sunday - Sun (improved)
+        # Sunday - Sun
         [
-            "    \\     /",
-            "     \\   /",
-            "      .-.",
-            "  --- ( ) ---",
-            "      '-'",
-            "     /   \\",
-            "    /     \\"
-        ]
+            "            \\   |   /",
+            "             \\  |  /",
+            "           ---\\ | /---",
+            "                .-. ",
+            "           --- (   ) ---",
+            "                '-' ",
+            "           ---/ | \\---",
+            "             /  |  \\",
+            "            /   |   \\",
+        ],
     ]
-    
+
     return art_collection[day_of_week]
 
 
