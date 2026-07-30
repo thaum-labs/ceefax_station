@@ -1,5 +1,5 @@
 {
-  "current_version": "0.1.2-alpha",
+  "current_version": "0.1.3-alpha",
   "stage": "alpha",
   "entries": [
     {
@@ -82,6 +82,14 @@
         "Significantly improved UK weather and weather map page load times with caching and parallel fetching",
         "Added 10-minute cache for wttr.in API responses to reduce API calls",
         "Implemented parallel fetching for multiple weather locations simultaneously"
+      ]
+    },
+    {
+      "date": "2026-07-30",
+      "version": "0.1.3-alpha",
+      "changes": [
+        "Improved daily ASCII art on page 601",
+        "Football league tables fall back to the previous season when the new season has no matches yet"
       ]
     }
   ]

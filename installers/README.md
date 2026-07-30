@@ -4,6 +4,7 @@ This directory contains Windows installer executables for Ceefax Station.
 
 ## Current Installer
 
+- **CeefaxStation-Setup-0.1.3.exe** - Version 0.1.3-alpha (ASCII art + football table off-season fix)
 - **CeefaxStation-Setup-0.1.2.exe** - Version 0.1.2-alpha (bundles Dire Wolf 1.8.1 for live RX)
 - **CeefaxStation-Setup-0.1.1.exe** - Version 0.1.1-alpha (previous)
 - **CeefaxStation-Setup-0.1.0.exe** - Version 0.1.0-alpha (previous)
