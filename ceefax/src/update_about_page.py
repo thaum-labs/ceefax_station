@@ -6,6 +6,7 @@ from __future__ import annotations
 import platform
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
 from .compiler import PAGE_WIDTH, PAGE_HEIGHT
@@ -60,14 +61,29 @@ def get_python_version() -> str:
 
 
 def get_app_version() -> str:
+    """
+    Installed app version from VERSION.
+
+    Frozen builds prefer the file next to the EXE (updated by the installer).
+    Writable LocalAppData is only a fallback so a stale user copy cannot hide upgrades.
+    """
     try:
-        version_file = repo_root() / "VERSION"
-        if not version_file.exists() and getattr(sys, "frozen", False):
+        candidates: list[Path] = []
+        if getattr(sys, "frozen", False):
             from .paths import install_root
 
-            version_file = install_root() / "VERSION"
-        if version_file.exists():
-            return version_file.read_text(encoding="utf-8").strip() or "0.1.1-alpha"
+            # Prefer installer-deployed VERSION beside the EXE.
+            candidates.append(install_root() / "VERSION")
+            # One-file PyInstaller also ships VERSION inside the extract dir.
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                candidates.append(Path(meipass) / "VERSION")
+        candidates.append(repo_root() / "VERSION")
+        for version_file in candidates:
+            if version_file.exists():
+                text = version_file.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
     except OSError:
         pass
     return "0.1.1-alpha"

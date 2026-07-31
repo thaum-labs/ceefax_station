@@ -1,7 +1,16 @@
 {
-  "current_version": "0.1.3-alpha",
+  "current_version": "0.1.4-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-07-31",
+      "version": "0.1.4-alpha",
+      "changes": [
+        "Windows app can update itself from GitHub Releases (viewer U key or `ceefaxstation update`)",
+        "Self-update downloads the latest Setup installer and upgrades in place (no uninstall)",
+        "`ceefaxstation update --check` reports whether a newer release is available"
+      ]
+    },
     {
       "date": "2026-07-29",
       "version": "0.1.2-alpha",

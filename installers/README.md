@@ -4,10 +4,20 @@ This directory contains Windows installer executables for Ceefax Station.
 
 ## Current Installer
 
+- **CeefaxStation-Setup-0.1.4.exe** - Version 0.1.4-alpha (in-app self-update from GitHub Releases)
 - **CeefaxStation-Setup-0.1.3.exe** - Version 0.1.3-alpha (ASCII art + football table off-season fix)
 - **CeefaxStation-Setup-0.1.2.exe** - Version 0.1.2-alpha (bundles Dire Wolf 1.8.1 for live RX)
 - **CeefaxStation-Setup-0.1.1.exe** - Version 0.1.1-alpha (previous)
 - **CeefaxStation-Setup-0.1.0.exe** - Version 0.1.0-alpha (previous)
+
+## Updating an installed app
+
+Installed stations can upgrade without uninstalling:
+
+- In the viewer: press **U**, confirm, approve UAC if prompted
+- From a terminal: `ceefaxstation update` (or `ceefaxstation update --check`)
+
+This downloads `CeefaxStation-Setup.exe` from the latest GitHub Release and runs the silent Setup upgrade.
 
 ## Building New Installers
 

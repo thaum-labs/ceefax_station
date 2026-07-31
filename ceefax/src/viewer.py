@@ -381,14 +381,17 @@ def _draw_footer(
     _init_ui_colors()
 
     if mode == "viewer":
-        controls = "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  S: SETUP  F5: REFRESH  ESC: EXIT"
+        controls = (
+            "000 INDEX  3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  "
+            "R: RX  T: TX  S: SETUP  U: UPDATE  F5: REFRESH  ESC: EXIT"
+        )
     elif mode == "rx":
         controls = "LEFT/RIGHT: RECEIVED PAGES  3 DIGITS: PAGE  ESC: RETURN"
     else:
         controls = "ESC: CANCEL / RETURN"
     if max_x < len(controls) + 2 and mode in ("viewer", "rx"):
         controls = (
-            "3 DIGITS: PAGE  LEFT/RIGHT: BROWSE  R: RX  T: TX  ESC: EXIT"
+            "3 DIGITS: PAGE  R:RX T:TX S:SETUP U:UPD F5 ESC"
             if mode == "viewer"
             else "LEFT/RIGHT: PAGES  3 DIGITS: PAGE  ESC: RETURN"
         )
@@ -1635,6 +1638,187 @@ def _tx_wait_until(
         time.sleep(0.25)
 
 
+def _app_update_flow(stdscr: "curses._CursesWindow") -> bool:
+    """
+    Check GitHub Releases for a newer Windows installer and apply it.
+
+    Returns True if the installer was launched (caller should exit the app).
+    """
+    from ceefaxstation.self_update import apply_update, check_for_update
+
+    stdscr.nodelay(False)
+    _draw_mode_screen(
+        stdscr,
+        mode="--",
+        title="Application update",
+        status="Checking GitHub Releases",
+        fields=[("Source", "github.com/thaum-labs/ceefax_station")],
+        message="Comparing installed version to the latest release...",
+        footer_status="UPDATE CHECK  ESC: CANCEL",
+    )
+    stdscr.refresh()
+
+    check_done = threading.Event()
+    check_err: dict = {"err": None}
+    check_result: dict = {"local": None, "latest": None, "available": False}
+
+    def _check_worker() -> None:
+        try:
+            local, latest, available = check_for_update()
+            check_result["local"] = local
+            check_result["latest"] = latest
+            check_result["available"] = available
+        except Exception as exc:  # noqa: BLE001
+            check_err["err"] = exc
+        finally:
+            check_done.set()
+
+    threading.Thread(target=_check_worker, daemon=True).start()
+    stdscr.nodelay(True)
+    while not check_done.is_set():
+        if stdscr.getch() == 27:
+            return False
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Checking GitHub Releases",
+            fields=[("Source", "github.com/thaum-labs/ceefax_station")],
+            message="Comparing installed version to the latest release...",
+            footer_status="UPDATE CHECK  ESC: CANCEL",
+        )
+        stdscr.refresh()
+        time.sleep(0.1)
+    stdscr.nodelay(False)
+
+    if check_err["err"] is not None:
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Update check failed",
+            message=str(check_err["err"])[:120],
+            footer_status="ESC: RETURN",
+        )
+        while stdscr.getch() != 27:
+            pass
+        return False
+
+    local = str(check_result["local"] or "")
+    latest = check_result["latest"]
+    available = bool(check_result["available"])
+    remote_tag = getattr(latest, "tag", None) or "?"
+
+    if not available:
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Already up to date",
+            fields=[("Installed", local), ("Latest", remote_tag)],
+            message="No newer GitHub release is available.",
+            footer_status="ESC: RETURN",
+        )
+        while stdscr.getch() != 27:
+            pass
+        return False
+
+    while True:
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Update available",
+            fields=[
+                ("Installed", local),
+                ("Latest", remote_tag),
+                ("Installs via", "Windows Setup (UAC may prompt)"),
+            ],
+            message="ENTER downloads the installer and upgrades in place. ESC cancels.",
+            footer_status="UPDATE READY  ENTER: INSTALL  ESC: CANCEL",
+        )
+        ch = stdscr.getch()
+        if ch in (10, 13, curses.KEY_ENTER):
+            break
+        if ch == 27:
+            return False
+
+    progress_msg = {"text": "Starting download..."}
+    apply_done = threading.Event()
+    apply_err: dict = {"err": None}
+    apply_result: dict = {"result": None}
+
+    def _apply_worker() -> None:
+        try:
+            apply_result["result"] = apply_update(
+                force=False,
+                silent=True,
+                progress=lambda msg: progress_msg.__setitem__("text", msg),
+            )
+        except Exception as exc:  # noqa: BLE001
+            apply_err["err"] = exc
+        finally:
+            apply_done.set()
+
+    threading.Thread(target=_apply_worker, daemon=True).start()
+    stdscr.nodelay(True)
+    while not apply_done.is_set():
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Downloading / launching installer",
+            fields=[("Installed", local), ("Latest", remote_tag)],
+            message=str(progress_msg["text"])[:120],
+            footer_status="PLEASE WAIT",
+        )
+        stdscr.refresh()
+        time.sleep(0.15)
+    stdscr.nodelay(False)
+
+    if apply_err["err"] is not None:
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Update failed",
+            message=str(apply_err["err"])[:120],
+            footer_status="ESC: RETURN",
+        )
+        while stdscr.getch() != 27:
+            pass
+        return False
+
+    result = apply_result["result"] or {}
+    status = result.get("status")
+    if status == "launched":
+        _draw_mode_screen(
+            stdscr,
+            mode="--",
+            title="Application update",
+            status="Installer started",
+            fields=[("From", local), ("To", remote_tag)],
+            message="Approve UAC if prompted. The app will exit so files can be replaced.",
+            footer_status="EXITING...",
+        )
+        stdscr.refresh()
+        time.sleep(1.5)
+        return True
+
+    err = result.get("error") or status or "unknown error"
+    _draw_mode_screen(
+        stdscr,
+        mode="--",
+        title="Application update",
+        status="Update failed",
+        message=str(err)[:120],
+        footer_status="ESC: RETURN",
+    )
+    while stdscr.getch() != 27:
+        pass
+    return False
+
+
 def _tx_refresh_pages(
     stdscr: "curses._CursesWindow",
     pages: List[Page],
@@ -2237,6 +2421,10 @@ def _viewer_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         elif ch in (ord("s"), ord("S")):
             saved = _station_setup_in_tui(stdscr, force=True)
             notice = "STATION SETTINGS SAVED" if saved else "STATION SETUP CANCELLED"
+        elif ch in (ord("u"), ord("U")):
+            if _app_update_flow(stdscr):
+                break
+            notice = ""
 
 
 def _rx_viewer_loop_from_wav(

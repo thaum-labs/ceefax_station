@@ -230,10 +230,33 @@ def main(argv: list[str] | None = None) -> int:
             "  ceefaxstation rx live --device USB --listener M7TJF\n"
             "  ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 2\n"
             "  ceefaxstation pages pull\n"
+            "  ceefaxstation update\n"
             "  ceefaxstation shell\n"
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    # ---- update (GitHub Releases installer) ----
+    p_update = sub.add_parser(
+        "update",
+        help="Check GitHub Releases for a newer Windows installer and apply it.",
+    )
+    p_update.add_argument(
+        "--check",
+        action="store_true",
+        help="Only check for an update (exit 2 if newer available).",
+    )
+    p_update.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Download and install without prompting.",
+    )
+    p_update.add_argument(
+        "--force",
+        action="store_true",
+        help="Reinstall the latest release even if versions match.",
+    )
 
     # ---- pages (hub pack) ----
     p_pages = sub.add_parser("pages", help="Download or publish shared teletext page packs.")
@@ -433,6 +456,15 @@ def main(argv: list[str] | None = None) -> int:
     p_tx_now.add_argument("--play-player", default=None)
 
     args = parser.parse_args(argv)
+
+    if args.cmd == "update":
+        from ceefaxstation.self_update import run_cli_update
+
+        return run_cli_update(
+            check_only=bool(args.check),
+            yes=bool(args.yes),
+            force=bool(args.force),
+        )
 
     if args.cmd == "pages":
         if args.pages_cmd == "pull":
