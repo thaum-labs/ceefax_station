@@ -1,0 +1,46 @@
+name: Delete Sample Data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete sample data on production
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            REPO_DIR="/root/ceefax_station"
+            if [ -d "/root/ceefax_station_website/.git" ] && [ ! -d "/root/ceefax_station/.git" ]; then
+              REPO_DIR="/root/ceefax_station_website"
+            fi
+            echo "Using REPO_DIR=${REPO_DIR}"
+            cd "${REPO_DIR}"
+
+            set -a
+            # shellcheck disable=SC1091
+            [ -f "${REPO_DIR}/.env" ] && . "${REPO_DIR}/.env"
+            set +a
+
+            if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+              PY="${REPO_DIR}/venv/bin/python"
+            else
+              PY="python3"
+            fi
+
+            echo "Using DB=${CEEFAXWEB_DB:-"(default)"}"
+            echo "yes" | "${PY}" -m ceefaxweb.scripts.delete_sample_data --confirm
+
+            echo ""
+            echo "=== Restart tracker so in-memory views match disk ==="
+            systemctl restart ceefaxweb
+            sleep 2
+            systemctl is-active ceefaxweb
+
+            echo "Sample data deletion finished."

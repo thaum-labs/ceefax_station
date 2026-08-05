@@ -59,7 +59,7 @@ jobs:
             echo "yes" | python3 -m ceefaxweb.scripts.replace_callsign SM6OPW TEST1 2>&1 || echo "Replacement check completed (SM6OPW may not exist or already replaced)"
 
             echo ""
-            echo "=== Delete and re-upload sample data (with correct frequency format) ==="
+            echo "=== Delete sample data (do not re-seed demo stations) ==="
             cd "${REPO_DIR}"
             set -a
             # shellcheck disable=SC1091
@@ -72,7 +72,6 @@ jobs:
             fi
             echo "Using DB=${CEEFAXWEB_DB:-"(default)"}"
             echo "yes" | "${PY}" -m ceefaxweb.scripts.delete_sample_data --confirm 2>&1 || echo "Sample data deletion completed (may have no sample data)"
-            "${PY}" -m ceefaxweb.sample_data --ingest http://127.0.0.1:8088 2>&1 || echo "Sample data upload completed"
 
             echo ""
             echo "=== Install / refresh hub page pack timer ==="
