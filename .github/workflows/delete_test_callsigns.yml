@@ -1,0 +1,53 @@
+name: Delete Test Callsigns
+
+on:
+  workflow_dispatch:
+    inputs:
+      callsigns:
+        description: "Space-separated callsigns to delete (M7TJF is always protected)"
+        required: true
+        default: "G0CEF TEST1"
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete callsigns on production
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            REPO_DIR="/root/ceefax_station"
+            if [ -d "/root/ceefax_station_website/.git" ] && [ ! -d "/root/ceefax_station/.git" ]; then
+              REPO_DIR="/root/ceefax_station_website"
+            fi
+            echo "Using REPO_DIR=${REPO_DIR}"
+            cd "${REPO_DIR}"
+
+            git remote set-url origin https://github.com/thaum-labs/ceefax_station.git
+            git fetch origin
+            git reset --hard origin/main
+
+            set -a
+            # shellcheck disable=SC1091
+            [ -f "${REPO_DIR}/.env" ] && . "${REPO_DIR}/.env"
+            set +a
+
+            if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+              PY="${REPO_DIR}/venv/bin/python"
+            else
+              PY="python3"
+            fi
+
+            echo "Using DB=${CEEFAXWEB_DB:-"(default)"}"
+            # shellcheck disable=SC2086
+            echo "yes" | "${PY}" -m ceefaxweb.scripts.delete_callsigns ${{ github.event.inputs.callsigns }} --keep M7TJF --confirm
+
+            systemctl restart ceefaxweb
+            sleep 2
+            systemctl is-active ceefaxweb
+            echo "Done."
