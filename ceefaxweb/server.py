@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
+from .notify import notify_upload
 from .page_pack_api import RateLimiter, default_pack_dir, get_pack_manifest, pack_zip_path
 
 
@@ -242,6 +243,18 @@ def create_app() -> FastAPI:
         inserted, reason = ingest_log(conn, payload=log, uploader_callsign=up_callsign, uploader_grid=up_grid, source_path=src)
         if inserted:
             await hub.broadcast({"type": "ingested", "reason": reason})
+            # Best-effort owner email; never block or fail the upload response.
+            try:
+                await asyncio.to_thread(
+                    notify_upload,
+                    reason=reason,
+                    uploader_callsign=up_callsign,
+                    uploader_grid=up_grid,
+                    source_path=src,
+                    log=log,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"Warning: upload notify scheduling failed: {exc}")
         return JSONResponse({"ok": True, "inserted": inserted, "reason": reason})
 
     @app.websocket("/ws")

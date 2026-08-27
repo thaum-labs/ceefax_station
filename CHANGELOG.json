@@ -6,6 +6,7 @@
       "date": "2026-07-31",
       "version": "0.1.4-alpha",
       "changes": [
+        "Email the site owner via Resend when a station uploads a new TX/RX log (skips sample data; cooldown to avoid floods)",
         "Windows app can update itself from GitHub Releases (viewer U key or `ceefaxstation update`)",
         "Self-update downloads the latest Setup installer and upgrades in place (no uninstall)",
         "`ceefaxstation update --check` reports whether a newer release is available"
@@ -37,6 +38,7 @@
       "changes": [
         "Improved the map legend: stations vs links, listening-only (blue), partial as diagonal split, dashed TX→RX link swatches",
         "Slowed hub page-pack refresh to every 2 hours and added provider cache/pacing for free API rate limits",
+        "Email the site owner via Resend when a station uploads a new TX/RX log (skips sample data; cooldown to avoid floods)",
         "Added map style picker: Street (light), CARTO light, CARTO dark, and topographic (choice is remembered)",
         "Default map style is Street (light); dark map is optional",
         "Refreshed the public map mock dataset with a new UK demo network (HF/VHF/UHF)",
