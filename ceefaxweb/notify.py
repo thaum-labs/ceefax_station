@@ -22,7 +22,10 @@ def notify_config() -> dict[str, Any]:
     """Return resolved notify settings (empty api_key means disabled)."""
     api_key = (os.environ.get("RESEND_API_KEY") or "").strip()
     to_raw = (os.environ.get("CEEFAXWEB_NOTIFY_TO") or "tobias.j.franklin@gmail.com").strip()
-    from_addr = (os.environ.get("CEEFAXWEB_NOTIFY_FROM") or "").strip()
+    # Resend allows delivered@resend.dev without verifying your own domain.
+    from_addr = (
+        os.environ.get("CEEFAXWEB_NOTIFY_FROM") or "Ceefax Station <delivered@resend.dev>"
+    ).strip()
     cooldown = float(os.environ.get("CEEFAXWEB_NOTIFY_COOLDOWN_SECONDS") or "120")
     recipients = [part.strip() for part in to_raw.split(",") if part.strip()]
     return {

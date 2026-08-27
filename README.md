@@ -256,7 +256,8 @@ python -m pytest
 ```bash
 RESEND_API_KEY=re_...
 CEEFAXWEB_NOTIFY_TO=you@example.com
-CEEFAXWEB_NOTIFY_FROM=Ceefax Station <notify@your-verified-domain>
+# optional — defaults to Ceefax Station <delivered@resend.dev>
+# CEEFAXWEB_NOTIFY_FROM=Ceefax Station <notify@your-verified-domain>
 # optional: seconds between emails for the same callsign+reason (default 120)
 # CEEFAXWEB_NOTIFY_COOLDOWN_SECONDS=120
 ```

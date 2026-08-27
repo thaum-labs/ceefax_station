@@ -43,6 +43,15 @@ def test_notify_disabled_without_config() -> None:
     assert result == {"ok": False, "skipped": "not_configured"}
 
 
+def test_notify_default_from_is_resend_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESEND_API_KEY", "re_test")
+    monkeypatch.delenv("CEEFAXWEB_NOTIFY_FROM", raising=False)
+    cfg = notify.notify_config()
+    assert cfg["enabled"] is True
+    assert cfg["from"] == "Ceefax Station <delivered@resend.dev>"
+    assert cfg["to"] == ["tobias.j.franklin@gmail.com"]
+
+
 def test_notify_skips_sample_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
     monkeypatch.setenv("CEEFAXWEB_NOTIFY_FROM", "Ceefax <notify@example.com>")
