@@ -16,6 +16,7 @@ RESEND_API_URL = "https://api.resend.com/emails"
 
 # In-process cooldown so a busy uploader does not flood the inbox.
 _last_notify_at: dict[str, float] = {}
+_warned_not_configured = False
 
 
 def notify_config() -> dict[str, Any]:
@@ -128,6 +129,10 @@ def notify_upload(
 
         cfg = notify_config()
         if not cfg["enabled"]:
+            global _warned_not_configured
+            if not _warned_not_configured:
+                print("Warning: upload notify skipped (RESEND_API_KEY not configured)")
+                _warned_not_configured = True
             return {"ok": False, "skipped": "not_configured"}
 
         key = _cooldown_key(uploader_callsign, reason)

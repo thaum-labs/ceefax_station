@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
-from .notify import notify_upload
+from .envfile import load_repo_dotenv
+from .notify import notify_config, notify_upload
 from .page_pack_api import RateLimiter, default_pack_dir, get_pack_manifest, pack_zip_path
 
 
@@ -50,7 +51,8 @@ async def periodic_cleanup(conn: sqlite3.Connection) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup — pull unset keys from repo `.env` (RESEND_API_KEY, CEEFAXWEB_DB, …)
+    load_repo_dotenv(_repo_root())
     db_path = Path(os.environ.get("CEEFAXWEB_DB", "")).expanduser() if os.environ.get("CEEFAXWEB_DB") else default_db_path(_repo_root())
     conn = connect(db_path)
     init_db(conn)
@@ -61,6 +63,12 @@ async def lifespan(app: FastAPI):
     app.state.page_pack_dir = default_pack_dir(_repo_root())
     # Public pack download: 30 requests / minute / client IP
     app.state.page_pack_limiter = RateLimiter(limit=30, window_seconds=60.0)
+
+    cfg = notify_config()
+    if cfg["enabled"]:
+        print(f"Upload email notify enabled → {', '.join(cfg['to'])}")
+    else:
+        print("Upload email notify disabled (set RESEND_API_KEY in repo .env and restart)")
     
     # Run cleanup on startup (best effort - don't block if it fails)
     try:

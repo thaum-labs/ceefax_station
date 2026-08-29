@@ -1,7 +1,14 @@
 {
-  "current_version": "0.1.4-alpha",
+  "current_version": "0.1.5-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-08-29",
+      "version": "0.1.5-alpha",
+      "changes": [
+        "Load Resend / notify settings from the server repo `.env` on startup so upload emails work without relying on systemd EnvironmentFile alone"
+      ]
+    },
     {
       "date": "2026-07-31",
       "version": "0.1.4-alpha",

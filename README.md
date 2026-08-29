@@ -251,7 +251,10 @@ python -m pytest
 
 **Hub page pack note:** the official site refreshes shared teletext pages about every **2 hours**. That cadence (plus provider cache TTLs and request pacing) is sized for free API rate limits used by the hub — notably football-data.org (10 req/min), Guardian developer (500/day), Lottery Results Feed free (100/month), and Open-Meteo (10k/day). Stations still pull the published pack; they do not need those API keys.
 
-**Upload email alerts (site owner):** set these on the server `.env` and restart `ceefaxweb` to get an email whenever a station uploads a new TX/RX log:
+**Upload email alerts (site owner):** on the DigitalOcean box the live checkout is
+`/root/ceefax_station` (not `ceefax_station_website`). Put these in that repo’s
+`.env`, then `systemctl restart ceefaxweb`. The web process loads unset keys from
+`.env` on startup:
 
 ```bash
 RESEND_API_KEY=re_...
