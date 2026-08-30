@@ -367,11 +367,6 @@ def _since_sql_key(dt: datetime) -> str:
     return _utc_iso_z(dt).replace("Z", "")
 
 
-def _seen_in_window(iso: str | None, since_dt: datetime) -> bool:
-    parsed = _parse_iso(iso)
-    return parsed is not None and parsed >= since_dt
-
-
 def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = "") -> dict[str, Any]:
     since_dt = _range_to_since(range_key)
     since = _utc_iso_z(since_dt)
@@ -483,6 +478,23 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
         for r in conn.execute(rx_query, rx_params).fetchall()
     }
 
+    # TX/RX rows can outlive a deleted stations row (orphan sweep / NULL last_seen).
+    known = {(s.get("callsign") or "").strip().upper() for s in stations}
+    for cs in set(tx_pages_unique) | set(rx_pages_unique):
+        cs = (cs or "").strip().upper()
+        if cs and cs not in known:
+            stations.append(
+                {
+                    "callsign": cs,
+                    "grid": None,
+                    "lat": None,
+                    "lon": None,
+                    "first_seen_utc": None,
+                    "last_seen_utc": None,
+                }
+            )
+            known.add(cs)
+
     # Filter stations to only those with activity on the selected band (if filtering)
     filtered_stations = []
     for s in stations:
@@ -494,15 +506,9 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
         if freq_pattern and tx_count == 0 and rx_count == 0:
             continue
 
-        # Time frame applies to the station itself (last/first seen), not only
-        # TX/RX rows. A station uploaded 2 days ago must reappear on 7d/30d
-        # even if it has no pages in the last 24 hours (listening-only).
-        if tx_count == 0 and rx_count == 0:
-            if not (
-                _seen_in_window(s.get("last_seen_utc"), since_dt)
-                or _seen_in_window(s.get("first_seen_utc"), since_dt)
-            ):
-                continue
+        # Keep every retained station on the map. Time Frame only changes
+        # TX/RX activity (green vs listening-only), so a UK station last seen
+        # a few days ago still appears on the default 24h view.
         
         grid = (s.get("grid") or "").strip().upper()
         if grid:
@@ -663,6 +669,91 @@ def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: 
         "pages_rx_ok": ok,
         "rows": table_rows,
     }
+
+
+def rebuild_stations_from_logs(conn: sqlite3.Connection) -> int:
+    """
+    Recreate missing station rows from ingested logs / TX / RX.
+
+    Deploy used to delete listening-only stations (no TX/RX rows). Those
+    uploads still live in ingested_logs; restore them so callsigns like
+    G0CER reappear on the map after restart.
+    """
+    touched = 0
+
+    def _note(callsign: str | None, grid: str | None, when: datetime | None) -> None:
+        nonlocal touched
+        cs = (callsign or "").strip().upper()
+        if not cs:
+            return
+        upsert_station(conn, callsign=cs, grid=grid, seen_at=when)
+        touched += 1
+
+    rows = conn.execute(
+        "SELECT callsign, source_path, observed_at_utc, payload_json FROM ingested_logs"
+    ).fetchall()
+    for row in rows:
+        src = str(row["source_path"] or "")
+        if src.startswith("sample:"):
+            continue
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(payload, dict):
+            continue
+        observed = _parse_iso(row["observed_at_utc"]) or datetime.now(timezone.utc)
+        event = (
+            _parse_iso(str(payload.get("completed_at") or ""))
+            or _parse_iso(str(payload.get("generated_at") or ""))
+            or _parse_iso(str(payload.get("updated_at") or ""))
+            or _parse_iso(str(payload.get("started_at") or ""))
+            or observed
+        )
+        station_cs = str(payload.get("station_callsign") or "").strip().upper() or None
+        listener_cs = str(payload.get("listener_callsign") or "").strip().upper() or None
+        station_grid = str(payload.get("station_grid") or "").strip().upper() or None
+        listener_grid = str(payload.get("listener_grid") or "").strip().upper() or None
+        uploader = str(row["callsign"] or "").strip().upper() or None
+        uploader_grid = None
+        if uploader and uploader == station_cs:
+            uploader_grid = station_grid
+        elif uploader and uploader == listener_cs:
+            uploader_grid = listener_grid
+
+        _note(station_cs, station_grid, event)
+        _note(listener_cs, listener_grid, event)
+        if uploader and uploader not in {station_cs, listener_cs}:
+            _note(uploader, uploader_grid, event)
+
+    for row in conn.execute(
+        "SELECT tx_callsign AS cs, MAX(generated_at_utc) AS ts FROM transmissions GROUP BY tx_callsign"
+    ):
+        cs = (row["cs"] or "").strip().upper()
+        if not cs:
+            continue
+        if conn.execute("SELECT 1 FROM stations WHERE callsign = ?", (cs,)).fetchone():
+            continue
+        _note(cs, None, _parse_iso(row["ts"]))
+
+    for row in conn.execute(
+        """
+        SELECT rx_callsign AS cs, MAX(received_at_utc) AS ts FROM receptions
+        GROUP BY rx_callsign
+        UNION ALL
+        SELECT tx_callsign AS cs, MAX(received_at_utc) AS ts FROM receptions
+        WHERE tx_callsign IS NOT NULL AND tx_callsign != ''
+        GROUP BY tx_callsign
+        """
+    ):
+        cs = (row["cs"] or "").strip().upper()
+        if not cs:
+            continue
+        if conn.execute("SELECT 1 FROM stations WHERE callsign = ?", (cs,)).fetchone():
+            continue
+        _note(cs, None, _parse_iso(row["ts"]))
+
+    return touched
 
 
 def cleanup_old_data(conn: sqlite3.Connection) -> dict[str, int]:

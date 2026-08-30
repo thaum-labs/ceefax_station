@@ -12,7 +12,16 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .db import cleanup_old_data, connect, default_db_path, ingest_log, init_db, query_link_detail, query_map
+from .db import (
+    cleanup_old_data,
+    connect,
+    default_db_path,
+    ingest_log,
+    init_db,
+    query_link_detail,
+    query_map,
+    rebuild_stations_from_logs,
+)
 from .envfile import load_repo_dotenv
 from .notify import notify_config, notify_upload
 from .page_pack_api import RateLimiter, default_pack_dir, get_pack_manifest, pack_zip_path
@@ -77,6 +86,13 @@ async def lifespan(app: FastAPI):
             print(f"Startup database cleanup: deleted {deleted}")
     except Exception:  # noqa: BLE001
         pass  # Cleanup is best effort, don't fail startup
+
+    try:
+        restored = rebuild_stations_from_logs(conn)
+        if restored:
+            print(f"Restored/updated {restored} station row(s) from stored logs")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: station rebuild from logs failed: {exc}")
     
     # Start periodic cleanup task
     cleanup_task = asyncio.create_task(periodic_cleanup(conn))

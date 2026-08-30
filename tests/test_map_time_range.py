@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ceefaxweb.db import connect, ingest_log, init_db, query_link_detail, query_map
+from ceefaxweb.db import (
+    connect,
+    ingest_log,
+    init_db,
+    query_link_detail,
+    query_map,
+    rebuild_stations_from_logs,
+)
 from ceefaxweb.scripts.delete_sample_data import delete_sample_data
 
 
@@ -65,10 +72,12 @@ def test_station_older_than_24h_reappears_on_7d_and_30d(tmp_path: Path) -> None:
     m7 = query_map(conn, range_key="7d")
     m30 = query_map(conn, range_key="30d")
 
-    assert "G0OLD" not in _callsigns(m24)
+    assert "G0OLD" in _callsigns(m24)
     assert "G0OLD" in _callsigns(m7)
     assert "G0OLD" in _callsigns(m30)
 
+    st24 = next(s for s in m24["stations"] if s["callsign"] == "G0OLD")
+    assert st24["is_tx"] is False
     st7 = next(s for s in m7["stations"] if s["callsign"] == "G0OLD")
     assert st7["is_tx"] is True
     assert st7["tx_pages_unique"] == 1
@@ -84,7 +93,7 @@ def test_listening_only_station_follows_last_seen_window(tmp_path: Path) -> None
     m24 = query_map(conn, range_key="24h")
     m7 = query_map(conn, range_key="7d")
 
-    assert "M7WAIT" not in _callsigns(m24)
+    assert "M7WAIT" in _callsigns(m24)
     assert "M7WAIT" in _callsigns(m7)
     st = next(s for s in m7["stations"] if s["callsign"] == "M7WAIT")
     assert st["is_tx"] is False
@@ -113,15 +122,19 @@ def test_tx_timestamp_with_offset_suffix_counts_in_7d(tmp_path: Path) -> None:
     conn.close()
 
 
-def test_station_20_days_ago_only_in_30d(tmp_path: Path) -> None:
+def test_station_20_days_ago_is_tx_only_on_30d(tmp_path: Path) -> None:
     conn = connect(tmp_path / "t.sqlite3")
     init_db(conn)
     twenty_days_ago = datetime.now(timezone.utc) - timedelta(days=20)
     _seed_station(conn, callsign="G4OLD", seen_at=twenty_days_ago, tx_at=twenty_days_ago)
 
-    assert "G4OLD" not in _callsigns(query_map(conn, range_key="24h"))
-    assert "G4OLD" not in _callsigns(query_map(conn, range_key="7d"))
-    assert "G4OLD" in _callsigns(query_map(conn, range_key="30d"))
+    assert "G4OLD" in _callsigns(query_map(conn, range_key="24h"))
+    assert next(s for s in query_map(conn, range_key="24h")["stations"] if s["callsign"] == "G4OLD")["is_tx"] is False
+    assert "G4OLD" in _callsigns(query_map(conn, range_key="7d"))
+    assert next(s for s in query_map(conn, range_key="7d")["stations"] if s["callsign"] == "G4OLD")["is_tx"] is False
+    m30 = query_map(conn, range_key="30d")
+    assert "G4OLD" in _callsigns(m30)
+    assert next(s for s in m30["stations"] if s["callsign"] == "G4OLD")["is_tx"] is True
     conn.close()
 
 
@@ -148,11 +161,54 @@ def test_ingested_old_tx_shows_on_7d_not_24h(tmp_path: Path) -> None:
         source_path="logs_tx/old.json",
     )
     assert inserted and reason == "tx_ingested"
-    assert "G0OLD" not in _callsigns(query_map(conn, range_key="24h"))
+    assert "G0OLD" in _callsigns(query_map(conn, range_key="24h"))
+    assert next(s for s in query_map(conn, range_key="24h")["stations"] if s["callsign"] == "G0OLD")["is_tx"] is False
     m7 = query_map(conn, range_key="7d")
     assert "G0OLD" in _callsigns(m7)
     st = next(s for s in m7["stations"] if s["callsign"] == "G0OLD")
     assert st["is_tx"] is True
+    conn.close()
+
+
+def test_rebuild_restores_deleted_uk_station_from_log(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "t.sqlite3")
+    init_db(conn)
+    two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
+    ts = _iso_z(two_days_ago)
+    inserted, reason = ingest_log(
+        conn,
+        payload={
+            "schema": 1,
+            "kind": "ceefax_tx_report",
+            "tx_id": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+            "station_callsign": "G0CER",
+            "station_grid": "IO83QE",
+            "generated_at": ts,
+            "completed_at": ts,
+            "page_ids": ["101"],
+            "frequency": "144.800 MHz (2m)",
+        },
+        uploader_callsign="G0CER",
+        uploader_grid="IO83QE",
+        source_path="logs_tx/g0cer.json",
+    )
+    assert inserted and reason == "tx_ingested"
+    conn.execute("DELETE FROM stations WHERE callsign = ?", ("G0CER",))
+    conn.commit()
+    assert conn.execute("SELECT 1 FROM stations WHERE callsign = ?", ("G0CER",)).fetchone() is None
+
+    n = rebuild_stations_from_logs(conn)
+    assert n >= 1
+    row = conn.execute(
+        "SELECT callsign, grid FROM stations WHERE callsign = ?",
+        ("G0CER",),
+    ).fetchone()
+    assert row is not None
+    assert row["grid"] == "IO83QE"
+    m24 = query_map(conn, range_key="24h")
+    assert "G0CER" in _callsigns(m24)
+    st = next(s for s in m24["stations"] if s["callsign"] == "G0CER")
+    assert st.get("bbox")
     conn.close()
 
 
