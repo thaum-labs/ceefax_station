@@ -12,8 +12,16 @@ from typing import Any, Iterable
 from .maidenhead import haversine_km, maidenhead_to_latlon, maidenhead_bbox
 
 
+def _utc_iso_z(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return _utc_iso_z(datetime.now(timezone.utc))
 
 
 def _parse_iso(dt: str | None) -> datetime | None:
@@ -133,7 +141,13 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def upsert_station(conn: sqlite3.Connection, *, callsign: str, grid: str | None) -> None:
+def upsert_station(
+    conn: sqlite3.Connection,
+    *,
+    callsign: str,
+    grid: str | None,
+    seen_at: datetime | None = None,
+) -> None:
     cs = (callsign or "").strip().upper()
     if not cs:
         return
@@ -141,17 +155,34 @@ def upsert_station(conn: sqlite3.Connection, *, callsign: str, grid: str | None)
     latlon = maidenhead_to_latlon(grid2) if grid2 else None
     lat = latlon[0] if latlon else None
     lon = latlon[1] if latlon else None
-    now = _utcnow_iso()
+    seen_dt = seen_at or datetime.now(timezone.utc)
+    if seen_dt.tzinfo is None:
+        seen_dt = seen_dt.replace(tzinfo=timezone.utc)
+    else:
+        seen_dt = seen_dt.astimezone(timezone.utc)
+    seen_iso = _utc_iso_z(seen_dt)
 
-    # Preserve first_seen, update last_seen; update grid/lat/lon if provided.
-    row = conn.execute("SELECT first_seen_utc, grid FROM stations WHERE callsign = ?", (cs,)).fetchone()
+    # Preserve earliest first_seen, latest last_seen; update grid/lat/lon if provided.
+    row = conn.execute(
+        "SELECT first_seen_utc, last_seen_utc, grid FROM stations WHERE callsign = ?",
+        (cs,),
+    ).fetchone()
     if row is None:
         conn.execute(
             "INSERT OR REPLACE INTO stations(callsign, grid, lat, lon, first_seen_utc, last_seen_utc) VALUES (?,?,?,?,?,?)",
-            (cs, grid2, lat, lon, now, now),
+            (cs, grid2, lat, lon, seen_iso, seen_iso),
         )
     else:
-        first_seen = row["first_seen_utc"] or now
+        old_first = _parse_iso(row["first_seen_utc"])
+        if old_first is None or seen_dt < old_first:
+            first_seen = seen_iso
+        else:
+            first_seen = row["first_seen_utc"] or seen_iso
+        old_last = _parse_iso(row["last_seen_utc"])
+        if old_last is not None and old_last > seen_dt:
+            last_seen = row["last_seen_utc"] or seen_iso
+        else:
+            last_seen = seen_iso
         # Only overwrite grid if new grid provided.
         use_grid = grid2 if grid2 else row["grid"]
         use_latlon = maidenhead_to_latlon(use_grid) if use_grid else None
@@ -159,7 +190,7 @@ def upsert_station(conn: sqlite3.Connection, *, callsign: str, grid: str | None)
         use_lon = use_latlon[1] if use_latlon else None
         conn.execute(
             "UPDATE stations SET grid=?, lat=?, lon=?, first_seen_utc=?, last_seen_utc=? WHERE callsign=?",
-            (use_grid, use_lat, use_lon, first_seen, now, cs),
+            (use_grid, use_lat, use_lon, first_seen, last_seen, cs),
         )
     conn.commit()
 
@@ -193,9 +224,17 @@ def ingest_log(
     except sqlite3.IntegrityError:
         return (False, "duplicate")
 
+    event_at = (
+        _parse_iso(str(payload.get("completed_at") or ""))
+        or _parse_iso(str(payload.get("generated_at") or ""))
+        or _parse_iso(str(payload.get("updated_at") or ""))
+        or _parse_iso(str(payload.get("started_at") or ""))
+        or datetime.now(timezone.utc)
+    )
+
     # Update uploader station info (grid is authoritative for that station).
     if uploader_callsign:
-        upsert_station(conn, callsign=uploader_callsign, grid=uploader_grid)
+        upsert_station(conn, callsign=uploader_callsign, grid=uploader_grid, seen_at=event_at)
 
     # Optional station grid hints inside the payload (useful for sample data and
     # for remote ingestion where the uploader isn't the same as station_callsign).
@@ -206,12 +245,8 @@ def ingest_log(
     if payload.get("kind") == "ceefax_tx_report" and payload.get("tx_id") and payload.get("station_callsign"):
         tx_id = str(payload.get("tx_id"))
         tx_cs = str(payload.get("station_callsign")).strip().upper()
-        gen = (
-            _parse_iso(str(payload.get("completed_at") or ""))
-            or _parse_iso(str(payload.get("generated_at") or ""))
-            or datetime.now(timezone.utc)
-        )
-        gen_iso = gen.isoformat().replace("+00:00", "Z")
+        gen = event_at
+        gen_iso = _utc_iso_z(gen)
         tx_freq = (str(payload.get("frequency") or payload.get("freq") or "").strip() or None)
 
         upsert_station(
@@ -221,6 +256,7 @@ def ingest_log(
                 station_grid
                 or (uploader_grid if tx_cs == (uploader_callsign or "").strip().upper() else None)
             ),
+            seen_at=gen,
         )
 
         pages = payload.get("page_ids") or []
@@ -257,9 +293,10 @@ def ingest_log(
                 listener_grid
                 or (uploader_grid if rx_cs == (uploader_callsign or "").strip().upper() else None)
             ),
+            seen_at=started,
         )
         if tx_cs:
-            upsert_station(conn, callsign=tx_cs, grid=station_grid)
+            upsert_station(conn, callsign=tx_cs, grid=station_grid, seen_at=started)
 
         # Process pages_decoded if present
         pages_decoded = payload.get("pages_decoded") or {}
@@ -281,7 +318,7 @@ def ingest_log(
                         rx_at = started + timedelta(seconds=float(s))
                 except Exception:  # noqa: BLE001
                     rx_at = started
-                rx_at_iso = rx_at.isoformat().replace("+00:00", "Z")
+                rx_at_iso = _utc_iso_z(rx_at)
 
                 # Best-effort per-page dB reading and frequency
                 try:
@@ -316,8 +353,29 @@ def _range_to_since(range_key: str) -> datetime:
     return now - timedelta(hours=24)
 
 
+def _sql_ts_key(col: str) -> str:
+    """
+    Strip Z / +00:00 so ISO timestamps compare lexicographically.
+
+    Stored rows mix '...Z' and '...+00:00' depending on ingest path; a raw
+    string compare against a Z-suffixed cutoff can exclude in-window rows.
+    """
+    return f"replace(replace(ifnull({col}, ''), 'Z', ''), '+00:00', '')"
+
+
+def _since_sql_key(dt: datetime) -> str:
+    return _utc_iso_z(dt).replace("Z", "")
+
+
+def _seen_in_window(iso: str | None, since_dt: datetime) -> bool:
+    parsed = _parse_iso(iso)
+    return parsed is not None and parsed >= since_dt
+
+
 def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = "") -> dict[str, Any]:
-    since = _range_to_since(range_key).isoformat().replace("+00:00", "Z")
+    since_dt = _range_to_since(range_key)
+    since = _utc_iso_z(since_dt)
+    since_key = _since_sql_key(since_dt)
     
     # Build frequency filter for band
     freq_pattern: str | None = None
@@ -343,18 +401,18 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
     # Therefore, for band filtering we:
     # - Prefer r.freq when present
     # - Else fall back to any TX row matching (tx_callsign, page_id) in the same time window
-    link_query = """
+    link_query = f"""
         SELECT
           r.tx_callsign AS tx_callsign,
           r.rx_callsign AS rx_callsign,
           COUNT(*) AS rx_pages_ok,
           COUNT(DISTINCT r.page_id) AS rx_pages_ok_unique
         FROM receptions r
-        WHERE r.received_at_utc >= ?
+        WHERE {_sql_ts_key("r.received_at_utc")} >= ?
     """
-    link_params: list[Any] = [since]
+    link_params: list[Any] = [since_key]
     if freq_pattern:
-        link_query += """
+        link_query += f"""
           AND (
             r.freq LIKE ?
             OR EXISTS (
@@ -362,12 +420,12 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
               FROM transmissions t
               WHERE t.tx_callsign = r.tx_callsign
                 AND t.page_id = r.page_id
-                AND t.generated_at_utc >= ?
+                AND {_sql_ts_key("t.generated_at_utc")} >= ?
                 AND t.freq LIKE ?
             )
           )
         """
-        link_params.extend([freq_pattern, since, freq_pattern])
+        link_params.extend([freq_pattern, since_key, freq_pattern])
     link_query += " GROUP BY r.tx_callsign, r.rx_callsign"
     
     links = [
@@ -376,12 +434,12 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
     ]
 
     # TX unique page set size per callsign (for completeness checks).
-    tx_query = """
+    tx_query = f"""
         SELECT tx_callsign, COUNT(DISTINCT page_id) AS tx_pages_unique
         FROM transmissions
-        WHERE generated_at_utc >= ?
+        WHERE {_sql_ts_key("generated_at_utc")} >= ?
     """
-    tx_params: list[Any] = [since]
+    tx_params: list[Any] = [since_key]
     if freq_pattern:
         tx_query += " AND freq LIKE ?"
         tx_params.append(freq_pattern)
@@ -409,12 +467,12 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
                 inbound_partial.add(rx)
 
     # RX activity per station: how many unique pages decoded in the window.
-    rx_query = """
+    rx_query = f"""
         SELECT rx_callsign, COUNT(DISTINCT page_id) AS rx_pages_unique
         FROM receptions
-        WHERE received_at_utc >= ?
+        WHERE {_sql_ts_key("received_at_utc")} >= ?
     """
-    rx_params: list[Any] = [since]
+    rx_params: list[Any] = [since_key]
     if freq_pattern:
         rx_query += " AND freq LIKE ?"
         rx_params.append(freq_pattern)
@@ -432,9 +490,19 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
         tx_count = int(tx_pages_unique.get(cs, 0))
         rx_count = int(rx_pages_unique.get(cs, 0))
         
-        # If band filter is active, only include stations with activity on that band
+        # Band filter: only stations with TX/RX on that band in this window.
         if freq_pattern and tx_count == 0 and rx_count == 0:
             continue
+
+        # Time frame applies to the station itself (last/first seen), not only
+        # TX/RX rows. A station uploaded 2 days ago must reappear on 7d/30d
+        # even if it has no pages in the last 24 hours (listening-only).
+        if tx_count == 0 and rx_count == 0:
+            if not (
+                _seen_in_window(s.get("last_seen_utc"), since_dt)
+                or _seen_in_window(s.get("first_seen_utc"), since_dt)
+            ):
+                continue
         
         grid = (s.get("grid") or "").strip().upper()
         if grid:
@@ -463,36 +531,38 @@ def query_map(conn: sqlite3.Connection, *, range_key: str, band_filter: str = ""
 
 
 def query_link_detail(conn: sqlite3.Connection, *, tx: str, rx: str, range_key: str) -> dict[str, Any]:
-    since = _range_to_since(range_key).isoformat().replace("+00:00", "Z")
+    since_dt = _range_to_since(range_key)
+    since = _utc_iso_z(since_dt)
+    since_key = _since_sql_key(since_dt)
     tx_cs = (tx or "").strip().upper()
     rx_cs = (rx or "").strip().upper()
 
     sent_rows = conn.execute(
-        """
+        f"""
         SELECT
           t.page_id AS page_id,
           MAX(t.generated_at_utc) AS tx_at_utc,
           MAX(t.freq) AS tx_freq
         FROM transmissions t
-        WHERE t.tx_callsign = ? AND t.generated_at_utc >= ?
+        WHERE t.tx_callsign = ? AND {_sql_ts_key("t.generated_at_utc")} >= ?
         GROUP BY t.page_id
         ORDER BY t.page_id
         """,
-        (tx_cs, since),
+        (tx_cs, since_key),
     ).fetchall()
 
     rx_rows = conn.execute(
-        """
+        f"""
         SELECT
           r.page_id AS page_id,
           MAX(r.received_at_utc) AS rx_at_utc,
           MAX(r.freq) AS rx_freq,
           MAX(r.rx_db) AS rx_db
         FROM receptions r
-        WHERE r.tx_callsign = ? AND r.rx_callsign = ? AND r.received_at_utc >= ?
+        WHERE r.tx_callsign = ? AND r.rx_callsign = ? AND {_sql_ts_key("r.received_at_utc")} >= ?
         GROUP BY r.page_id
         """,
-        (tx_cs, rx_cs, since),
+        (tx_cs, rx_cs, since_key),
     ).fetchall()
 
     rx_by_page = {r["page_id"]: dict(r) for r in rx_rows}

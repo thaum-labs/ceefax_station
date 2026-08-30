@@ -120,19 +120,9 @@ def delete_sample_data(db_path: Path) -> dict[str, int]:
                     deleted_counts["stations"] += cursor.rowcount
                     print(f"Deleted station: {callsign}")
 
-        # Sweep any leftover orphan stations with no TX/RX activity (e.g. old SAMPLE uploader)
-        orphans = conn.execute(
-            """
-            SELECT callsign FROM stations s
-            WHERE NOT EXISTS (SELECT 1 FROM transmissions t WHERE t.tx_callsign = s.callsign)
-              AND NOT EXISTS (SELECT 1 FROM receptions r WHERE r.rx_callsign = s.callsign OR r.tx_callsign = s.callsign)
-            """
-        ).fetchall()
-        for row in orphans:
-            cursor = conn.execute("DELETE FROM stations WHERE callsign = ?", (row["callsign"],))
-            if cursor.rowcount > 0:
-                deleted_counts["stations"] += cursor.rowcount
-                print(f"Deleted orphan station: {row['callsign']}")
+        # Do not delete every station without TX/RX rows. Listening-only uploads
+        # register a station with no transmissions/receptions; wiping those on
+        # deploy made real stations vanish after the 24h map window.
         
         conn.commit()
         print("\nSample data deletion complete!")

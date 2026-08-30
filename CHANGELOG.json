@@ -1,7 +1,15 @@
 {
-  "current_version": "0.1.5-alpha",
+  "current_version": "0.1.6-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-08-30",
+      "version": "0.1.6-alpha",
+      "changes": [
+        "Time Frame 7-day and 30-day filters show stations last seen in that window, not only the last 24 hours",
+        "Keep listening-only stations when deleting leftover sample data"
+      ]
+    },
     {
       "date": "2026-08-30",
       "version": "0.1.5-alpha",

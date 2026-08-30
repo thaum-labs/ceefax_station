@@ -166,12 +166,18 @@ def create_app() -> FastAPI:
     @app.get("/api/map")
     def api_map(request: Request, range: str = "24h", band: str = "") -> JSONResponse:  # noqa: A002
         conn = request.app.state.db_conn
-        return JSONResponse(query_map(conn, range_key=range, band_filter=band))
+        return JSONResponse(
+            query_map(conn, range_key=range, band_filter=band),
+            headers=_NO_CACHE_HEADERS,
+        )
 
     @app.get("/api/link")
     def api_link(request: Request, tx: str, rx: str, range: str = "24h") -> JSONResponse:  # noqa: A002
         conn = request.app.state.db_conn
-        return JSONResponse(query_link_detail(conn, tx=tx, rx=rx, range_key=range))
+        return JSONResponse(
+            query_link_detail(conn, tx=tx, rx=rx, range_key=range),
+            headers=_NO_CACHE_HEADERS,
+        )
 
     @app.get("/api/changelog")
     def api_changelog() -> JSONResponse:
