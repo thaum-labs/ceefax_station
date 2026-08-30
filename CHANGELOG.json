@@ -6,10 +6,15 @@
       "date": "2026-08-30",
       "version": "0.1.5-alpha",
       "changes": [
-        "Debian package (`ceefax-station.deb`) so the station app can be installed on Linux",
-        "Packaged Linux installs keep writable pages and config in ~/.ceefax_station",
-        "Website Download Linux (`/download/linux`) redirects to the GitHub `ceefax-station.deb` alias",
-        "Self-update (`U` / `ceefaxstation update`) installs the Debian package on Linux"
+        "Debian package so Ceefax Station can be installed on Linux (`sudo apt install ./ceefax-station.deb`)",
+        "Shipped installable packages in `installers/`: `ceefax-station.deb` and `ceefax-station_0.1.5~alpha-1_all.deb`",
+        "Published Git tag and GitHub Release **v0.1.5** with the Linux `.deb` (plus Windows `CeefaxStation-Setup.exe` so existing downloads keep working)",
+        "README Quick start documents Linux install from `main` and from GitHub Releases / ceefaxstation.com/download/linux",
+        "Packaged Linux installs keep writable pages, config, cache, and logs in `~/.ceefax_station`",
+        "First-run defaults: `config.default.toml` and `radio_config.default.json` are seeded on install",
+        "Website **Download Linux** (`/download/linux`) redirects to the GitHub `ceefax-station.deb` alias",
+        "Self-update (`U` in the viewer or `ceefaxstation update`) installs the Debian package on Linux",
+        "CI builds the `.deb` and attaches it to the v0.1.5 release"
       ]
     },
     {
