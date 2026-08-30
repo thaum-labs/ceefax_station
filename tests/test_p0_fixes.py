@@ -69,23 +69,26 @@ def test_normalize_page_id_accepts_string_subpage() -> None:
 
 
 def test_query_link_detail_includes_rx_only_pages(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
     from ceefaxweb.db import connect, init_db, query_link_detail
 
     db_path = tmp_path / "t.sqlite3"
     conn = connect(db_path)
     init_db(conn)
 
+    seen = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat().replace("+00:00", "Z")
     conn.execute(
         "INSERT INTO stations(callsign, grid, lat, lon, first_seen_utc, last_seen_utc) VALUES (?,?,?,?,?,?)",
-        ("TX1", "IO91WM", 51.5, -0.1, "2026-01-01T00:00:00Z", "2026-07-28T12:00:00Z"),
+        ("TX1", "IO91WM", 51.5, -0.1, "2026-01-01T00:00:00Z", seen),
     )
     conn.execute(
         "INSERT INTO stations(callsign, grid, lat, lon, first_seen_utc, last_seen_utc) VALUES (?,?,?,?,?,?)",
-        ("RX1", "IO91XN", 51.6, -0.05, "2026-01-01T00:00:00Z", "2026-07-28T12:00:00Z"),
+        ("RX1", "IO91XN", 51.6, -0.05, "2026-01-01T00:00:00Z", seen),
     )
     conn.execute(
         "INSERT INTO receptions(rx_callsign, tx_callsign, tx_id, received_at_utc, page_id, freq, rx_db) VALUES (?,?,?,?,?,?,?)",
-        ("RX1", "TX1", "tx-only-rx", "2026-07-28T11:00:00Z", "101", "145.500 MHz", -8.5),
+        ("RX1", "TX1", "tx-only-rx", seen, "101", "145.500 MHz", -8.5),
     )
     conn.commit()
 
