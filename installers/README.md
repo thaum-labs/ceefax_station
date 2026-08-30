@@ -2,6 +2,15 @@
 
 This directory contains installer artifacts for Ceefax Station.
 
+## Current Linux installer
+
+- **ceefax-station_0.1.5~alpha-1_all.deb** — Version 0.1.5-alpha (and `ceefax-station.deb` alias)
+
+```bash
+sudo apt install ./installers/ceefax-station.deb
+ceefaxstation
+```
+
 ## Linux (Debian package)
 
 Build from the repo (Debian, Ubuntu, Raspberry Pi OS):

@@ -172,7 +172,7 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 ## Optional: installers
 
-**Linux:** `https://ceefaxstation.com/download/linux` is the Debian package (`ceefax-station.deb`). See Quick start above.
+**Linux:** there is an installer in [`installers/`](installers/) (`ceefax-station_0.1.5~alpha-1_all.deb`, plus `ceefax-station.deb`). `https://ceefaxstation.com/download/linux` is the same Debian package once published. See Quick start above.
 
 **Windows:** there is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.4.exe`).
 
