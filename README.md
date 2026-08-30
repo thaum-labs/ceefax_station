@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/version-0.1.4--alpha-orange" alt="Version 0.1.4-alpha" />
+  <img src="https://img.shields.io/badge/version-0.1.5--alpha-orange" alt="Version 0.1.5-alpha" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6?logo=linux&logoColor=white" alt="Windows and Linux" />
   <br/>
   <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
@@ -61,15 +61,26 @@ Best way to get the **latest** version: install from GitHub. Installed apps can 
 
 ### Linux (Debian / Ubuntu / Raspberry Pi OS)
 
+Install the Debian package (tag **v0.1.5** / version 0.1.5-alpha):
+
 ```bash
-curl -L -o ceefax-station.deb https://ceefaxstation.com/download/linux
+# From this repo (main)
+curl -L -o ceefax-station.deb \
+  https://github.com/thaum-labs/ceefax_station/raw/main/installers/ceefax-station.deb
 sudo apt install ./ceefax-station.deb
 ceefaxstation
 ```
 
-That installs the `ceefaxstation` command. First run stores config and pages in `~/.ceefax_station`. For live radio receive, also install Dire Wolf: `sudo apt install direwolf alsa-utils`.
+If you already cloned the repo:
 
-You can also build the `.deb` from this repo: `python scripts/build_debian_package.py` — see [`packaging/debian/README.md`](packaging/debian/README.md).
+```bash
+sudo apt install ./installers/ceefax-station.deb
+ceefaxstation
+```
+
+That installs the `ceefaxstation` command. First run stores config and pages in `~/.ceefax_station`. For live radio receive: `sudo apt install direwolf alsa-utils`.
+
+The same file is also the GitHub Release asset `ceefax-station.deb` (website: [ceefaxstation.com/download/linux](https://ceefaxstation.com/download/linux)). To rebuild: `python scripts/build_debian_package.py` — see [`packaging/debian/README.md`](packaging/debian/README.md).
 
 ### Windows
 
@@ -172,11 +183,11 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 ## Optional: installers
 
-**Linux:** there is an installer in [`installers/`](installers/) (`ceefax-station_0.1.5~alpha-1_all.deb`, plus `ceefax-station.deb`). `https://ceefaxstation.com/download/linux` is the same Debian package once published. See Quick start above.
+**Linux (v0.1.5):** [`installers/ceefax-station.deb`](installers/ceefax-station.deb) and [`installers/ceefax-station_0.1.5~alpha-1_all.deb`](installers/ceefax-station_0.1.5~alpha-1_all.deb). Install with `sudo apt install ./installers/ceefax-station.deb`.
 
-**Windows:** there is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.4.exe`).
+**Windows:** [`installers/CeefaxStation-Setup-0.1.4.exe`](installers/CeefaxStation-Setup-0.1.4.exe).
 
-The website **Download Windows** button (`https://ceefaxstation.com/download`) always redirects to the GitHub **latest** release asset named `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. Pushing a new installer to `main` publishes that release automatically (versioned file + stable alias) — see [`installers/README.md`](installers/README.md).
+Website **Download Windows** (`https://ceefaxstation.com/download`) uses the latest GitHub Release asset `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. See [`installers/README.md`](installers/README.md).
 
 Once installed, the app can upgrade itself from GitHub Releases: press **U** in the viewer, or run `ceefaxstation update` (no uninstall required).
 
@@ -262,7 +273,7 @@ Disable automatic uploads with environment variable `CEEFAX_AUTO_UPLOAD=0`.
 ceefax/           station app, page updaters, viewer
 ceefaxstation/    CLI (`python -m ceefaxstation ...`)
 ceefaxweb/        official site source (ceefaxstation.com — not for self-hosting)
-installers/       Windows setup .exe and generated Linux .deb (may lag main)
+installers/       Windows Setup .exe + Linux .deb (current: 0.1.5-alpha / tag v0.1.5)
 packaging/debian/ build notes for the Debian package
 ```
 

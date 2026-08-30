@@ -31,7 +31,11 @@ sudo apt install ./installers/ceefax-station.deb
 ceefaxstation
 ```
 
-Website **Download Linux** (`https://ceefaxstation.com/download/linux`) redirects to the GitHub latest-release asset `ceefax-station.deb`.
+Website **Download Linux** (`https://ceefaxstation.com/download/linux`) redirects to the GitHub latest-release asset `ceefax-station.deb` (tag **v0.1.5**).
+
+Direct from `main`:
+
+https://github.com/thaum-labs/ceefax_station/raw/main/installers/ceefax-station.deb
 
 See [`packaging/debian/README.md`](../packaging/debian/README.md).
 
