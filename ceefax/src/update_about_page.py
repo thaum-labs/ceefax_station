@@ -68,11 +68,11 @@ def get_app_version() -> str:
     Writable LocalAppData is only a fallback so a stale user copy cannot hide upgrades.
     """
     try:
-        candidates: list[Path] = []
-        if getattr(sys, "frozen", False):
-            from .paths import install_root
+        from .paths import install_root, uses_user_data
 
-            # Prefer installer-deployed VERSION beside the EXE.
+        candidates: list[Path] = []
+        if uses_user_data():
+            # Prefer installer-deployed VERSION beside the EXE / package root.
             candidates.append(install_root() / "VERSION")
             # One-file PyInstaller also ships VERSION inside the extract dir.
             meipass = getattr(sys, "_MEIPASS", None)

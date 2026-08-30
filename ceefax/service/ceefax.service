@@ -1,18 +1,16 @@
 [Unit]
-Description=Ceefax Station Broadcast System
-After=network.target sound.target
+Description=Ceefax Station hourly AX.25 audio
+After=network-online.target sound.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust ExecStart to your Python path and project root
-ExecStart=/usr/bin/python3 -m ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 1
-# Set this to the repository root (the directory that contains `ceefax/` and `ceefaxstation/`)
-WorkingDirectory=/home/pi/thaum-public
+# Packaged install (Debian/Ubuntu). For a git checkout, use:
+#   ExecStart=/usr/bin/python3 -m ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 1
+#   WorkingDirectory=/path/to/ceefax_station
+ExecStart=/usr/bin/ceefaxstation tx hourly --refresh-lead 300 --carousel-loops 3 --play --play-loops 1
 Restart=on-failure
-User=pi
-Group=pi
+Environment=CEEFAX_PACKAGED=1
 
 [Install]
-WantedBy=multi-user.target
-
-
+WantedBy=default.target

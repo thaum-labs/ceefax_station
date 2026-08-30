@@ -1,0 +1,33 @@
+[general]
+mode = "ax25_audio"
+page_dir = "pages"
+log_level = "INFO"
+output_dir = "out"
+
+[audio]
+sample_rate = 48000
+symbol_rate = 1200
+frequency_mark = 1200.0
+frequency_space = 2200.0
+amplitude = 0.5
+pre_tone_ms = 300
+post_tone_ms = 300
+vox_hold_ms = 250
+output = "files"
+
+[ax25]
+enabled = true
+callsign = "N0CALL-1"
+kiss_port = "/dev/ttyUSB0"
+baud_rate = 9600
+dest_callsign = "CEEFAX"
+max_info_bytes = 240
+preamble_flags = 150
+inter_frame_flags = 2
+postamble_flags = 20
+loops_per_hour = 3
+refresh_lead_seconds = 180
+
+[carousel]
+page_duration_ms = 1500
+loop_delay_ms = 200

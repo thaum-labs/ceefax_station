@@ -8,7 +8,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/version-0.1.4--alpha-orange" alt="Version 0.1.4-alpha" />
-  <img src="https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6?logo=linux&logoColor=white" alt="Windows and Linux" />
   <br/>
   <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
   <img src="https://img.shields.io/badge/Dire%20Wolf-packet%20radio-2E8B57" alt="Dire Wolf" />
@@ -57,14 +57,32 @@ With Ceefax Station you can:
 
 ## Quick start (recommended)
 
-Best way to get the **latest** version: install from GitHub. Windows installs can also self-update later (`U` in the viewer or `ceefaxstation update`).
+Best way to get the **latest** version: install from GitHub. Installed apps can self-update later (`U` in the viewer or `ceefaxstation update`).
 
-### 1. Install Python 3.11
+### Linux (Debian / Ubuntu / Raspberry Pi OS)
+
+```bash
+curl -L -o ceefax-station.deb https://ceefaxstation.com/download/linux
+sudo apt install ./ceefax-station.deb
+ceefaxstation
+```
+
+That installs the `ceefaxstation` command. First run stores config and pages in `~/.ceefax_station`. For live radio receive, also install Dire Wolf: `sudo apt install direwolf alsa-utils`.
+
+You can also build the `.deb` from this repo: `python scripts/build_debian_package.py` — see [`packaging/debian/README.md`](packaging/debian/README.md).
+
+### Windows
+
+Windows installs can also self-update later (`U` in the viewer or `ceefaxstation update`). A setup EXE is in [`installers/`](installers/) and at [ceefaxstation.com/download](https://ceefaxstation.com/download).
+
+### From source
+
+1. **Install Python 3.11**
 
 - Download: [python.org/downloads](https://www.python.org/downloads/)
 - On Windows: tick **Add Python to PATH**
 
-### 2. Download Ceefax Station
+2. **Download Ceefax Station**
 
 ```bash
 git clone https://github.com/thaum-labs/ceefax_station.git
@@ -73,7 +91,7 @@ cd ceefax_station
 
 No Git? On GitHub click the green **Code → Download ZIP**, then unzip.
 
-### 3. Install packages
+3. **Install packages**
 
 ```bash
 python -m pip install -r ceefax/requirements.txt
@@ -85,7 +103,7 @@ On Windows also run:
 python -m pip install windows-curses
 ```
 
-### 4. Set your station name
+4. **Set your station name**
 
 Edit `ceefax/radio_config.json`:
 
@@ -101,7 +119,7 @@ Edit `ceefax/radio_config.json`:
 - **grid** — Maidenhead locator (e.g. `IO91WM`) so you can appear on the map  
 - **frequency** — only needed if you transmit
 
-### 5. Run it
+5. **Run it**
 
 ```bash
 python -m ceefaxstation debug --refresh --view
@@ -123,7 +141,7 @@ That will:
 | `n` or → | Next page |
 | `p` or ← | Previous page |
 | `F5` | Reload pages (hub pack if newer) |
-| `U` | Check GitHub and update the Windows app |
+| `U` | Check GitHub and update the installed app |
 | `t` | Transmit menu |
 | `r` | Receive menu |
 | `s` | Station setup |
@@ -152,21 +170,23 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 ---
 
-## Optional: Windows installer
+## Optional: installers
 
-There is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.4.exe`).
+**Linux:** `https://ceefaxstation.com/download/linux` is the Debian package (`ceefax-station.deb`). See Quick start above.
 
-The website **Download app** button (`https://ceefaxstation.com/download`) always redirects to the GitHub **latest** release asset named `CeefaxStation-Setup.exe`. Pushing a new installer to `main` publishes that release automatically (versioned file + stable alias) — see [`installers/README.md`](installers/README.md).
+**Windows:** there is an installer in [`installers/`](installers/) (`CeefaxStation-Setup-0.1.4.exe`).
+
+The website **Download Windows** button (`https://ceefaxstation.com/download`) always redirects to the GitHub **latest** release asset named `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. Pushing a new installer to `main` publishes that release automatically (versioned file + stable alias) — see [`installers/README.md`](installers/README.md).
 
 Once installed, the app can upgrade itself from GitHub Releases: press **U** in the viewer, or run `ceefaxstation update` (no uninstall required).
 
-It is the easiest install (bundles the app **and Dire Wolf** for live RX). After install, use **U** / `ceefaxstation update` to pull newer GitHub Releases without uninstalling. Prefer the Quick start above if you want bleeding-edge source.
+The Windows installer is the easiest install on that platform (bundles the app **and Dire Wolf** for live RX). The Debian package uses system Python and recommends the distro `direwolf` package. After install, use **U** / `ceefaxstation update` to pull newer GitHub Releases without uninstalling. Prefer From source above if you want bleeding-edge source.
 
 ---
 
 ## Radio (TX / RX)
 
-You need a valid licence, a radio, and audio into the PC. For live receive decode you need [Dire Wolf](https://github.com/wb2osz/direwolf) — the Windows installer bundles it under `ceefax/tools/direwolf`. Manual installs should put `direwolf.exe` on `PATH` or in that folder.
+You need a valid licence, a radio, and audio into the PC. For live receive decode you need [Dire Wolf](https://github.com/wb2osz/direwolf) — the Windows installer bundles it under `ceefax/tools/direwolf`. On Linux, `sudo apt install direwolf` (the Debian package recommends this). Manual installs should put `direwolf` / `direwolf.exe` on `PATH` or in that folder.
 
 ```bash
 # Transmit once
@@ -242,7 +262,8 @@ Disable automatic uploads with environment variable `CEEFAX_AUTO_UPLOAD=0`.
 ceefax/           station app, page updaters, viewer
 ceefaxstation/    CLI (`python -m ceefaxstation ...`)
 ceefaxweb/        official site source (ceefaxstation.com — not for self-hosting)
-installers/       Windows setup .exe (may lag main)
+installers/       Windows setup .exe and generated Linux .deb (may lag main)
+packaging/debian/ build notes for the Debian package
 ```
 
 ```bash

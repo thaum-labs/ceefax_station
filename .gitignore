@@ -134,6 +134,5 @@ ceefax/radio_config.json
 # Screenshot generator temps
 screenshots/.tmp*
 
-# Hub published page packs (runtime)
-ceefaxweb/data/page_pack/
-ceefax/pages/hub_manifest.json
+# Generated Debian packages (built by scripts/build_debian_package.py)
+installers/*.deb

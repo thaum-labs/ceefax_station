@@ -200,27 +200,34 @@ def _compiled_bytes_to_matrix_and_page(page: str, subpage: int, compiled: bytes)
     )
 
 
+def _direwolf_binary_names() -> list[str]:
+    if sys.platform.startswith("win"):
+        return ["direwolf.exe"]
+    return ["direwolf", "direwolf.exe"]
+
+
 def _find_direwolf_exe(explicit: str | None = None) -> str:
     """
-    Find bundled direwolf.exe or fall back to PATH.
+    Find bundled Dire Wolf or fall back to PATH.
 
     Prefer the writable user data tree, then the install directory (Program Files
-    for the Windows installer), then PATH.
+    for the Windows installer, /usr/lib/ceefax-station on Debian), then PATH.
+    Linux packages typically use the system `direwolf` binary from apt.
     """
     if explicit:
         return explicit
 
+    names = _direwolf_binary_names()
+    candidates: list[Path] = []
     try:
         from .paths import ceefax_root, install_root
 
-        candidates = [
-            ceefax_root() / "tools" / "direwolf" / "direwolf.exe",
-            install_root() / "ceefax" / "tools" / "direwolf" / "direwolf.exe",
-        ]
+        for name in names:
+            candidates.append(ceefax_root() / "tools" / "direwolf" / name)
+            candidates.append(install_root() / "ceefax" / "tools" / "direwolf" / name)
     except Exception:  # noqa: BLE001
-        candidates = [
-            Path(__file__).resolve().parent.parent / "tools" / "direwolf" / "direwolf.exe",
-        ]
+        for name in names:
+            candidates.append(Path(__file__).resolve().parent.parent / "tools" / "direwolf" / name)
 
     for candidate in candidates:
         try:
@@ -229,7 +236,14 @@ def _find_direwolf_exe(explicit: str | None = None) -> str:
         except Exception:  # noqa: BLE001
             continue
 
-    return "direwolf.exe"
+    import shutil
+
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+
+    return names[0]
 
 
 def _find_latest_wav_in_output_dir(output_dir: str) -> str | None:
@@ -2756,7 +2770,7 @@ def main() -> None:
         "--direwolf",
         dest="direwolf",
         default=None,
-        help="Path to direwolf.exe (defaults to bundled tools/direwolf/direwolf.exe or PATH).",
+        help="Path to the Dire Wolf executable (bundled tools/direwolf on Windows, or PATH on Linux).",
     )
     parser.add_argument(
         "--dest",

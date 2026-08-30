@@ -1,8 +1,32 @@
 # Ceefax Station Installers
 
-This directory contains Windows installer executables for Ceefax Station.
+This directory contains installer artifacts for Ceefax Station.
 
-## Current Installer
+## Linux (Debian package)
+
+Build from the repo (Debian, Ubuntu, Raspberry Pi OS):
+
+```bash
+python scripts/build_debian_package.py
+```
+
+Output:
+
+- `installers/ceefax-station_<version>-1_all.deb`
+- `installers/ceefax-station.deb` (stable alias)
+
+Install:
+
+```bash
+sudo apt install ./installers/ceefax-station.deb
+ceefaxstation
+```
+
+Website **Download Linux** (`https://ceefaxstation.com/download/linux`) redirects to the GitHub latest-release asset `ceefax-station.deb`.
+
+See [`packaging/debian/README.md`](../packaging/debian/README.md).
+
+## Current Windows installer
 
 - **CeefaxStation-Setup-0.1.4.exe** - Version 0.1.4-alpha (in-app self-update from GitHub Releases)
 - **CeefaxStation-Setup-0.1.3.exe** - Version 0.1.3-alpha (ASCII art + football table off-season fix)
@@ -56,9 +80,13 @@ When you want to create a new installer for a new version:
 
    - `CeefaxStation-Setup-X.Y.Z.exe`
    - `CeefaxStation-Setup.exe` (stable alias)
+   - `ceefax-station.deb` when a Debian package is present in `installers/`
 
-   That alias is what `https://ceefaxstation.com/download` redirects to
+   Windows download: `https://ceefaxstation.com/download`
    (`…/releases/latest/download/CeefaxStation-Setup.exe`).
+
+   Linux download: `https://ceefaxstation.com/download/linux`
+   (`…/releases/latest/download/ceefax-station.deb`).
 
    Manual / local publish (same script CI uses):
 
@@ -76,5 +104,6 @@ When you want to create a new installer for a new version:
 - The installer bundles the app EXE (Python runtime) plus Dire Wolf for live RX
 - Installers may lag behind the latest code on GitHub
 - Users can always use the manual installation method for the latest code
-- Website download always uses the latest GitHub release’s `CeefaxStation-Setup.exe` alias (not a file served from the droplet)
+- Website **Download Windows** always uses the latest GitHub release’s `CeefaxStation-Setup.exe` alias
+- Website **Download Linux** always uses the latest GitHub release’s `ceefax-station.deb` alias
 - Do **not** skip the GitHub Release step: without the stable alias on the latest release, **Download app** on ceefaxstation.com will 404

@@ -228,3 +228,25 @@ def test_uploader_scan_continues_after_http_error(tmp_path: Path, monkeypatch: p
     )
     state = up._load_state()
     assert state.get("files") in ({}, None) or "ceefax/logs_tx/a.json" not in state.get("files", {})
+
+
+def test_download_routes_redirect_to_github_release_assets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("CEEFAXWEB_DB", str(tmp_path / "web.sqlite3"))
+    import importlib
+    import ceefaxweb.server as server_mod
+
+    importlib.reload(server_mod)
+    with TestClient(server_mod.create_app()) as client:
+        windows = client.get("/download", follow_redirects=False)
+        assert windows.status_code == 302
+        assert windows.headers["location"].endswith("CeefaxStation-Setup.exe")
+
+        linux = client.get("/download/linux", follow_redirects=False)
+        assert linux.status_code == 302
+        assert linux.headers["location"].endswith("ceefax-station.deb")
+
+        alias = client.get("/download/windows", follow_redirects=False)
+        assert alias.status_code == 302
+        assert alias.headers["location"].endswith("CeefaxStation-Setup.exe")

@@ -146,6 +146,21 @@ def create_app() -> FastAPI:
             status_code=302,
         )
 
+    @app.get("/download/linux")
+    def download_linux() -> RedirectResponse:
+        """Redirect to the newest Debian package on GitHub Releases."""
+        return RedirectResponse(
+            url=(
+                "https://github.com/thaum-labs/ceefax_station/"
+                "releases/latest/download/ceefax-station.deb"
+            ),
+            status_code=302,
+        )
+
+    @app.get("/download/windows")
+    def download_windows() -> RedirectResponse:
+        return download_app()
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/api/map")

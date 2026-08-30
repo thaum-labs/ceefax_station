@@ -3,6 +3,16 @@
   "stage": "alpha",
   "entries": [
     {
+      "date": "2026-08-30",
+      "version": "0.1.5-alpha",
+      "changes": [
+        "Debian package (`ceefax-station.deb`) so the station app can be installed on Linux",
+        "Packaged Linux installs keep writable pages and config in ~/.ceefax_station",
+        "Website Download Linux (`/download/linux`) redirects to the GitHub `ceefax-station.deb` alias",
+        "Self-update (`U` / `ceefaxstation update`) installs the Debian package on Linux"
+      ]
+    },
+    {
       "date": "2026-08-29",
       "version": "0.1.5-alpha",
       "changes": [

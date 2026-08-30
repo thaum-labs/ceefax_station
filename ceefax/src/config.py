@@ -59,20 +59,30 @@ class AppConfig:
 
 
 def load_config(path: str | None = None) -> AppConfig:
-    from .paths import ceefax_root, config_path, pages_dir
+    from .paths import ceefax_root, config_path, pages_dir, uses_user_data
+
+    package_ceefax = Path(__file__).resolve().parent.parent
 
     if path is None:
         config_path_obj = config_path()
         if not config_path_obj.exists():
-            candidate = Path(__file__).resolve().parent.parent / "config.toml"
-            if candidate.exists():
-                config_path_obj = candidate
+            for candidate in (
+                package_ceefax / "config.toml",
+                package_ceefax / "config.default.toml",
+            ):
+                if candidate.exists():
+                    config_path_obj = candidate
+                    break
     else:
         config_path_obj = Path(path)
         if not config_path_obj.exists() and path == "config.toml":
-            candidate = Path(__file__).resolve().parent.parent / "config.toml"
-            if candidate.exists():
-                config_path_obj = candidate
+            for candidate in (
+                package_ceefax / "config.toml",
+                package_ceefax / "config.default.toml",
+            ):
+                if candidate.exists():
+                    config_path_obj = candidate
+                    break
 
     if not config_path_obj.exists():
         print(f"Config file not found: {config_path_obj}", file=sys.stderr)
@@ -96,7 +106,7 @@ def load_config(path: str | None = None) -> AppConfig:
     # for output_dir under the same data root.
     page_dir_value = str(pages_dir())
     output_raw = str(get("general", "output_dir", "out"))
-    if getattr(sys, "frozen", False) and not Path(output_raw).is_absolute():
+    if uses_user_data() and not Path(output_raw).is_absolute():
         output_dir_value = str((ceefax_root() / output_raw).resolve())
     else:
         output_dir_value = resolve_path(output_raw)

@@ -1,6 +1,6 @@
 # Ceefax Station (core app)
 
-Ceefax/Teletext-style information broadcast system. **Windows is the primary supported platform**; Linux / Raspberry Pi remain useful for development and experiments.
+Ceefax/Teletext-style information broadcast system. **Windows and Linux** are supported (Debian package or from source). Raspberry Pi remains useful for radio TX/RX.
 
 ## Overview
 
@@ -185,7 +185,15 @@ python -m ceefax.src.update_film_picks_page
 
 ## Linux / Raspberry Pi notes
 
-You can still run updaters and audio pipelines on Linux. Example continuous VOX stream:
+Install the Debian package (recommended):
+
+```bash
+python scripts/build_debian_package.py
+sudo apt install ./installers/ceefax-station.deb
+ceefaxstation
+```
+
+Or run from a git checkout as on other platforms. Example continuous VOX stream:
 
 - `audio.output = "stdout"`
 - `carousel.page_duration_ms = 0`
@@ -194,7 +202,11 @@ You can still run updaters and audio pipelines on Linux. Example continuous VOX 
 python -m src.main | aplay -f S16_LE -c 1 -r 48000
 ```
 
-Optional systemd unit: `service/ceefax.service` (adjust paths for your install).
+Optional systemd user unit ships in the Debian package as `ceefax-station.service`. Sample unit: `service/ceefax.service`.
+
+```bash
+systemctl --user enable --now ceefax-station.service
+```
 
 ## Related docs
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -66,9 +67,13 @@ def _run_module(mod: str, argv: list[str]) -> int:
             traceback.print_exc()
             return 1
     else:
-        # Development mode: use subprocess
+        # Development / Debian package: use subprocess so the viewer owns the TTY.
+        env = os.environ.copy()
+        root = str(_install_root())
+        previous = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = root + (os.pathsep + previous if previous else "")
         cmd = [sys.executable, "-m", mod, *argv]
-        return subprocess.call(cmd)
+        return subprocess.call(cmd, env=env)
 
 
 def _refresh_pages(
@@ -239,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     # ---- update (GitHub Releases installer) ----
     p_update = sub.add_parser(
         "update",
-        help="Check GitHub Releases for a newer Windows installer and apply it.",
+        help="Check GitHub Releases for a newer installer (.exe on Windows, .deb on Linux) and apply it.",
     )
     p_update.add_argument(
         "--check",

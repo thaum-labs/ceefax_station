@@ -10,9 +10,11 @@ on:
       - main
     paths:
       - "installers/CeefaxStation-Setup-*.exe"
+      - "installers/ceefax-station*.deb"
       - "VERSION"
       - "CHANGELOG.json"
       - "scripts/publish_github_release.py"
+      - "scripts/build_debian_package.py"
       - ".github/workflows/release-installer.yml"
   workflow_dispatch:
     inputs:

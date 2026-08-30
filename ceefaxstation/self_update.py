@@ -1,9 +1,11 @@
-"""Check GitHub Releases and apply Windows app updates via the Setup installer."""
+"""Check GitHub Releases and apply app updates via the platform installer."""
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -13,7 +15,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 DEFAULT_REPO = "thaum-labs/ceefax_station"
-STABLE_ASSET = "CeefaxStation-Setup.exe"
+STABLE_ASSET_WINDOWS = "CeefaxStation-Setup.exe"
+STABLE_ASSET_LINUX = "ceefax-station.deb"
+STABLE_ASSET = STABLE_ASSET_WINDOWS
 GITHUB_API_LATEST = "https://api.github.com/repos/{repo}/releases/latest"
 GITHUB_DOWNLOAD_LATEST = (
     "https://github.com/{repo}/releases/latest/download/{asset}"
@@ -65,6 +69,26 @@ def updates_dir() -> Path:
     return path
 
 
+def installer_asset_for_platform() -> str:
+    if sys.platform.startswith("linux"):
+        return STABLE_ASSET_LINUX
+    return STABLE_ASSET_WINDOWS
+
+
+def _is_linux_deb_name(name: str) -> bool:
+    lower = name.lower()
+    return lower == STABLE_ASSET_LINUX or (
+        lower.startswith("ceefax-station_") and lower.endswith(".deb")
+    )
+
+
+def _is_windows_setup_name(name: str) -> bool:
+    lower = name.lower()
+    return lower == STABLE_ASSET_WINDOWS or (
+        lower.startswith("ceefaxstation-setup-") and lower.endswith(".exe")
+    )
+
+
 def _http_json(url: str, *, timeout: float = 30.0) -> dict[str, Any]:
     req = Request(
         url,
@@ -80,8 +104,13 @@ def _http_json(url: str, *, timeout: float = 30.0) -> dict[str, Any]:
     return data
 
 
-def fetch_latest_release(*, repo: str = DEFAULT_REPO) -> ReleaseInfo:
-    """Load latest GitHub release metadata and resolve the stable Setup asset URL."""
+def fetch_latest_release(
+    *,
+    repo: str = DEFAULT_REPO,
+    asset: str | None = None,
+) -> ReleaseInfo:
+    """Load latest GitHub release metadata and resolve the platform installer URL."""
+    wanted = (asset or installer_asset_for_platform()).strip()
     payload = _http_json(GITHUB_API_LATEST.format(repo=repo))
     tag = str(payload.get("tag_name") or "").strip()
     if not tag:
@@ -89,25 +118,35 @@ def fetch_latest_release(*, repo: str = DEFAULT_REPO) -> ReleaseInfo:
 
     assets = payload.get("assets") if isinstance(payload.get("assets"), list) else []
     download_url = ""
-    asset_name = STABLE_ASSET
-    for asset in assets:
-        if not isinstance(asset, dict):
+    asset_name = wanted
+    fallback_url = ""
+    fallback_name = ""
+    for item in assets:
+        if not isinstance(item, dict):
             continue
-        name = str(asset.get("name") or "")
-        url = str(asset.get("browser_download_url") or "")
-        if name.lower() == STABLE_ASSET.lower() and url:
+        name = str(item.get("name") or "")
+        url = str(item.get("browser_download_url") or "")
+        if not name or not url:
+            continue
+        if name.lower() == wanted.lower():
             download_url = url
             asset_name = name
             break
-        if name.lower().startswith("ceefaxstation-setup-") and name.lower().endswith(".exe") and url:
-            # Prefer stable alias, but keep a versioned fallback.
-            if not download_url:
-                download_url = url
-                asset_name = name
+        linux_wanted = wanted.lower().endswith(".deb")
+        if linux_wanted and _is_linux_deb_name(name) and not fallback_url:
+            fallback_url = url
+            fallback_name = name
+        if not linux_wanted and _is_windows_setup_name(name) and not fallback_url:
+            fallback_url = url
+            fallback_name = name
+
+    if not download_url and fallback_url:
+        download_url = fallback_url
+        asset_name = fallback_name
 
     if not download_url:
-        download_url = GITHUB_DOWNLOAD_LATEST.format(repo=repo, asset=STABLE_ASSET)
-        asset_name = STABLE_ASSET
+        download_url = GITHUB_DOWNLOAD_LATEST.format(repo=repo, asset=wanted)
+        asset_name = wanted
 
     numeric = re.sub(r"^v", "", tag, flags=re.IGNORECASE)
     numeric = re.sub(r"[-+].*$", "", numeric)
@@ -160,12 +199,20 @@ def download_file(url: str, dest: Path, *, progress: ProgressCb | None = None) -
 
 def launch_installer(setup_path: Path, *, silent: bool = True) -> None:
     """
-    Launch the Inno Setup installer. On Windows, prefer an elevated start so
-    Program Files installs can be replaced.
+    Launch the downloaded installer.
+
+    Windows: Inno Setup with UAC elevation.
+    Linux: `pkexec dpkg -i` (or sudo) for the Debian package.
     """
     setup_path = setup_path.resolve()
     if not setup_path.is_file():
         raise FileNotFoundError(setup_path)
+
+    if setup_path.suffix.lower() == ".deb" or (
+        sys.platform.startswith("linux") and setup_path.name.lower().endswith(".deb")
+    ):
+        _launch_deb(setup_path)
+        return
 
     args = [str(setup_path)]
     if silent:
@@ -205,6 +252,23 @@ def launch_installer(setup_path: Path, *, silent: bool = True) -> None:
     subprocess.Popen(args, cwd=str(setup_path.parent))
 
 
+def _launch_deb(deb_path: Path) -> None:
+    deb = str(deb_path)
+    if shutil.which("pkexec"):
+        subprocess.Popen(["pkexec", "dpkg", "-i", deb])
+        return
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        subprocess.Popen(["dpkg", "-i", deb])
+        return
+    if shutil.which("sudo"):
+        subprocess.Popen(["sudo", "dpkg", "-i", deb])
+        return
+    raise OSError(
+        "Need pkexec or sudo to install the Debian package. "
+        f"You can install it manually with: sudo dpkg -i {deb}"
+    )
+
+
 def apply_update(
     *,
     repo: str = DEFAULT_REPO,
@@ -213,7 +277,7 @@ def apply_update(
     progress: ProgressCb | None = None,
 ) -> dict[str, Any]:
     """
-    Check GitHub for a newer release, download Setup.exe, launch installer.
+    Check GitHub for a newer release, download the platform installer, and launch it.
 
     Returns a result dict with keys: status, local, remote, path (optional).
     status: up_to_date | ready | launched | error
@@ -234,7 +298,7 @@ def apply_update(
         note("Already up to date.")
         return {"status": "up_to_date", "local": local, "remote": latest.tag}
 
-    dest = updates_dir() / STABLE_ASSET
+    dest = updates_dir() / latest.asset_name
     try:
         download_file(latest.download_url, dest, progress=progress)
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
@@ -245,7 +309,10 @@ def apply_update(
             "error": f"download failed: {exc}",
         }
 
-    note("Starting installer (approve UAC if prompted)...")
+    if dest.suffix.lower() == ".deb":
+        note("Starting Debian installer (authenticate if prompted)...")
+    else:
+        note("Starting installer (approve UAC if prompted)...")
     try:
         launch_installer(dest, silent=silent)
     except OSError as exc:
@@ -294,8 +361,11 @@ def run_cli_update(*, check_only: bool = False, yes: bool = False, force: bool =
         print("Already up to date.")
         return 0
     if status == "launched":
-        print("Installer started. Ceefax Station will exit so files can be replaced.")
-        print("If the app does not reopen, launch it from the Start Menu.")
+        if sys.platform.startswith("linux"):
+            print("Installer started. Authenticate if prompted, then relaunch Ceefax Station.")
+        else:
+            print("Installer started. Ceefax Station will exit so files can be replaced.")
+            print("If the app does not reopen, launch it from the Start Menu.")
         return 0
     print(f"Update failed: {result.get('error')}", file=sys.stderr)
     return 1
