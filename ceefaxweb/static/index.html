@@ -926,6 +926,12 @@
       let linkLayers = [];
       let currentRange = rangeSel.value;
       let currentBand = bandSel.value;
+      let suppressViewTrack = false;
+      let userAdjustedView = false;
+
+      map.on('dragend zoomend', () => {
+        if (!suppressViewTrack) userAdjustedView = true;
+      });
 
       // Palette (matches current design)
       const COLOR = {
@@ -941,6 +947,48 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function stationBbox(s) {
+        if (s && s.bbox && s.bbox.sw && s.bbox.ne) return s.bbox;
+        if (s && s.lat != null && s.lon != null && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon))) {
+          const d = 0.04;
+          return {
+            sw: { lat: Number(s.lat) - d, lon: Number(s.lon) - d },
+            ne: { lat: Number(s.lat) + d, lon: Number(s.lon) + d },
+          };
+        }
+        return null;
+      }
+
+      function stationInView(bbox) {
+        try {
+          const bounds = map.getBounds();
+          if (!bounds) return false;
+          const lat = (bbox.sw.lat + bbox.ne.lat) / 2;
+          const lon = (bbox.sw.lon + bbox.ne.lon) / 2;
+          return bounds.contains([lat, lon]);
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function fitMapToStations(placed) {
+        if (!placed.length) return;
+        const latlngs = [];
+        for (const { bbox } of placed) {
+          latlngs.push([bbox.sw.lat, bbox.sw.lon]);
+          latlngs.push([bbox.ne.lat, bbox.ne.lon]);
+        }
+        suppressViewTrack = true;
+        map.fitBounds(latlngs, {
+          padding: [48, 48],
+          maxZoom: 10,
+          animate: !preferReducedMotion,
+        });
+        const clear = () => { suppressViewTrack = false; };
+        map.once('moveend', clear);
+        setTimeout(clear, 800);
       }
 
       function formatLocalSeen(iso) {
@@ -1030,14 +1078,22 @@
           const resp = await fetch(url);
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const data = await resp.json();
-          renderMap(data);
-          const stations = Array.isArray(data.stations) ? data.stations.length : 0;
+          const placed = renderMap(data);
+          const total = Array.isArray(data.stations) ? data.stations.length : 0;
+          const stations = placed.length;
           const links = Array.isArray(data.links) ? data.links.length : 0;
           const bandText = currentBand ? `, Band=${currentBand}` : '';
-          if (stations === 0) {
+          if (total === 0) {
             statusEl.textContent = `No stations in this window${bandText}. Stations need a Maidenhead grid to appear.`;
+          } else if (stations === 0) {
+            statusEl.textContent = `Updated · ${total} station${total === 1 ? '' : 's'} (no Maidenhead grid to place on the map)${bandText}`;
           } else {
             statusEl.textContent = `Updated · ${stations} station${stations === 1 ? '' : 's'} · ${links} link${links === 1 ? '' : 's'} · Range=${data.range}${bandText}`;
+            const shouldFit = !opts.keepDetail && (!userAdjustedView || !placed.some((p) => stationInView(p.bbox)));
+            if (shouldFit) {
+              map.invalidateSize();
+              fitMapToStations(placed);
+            }
           }
         } catch (err) {
           console.error(err);
@@ -1050,10 +1106,13 @@
       function renderMap(data) {
         // Stations
         const seen = new Set();
+        const placed = [];
         for (const s of data.stations) {
-          // Require bbox (grid) to draw a rectangle.
-          if (!s.bbox || !s.bbox.sw || !s.bbox.ne) continue;
+          const bbox = stationBbox(s);
+          // Require bbox (grid) or lat/lon to draw a rectangle.
+          if (!bbox) continue;
           seen.add(s.callsign);
+          placed.push({ s, bbox });
 
           // Always refresh existing markers so status/bbox/grid updates apply on live ingest.
           if (stationMarkers.has(s.callsign)) {
@@ -1063,8 +1122,9 @@
           }
 
           {
-            const sw = [s.bbox.sw.lat, s.bbox.sw.lon];
-            const ne = [s.bbox.ne.lat, s.bbox.ne.lon];
+            const sw = [bbox.sw.lat, bbox.sw.lon];
+            const ne = [bbox.ne.lat, bbox.ne.lon];
+            const center = [(sw[0] + ne[0]) / 2, (sw[1] + ne[1]) / 2];
 
             const layers = [];
             const isTx = !!s.is_tx;
@@ -1089,6 +1149,17 @@
               const rect = L.rectangle([sw, ne], { color: outline, weight: 2, fillColor: primary, fillOpacity: 0.40 });
               layers.push(rect);
             }
+
+            // Grid squares are only a few pixels at country zoom; keep a marker so
+            // a single station is still obvious before the map fits to it.
+            const mark = L.circleMarker(center, {
+              radius: 8,
+              color: outline,
+              weight: 2,
+              fillColor: primary,
+              fillOpacity: 0.95,
+            });
+            layers.push(mark);
 
             for (const l of layers) l.addTo(map);
 
@@ -1120,11 +1191,13 @@
         for (const l of data.links) {
           const tx = byCall.get(l.tx_callsign);
           const rx = byCall.get(l.rx_callsign);
-          if (!tx || !rx || !tx.bbox || !rx.bbox) continue;
-          const txSw = [tx.bbox.sw.lat, tx.bbox.sw.lon];
-          const txNe = [tx.bbox.ne.lat, tx.bbox.ne.lon];
-          const rxSw = [rx.bbox.sw.lat, rx.bbox.sw.lon];
-          const rxNe = [rx.bbox.ne.lat, rx.bbox.ne.lon];
+          const txBox = stationBbox(tx);
+          const rxBox = stationBbox(rx);
+          if (!tx || !rx || !txBox || !rxBox) continue;
+          const txSw = [txBox.sw.lat, txBox.sw.lon];
+          const txNe = [txBox.ne.lat, txBox.ne.lon];
+          const rxSw = [rxBox.sw.lat, rxBox.sw.lon];
+          const rxNe = [rxBox.ne.lat, rxBox.ne.lon];
           const txC = [(txSw[0] + txNe[0]) / 2, (txSw[1] + txNe[1]) / 2];
           const rxC = [(rxSw[0] + rxNe[0]) / 2, (rxSw[1] + rxNe[1]) / 2];
 
@@ -1176,6 +1249,7 @@
             }, 0);
           }
         }
+        return placed;
       }
 
       async function showLinkDetail(tx, rx) {
@@ -1311,8 +1385,8 @@
       }
 
       refreshBtn.addEventListener('click', fetchMap);
-      rangeSel.addEventListener('change', fetchMap);
-      bandSel.addEventListener('change', fetchMap);
+      rangeSel.addEventListener('change', () => { userAdjustedView = false; fetchMap(); });
+      bandSel.addEventListener('change', () => { userAdjustedView = false; fetchMap(); });
 
       // Live updates via WebSocket (best-effort).
       function connectWS() {

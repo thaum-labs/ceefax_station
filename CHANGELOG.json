@@ -7,7 +7,8 @@
       "version": "0.1.6-alpha",
       "changes": [
         "Time Frame 7-day and 30-day filters show stations last seen in that window, not only the last 24 hours",
-        "Keep listening-only stations when deleting leftover sample data"
+        "Keep listening-only stations when deleting leftover sample data",
+        "Map now zooms to stations in the selected time window and draws a marker so a single distant grid square is visible"
       ]
     },
     {
