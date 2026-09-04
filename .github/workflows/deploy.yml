@@ -11,10 +11,13 @@ jobs:
     steps:
       - name: Deploy to server
         uses: appleboy/ssh-action@master
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
+          envs: RESEND_API_KEY
           script: |
             set -euo pipefail
 
@@ -52,6 +55,14 @@ jobs:
             git reset --hard origin/main
             git rev-parse --short HEAD
             git log -1 --oneline
+
+            echo ""
+            echo "=== Upsert RESEND_API_KEY into repo .env (value hidden) ==="
+            if [ -z "${RESEND_API_KEY:-}" ]; then
+              echo "RESEND_API_KEY secret not provided; leaving .env unchanged"
+            else
+              RESEND_ENV_FILE="${REPO_DIR}/.env" python3 -c "import os, pathlib, re; p=pathlib.Path(os.environ['RESEND_ENV_FILE']); k=(os.environ.get('RESEND_API_KEY') or '').strip(); assert k, 'empty key'; t=p.read_text(encoding='utf-8') if p.is_file() else ''; t=re.sub(r'^RESEND_API_KEY=.*$', 'RESEND_API_KEY=' + k, t, count=1, flags=re.M) if re.search(r'^RESEND_API_KEY=', t, re.M) else ((t if t.endswith(chr(10)) or t=='' else t+chr(10)) + 'RESEND_API_KEY=' + k + chr(10)); p.write_text(t, encoding='utf-8'); os.chmod(p, 0o600); print('RESEND_API_KEY present in .env')"
+            fi
 
             echo ""
             echo "=== Replace SM6OPW with TEST1 (one-time) ==="
@@ -102,6 +113,16 @@ jobs:
             systemctl restart ceefaxweb
             sleep 2
             systemctl status ceefaxweb --no-pager || true
+
+            echo ""
+            echo "=== Upload notify config (no secrets) ==="
+            if [ -x "${REPO_DIR}/venv/bin/python" ]; then
+              PY="${REPO_DIR}/venv/bin/python"
+            else
+              PY="python3"
+            fi
+            cd "${REPO_DIR}"
+            "${PY}" -c "from ceefaxweb.envfile import load_repo_dotenv; from ceefaxweb.notify import notify_config; load_repo_dotenv(); c=notify_config(); print('notify_enabled', c['enabled']); print('notify_to', ', '.join(c['to'])); print('notify_from', c['from'])"
 
             echo ""
             echo "=== Local health checks (localhost) ==="
