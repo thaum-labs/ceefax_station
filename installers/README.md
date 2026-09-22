@@ -4,7 +4,7 @@ This directory contains installer artifacts for Ceefax Station.
 
 ## Current Linux installer
 
-- **ceefax-station_0.1.8~alpha-1_all.deb** — Version 0.1.8-alpha (and `ceefax-station.deb` alias)
+- **ceefax-station_0.1.9~alpha-1_all.deb** — Version 0.1.9-alpha (and `ceefax-station.deb` alias)
 
 ```bash
 sudo apt install ./installers/ceefax-station.deb
@@ -31,7 +31,7 @@ sudo apt install ./installers/ceefax-station.deb
 ceefaxstation
 ```
 
-Website **Download Linux** (`https://ceefaxstation.com/download/linux`) redirects to the GitHub latest-release asset `ceefax-station.deb` (tag **v0.1.8**).
+Website **Download Linux** (`https://ceefaxstation.com/download/linux`) redirects to the GitHub latest-release asset `ceefax-station.deb` (tag **v0.1.9**).
 
 Direct from `main`:
 
@@ -41,6 +41,7 @@ See [`packaging/debian/README.md`](../packaging/debian/README.md).
 
 ## Current Windows installer
 
+- **CeefaxStation-Setup-0.1.9.exe** - Version 0.1.9-alpha (HF transmit paces by frame time and no longer aborts while modem73 is sending; in-app self-update from GitHub Releases)
 - **CeefaxStation-Setup-0.1.8.exe** - Version 0.1.8-alpha (HF transmit no longer drops frames after 256; in-app self-update from GitHub Releases)
 - **CeefaxStation-Setup-0.1.7.exe** - Version 0.1.7-alpha (HF modem73 path; in-app self-update from GitHub Releases)
 - **CeefaxStation-Setup-0.1.4.exe** - Version 0.1.4-alpha (in-app self-update from GitHub Releases)

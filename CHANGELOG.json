@@ -1,7 +1,14 @@
 {
-  "current_version": "0.1.8-alpha",
+  "current_version": "0.1.9-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-09-22",
+      "version": "0.1.9-alpha",
+      "changes": [
+        "HF transmit paces by the RDM frame time. modem73's transmitted-frame count does not move while a frame is on the air, and 0.1.8 treated that as a stall and stopped the pass"
+      ]
+    },
     {
       "date": "2026-09-22",
       "version": "0.1.8-alpha",

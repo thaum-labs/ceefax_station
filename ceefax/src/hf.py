@@ -32,10 +32,11 @@ HF_PHY_MTU = 170
 BEACON_MAGIC = b"CFXB"
 FRAME_SECONDS = {"RDM-600S": 3.6, "RDM-300S": 7.1}
 ROBUST_MODE = {"RDM-600S": 6, "RDM-300S": 7}
-# modem73 drops a KISS frame once 256 are already queued. The control port
-# has no queue depth, so stay this far ahead of tx_frame_count instead.
+# modem73 drops a KISS frame once 256 are already queued, and tx_frame_count
+# does not move while a frame is on the air. Pace off the published frame
+# time instead, and keep only this many frames queued ahead of that clock.
 TX_QUEUE_LIMIT = 256
-TX_QUEUE_WINDOW = 32
+TX_QUEUE_WINDOW = 16
 
 HF_LISTENER_NOTE = (
     "HF uses modem73, which decodes every robust mode at once. "
@@ -419,22 +420,27 @@ def wait_until_drained(
     min_tx_frames: int,
     timeout_s: float,
     poll_s: float = 0.25,
+    idle_hold_s: float | None = None,
 ) -> dict:
     """
     Block until get_status shows the TX queue has drained.
 
     Idle plus PTT off, twice in a row, and tx_frame_count at least min_tx_frames.
     The second idle poll avoids closing while a just-queued frame is about to key.
+    tx_frame_count stays put while a frame is on the air, so a pass can also
+    finish after the channel has been idle for idle_hold_s.
     """
     deadline = time.monotonic() + timeout_s
     last: dict = {}
     stable_count: int | None = None
     stable_hits = 0
+    idle_since: float | None = None
     while time.monotonic() < deadline:
         last = client.get_status()
         idle = last.get("channel_state") == "idle" and not bool(last.get("ptt_on"))
         tx_count = int(last.get("tx_frame_count") or 0)
         if idle and tx_count >= int(min_tx_frames):
+            idle_since = None
             if stable_count == tx_count:
                 stable_hits += 1
                 if stable_hits >= 2:
@@ -442,53 +448,44 @@ def wait_until_drained(
             else:
                 stable_count = tx_count
                 stable_hits = 1
+        elif idle and idle_hold_s is not None:
+            stable_count = None
+            stable_hits = 0
+            if idle_since is None:
+                idle_since = time.monotonic()
+            elif time.monotonic() - idle_since >= idle_hold_s:
+                return last
         else:
             stable_count = None
             stable_hits = 0
+            idle_since = None
         time.sleep(poll_s)
     raise TimeoutError(f"modem73 TX queue did not drain (last get_status: {last})")
 
 
-def _tx_completed(baseline: int, status: dict) -> int:
-    completed = int(status.get("tx_frame_count") or 0) - int(baseline)
-    return max(0, completed)
-
-
-def _wait_for_tx_room(
-    client: ControlClient,
+def _wait_for_frame_slot(
     *,
     sent: int,
-    baseline: int,
+    started: float,
     window: int,
-    stall_timeout_s: float,
+    per_frame: float,
     poll_s: float,
     stop_check: Callable[[], bool] | None,
 ) -> bool:
     """
-    Block until fewer than `window` submitted frames are still untransmitted.
+    Keep at most `window` frames ahead of the published frame duration.
 
-    Returns False when stop_check asks to stop queueing. Raises TimeoutError
-    if tx_frame_count does not advance, which is how a full 256-frame modem
-    queue shows up: modem73 drops the frame and never counts it.
+    Returns False when stop_check asks to stop queueing. modem73's
+    tx_frame_count does not advance during TX, so the clock is the pace.
     """
-    if sent < window:
+    if per_frame <= 0 or sent < window:
         return True
-    deadline = time.monotonic() + stall_timeout_s
-    last: dict = {}
     while True:
         if stop_check and stop_check():
             return False
-        last = client.get_status()
-        completed = _tx_completed(baseline, last)
-        if sent - completed < window:
+        elapsed = time.monotonic() - started
+        if sent < window + int(elapsed / per_frame):
             return True
-        if time.monotonic() >= deadline:
-            raise TimeoutError(
-                f"modem73 TX queue stalled with {sent} frames queued and "
-                f"{completed} transmitted. It drops frames once "
-                f"{TX_QUEUE_LIMIT} are queued "
-                f"(last get_status: {last})"
-            )
         time.sleep(poll_s)
 
 
@@ -611,7 +608,6 @@ class Modem73Session:
         on_frame: Callable[[int, int], None] | None = None,
         window: int = TX_QUEUE_WINDOW,
         poll_s: float = 0.25,
-        stall_timeout_s: float | None = None,
     ) -> int:
         if self.kiss is None or self.control is None:
             raise RuntimeError("modem73 session is not open")
@@ -620,19 +616,17 @@ class Modem73Session:
         before = self.control.get_status()
         baseline = int(before.get("tx_frame_count") or 0)
         per_frame = FRAME_SECONDS.get(mode, 3.6)
-        if stall_timeout_s is None:
-            stall_timeout_s = max(15.0, per_frame * 4)
-        room = max(1, int(window))
+        room = max(1, min(int(window), TX_QUEUE_LIMIT))
+        started = time.monotonic()
         sent = 0
         for payload in queued:
             if stop_check and stop_check():
                 break
-            if not _wait_for_tx_room(
-                self.control,
+            if not _wait_for_frame_slot(
                 sent=sent,
-                baseline=baseline,
+                started=started,
                 window=room,
-                stall_timeout_s=stall_timeout_s,
+                per_frame=per_frame,
                 poll_s=poll_s,
                 stop_check=stop_check,
             ):
@@ -641,12 +635,13 @@ class Modem73Session:
             sent += 1
             if on_frame:
                 on_frame(sent, len(queued))
-        timeout_s = estimate_pass_seconds(sent, mode) * 2 + 30
+        timeout_s = estimate_pass_seconds(max(sent, 1), mode) * 2 + 30
         wait_until_drained(
             self.control,
             min_tx_frames=baseline + sent,
             timeout_s=max(15.0, timeout_s),
             poll_s=poll_s,
+            idle_hold_s=max(6.0, per_frame),
         )
         return sent
 
