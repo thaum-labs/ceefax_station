@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Download Mac - Ceefax Station</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/static/favicon-32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/static/favicon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        background: #0b0b0b;
+        color: #f3f3f3;
+        line-height: 1.6;
+      }
+      .container {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 28px;
+        color: #ffd34d;
+      }
+      .muted { color: #9a9a9a; }
+      a { color: #ffd34d; }
+      .section {
+        margin: 24px 0;
+        padding: 20px;
+        border: 1px solid #2a2a2a;
+        border-radius: 8px;
+        background: #111;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .btn {
+        display: inline-block;
+        padding: 10px 14px;
+        background: #1a1a1a;
+        color: #ffd34d;
+        border: 1px solid #665522;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn:hover { background: #222; }
+      .hint { font-size: 13px; color: #9a9a9a; margin-top: 8px; }
+      .back-link { color: #ffd34d; text-decoration: none; font-size: 14px; }
+      .back-link:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <p><a class="back-link" href="/">← Live map</a></p>
+      <h1>Download for Mac</h1>
+      <p class="muted">Pick the installer that matches your Mac. Both require macOS 13 Ventura or later.</p>
+
+      <div class="section">
+        <h2 style="margin:0 0 8px 0; font-size:18px; color:#ffd34d;">Apple Silicon</h2>
+        <p>M1, M2, M3, M4, and later. Native arm64 package.</p>
+        <div class="actions">
+          <a class="btn" href="/download/mac/apple-silicon">Download Apple Silicon .pkg</a>
+        </div>
+        <p class="hint">Apple menu → About This Mac shows a chip name like “Apple M2”.</p>
+      </div>
+
+      <div class="section">
+        <h2 style="margin:0 0 8px 0; font-size:18px; color:#ffd34d;">Intel</h2>
+        <p>Intel x86_64 Macs, including macOS 13 Ventura.</p>
+        <div class="actions">
+          <a class="btn" href="/download/mac/intel">Download Intel .pkg</a>
+        </div>
+        <p class="hint">About This Mac shows an Intel processor. This package also runs on Apple Silicon via Rosetta.</p>
+      </div>
+
+      <p>After install, run <code>ceefaxstation</code> in Terminal, or open <strong>Ceefax Station</strong> from Applications.</p>
+      <p class="muted">If macOS blocks the package, open System Settings → Privacy &amp; Security and choose Open Anyway.</p>
+      <p>
+        <a href="/download">Windows</a> ·
+        <a href="/download/linux">Linux</a> ·
+        <a href="/about">About</a>
+      </p>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,110 @@
+name: Build macOS installers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ceefax/**"
+      - "ceefaxstation/**"
+      - "ceefaxweb/server.py"
+      - "ceefaxweb/static/**"
+      - "packaging/macos/**"
+      - "scripts/build_macos_package.py"
+      - "scripts/build_debian_package.py"
+      - "VERSION"
+      - ".github/workflows/build-macos.yml"
+  pull_request:
+    paths:
+      - "ceefax/**"
+      - "ceefaxstation/**"
+      - "ceefaxweb/server.py"
+      - "ceefaxweb/static/**"
+      - "packaging/macos/**"
+      - "scripts/build_macos_package.py"
+      - "tests/test_macos_package.py"
+      - "tests/test_self_update.py"
+      - "tests/test_paths.py"
+      - "tests/test_p0_fixes.py"
+      - "VERSION"
+      - ".github/workflows/build-macos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: python -m pip install pytest requests beautifulsoup4 fastapi httpx
+
+      - name: Test macOS packaging layout
+        run: python -m pytest tests/test_macos_package.py tests/test_paths.py tests/test_self_update.py tests/test_p0_fixes.py -q
+
+  pkg:
+    needs: layout
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [intel, apple-silicon]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: python -m pip install pytest requests beautifulsoup4 pip
+
+      - name: Cache standalone CPython
+        uses: actions/cache@v4
+        with:
+          path: packaging/macos/.cache
+          key: macos-cpython-${{ matrix.arch }}-3.11.16-20260901
+
+      - name: Build .pkg
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+        run: python scripts/build_macos_package.py --arch ${{ matrix.arch }} --output-dir installers
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ceefax-station-macos-${{ matrix.arch }}
+          path: |
+            installers/CeefaxStation-*.pkg
+
+      - name: Attach to existing GitHub Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LABEL="$(tr -d '[:space:]' < VERSION)"
+          TAG="v${LABEL%%-*}"
+          shopt -s nullglob
+          FILES=(installers/CeefaxStation-Intel*.pkg installers/CeefaxStation-AppleSilicon*.pkg)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "No macOS packages produced"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+            echo "Uploaded macOS packages to $TAG"
+          else
+            echo "No GitHub release $TAG yet; artifact only"
+          fi

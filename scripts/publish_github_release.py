@@ -7,6 +7,10 @@ Uploads:
   - CeefaxStation-Setup.exe        (stable Windows alias used by /download)
   - ceefax-station_*.deb           (versioned, if present)
   - ceefax-station.deb             (stable Linux alias used by /download/linux)
+  - CeefaxStation-Intel-X.Y.Z.pkg  (versioned, if present)
+  - CeefaxStation-Intel.pkg        (stable Intel Mac alias used by /download/mac/intel)
+  - CeefaxStation-AppleSilicon-X.Y.Z.pkg
+  - CeefaxStation-AppleSilicon.pkg (stable Apple Silicon alias used by /download/mac/apple-silicon)
 
 Usage:
     python scripts/publish_github_release.py
@@ -34,6 +38,8 @@ VERSION_FILE = ROOT / "VERSION"
 CHANGELOG_FILE = ROOT / "CHANGELOG.json"
 STABLE_NAME = "CeefaxStation-Setup.exe"
 LINUX_STABLE_NAME = "ceefax-station.deb"
+MAC_INTEL_STABLE_NAME = "CeefaxStation-Intel.pkg"
+MAC_ARM_STABLE_NAME = "CeefaxStation-AppleSilicon.pkg"
 
 
 def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -78,6 +84,19 @@ def resolve_linux_deb(label: str) -> Path | None:
     return None
 
 
+def resolve_mac_pkg(stable_name: str, versioned_glob: str, ver: str) -> Path | None:
+    versioned = INSTALLERS / versioned_glob.format(ver=ver)
+    if versioned.is_file():
+        return versioned
+    matches = sorted(INSTALLERS.glob(versioned_glob.format(ver="*")))
+    if matches:
+        return matches[-1]
+    alias = INSTALLERS / stable_name
+    if alias.is_file():
+        return alias
+    return None
+
+
 def changelog_notes(label: str) -> str:
     if not CHANGELOG_FILE.exists():
         return f"Installers for Ceefax Station {label}."
@@ -90,34 +109,49 @@ def changelog_notes(label: str) -> str:
     if not isinstance(entries, list):
         return f"Installers for Ceefax Station {label}."
 
+    matched: list[dict] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         if str(entry.get("version") or "").strip() != label:
             continue
-        changes = entry.get("changes")
+        matched.append(entry)
+    if not matched:
+        return f"Installers for Ceefax Station {label}."
+
+    lines = [f"## Ceefax Station {label}", ""]
+    for entry in matched:
         date = str(entry.get("date") or "").strip()
-        lines = [f"## Ceefax Station {label}", ""]
+        changes = entry.get("changes")
+        heading = "### Changes"
         if date:
-            lines.append(f"Date: {date}")
-            lines.append("")
+            heading = f"### Changes ({date})" if len(matched) > 1 else "### Changes"
+            if len(matched) == 1:
+                lines.append(f"Date: {date}")
+                lines.append("")
         if isinstance(changes, list) and changes:
-            lines.append("### Changes")
+            lines.append(heading)
             for item in changes:
                 lines.append(f"- {item}")
-        lines.append("")
-        lines.append("### Download")
-        lines.append(
-            "Windows: website **Download Windows** uses the stable asset "
-            "`CeefaxStation-Setup.exe` from this latest release."
-        )
-        lines.append(
-            "Linux: website **Download Linux** uses the stable asset "
-            "`ceefax-station.deb` from this latest release."
-        )
-        return "\n".join(lines)
-
-    return f"Installers for Ceefax Station {label}."
+            lines.append("")
+    lines.append("### Download")
+    lines.append(
+        "Windows: website **Download Windows** uses the stable asset "
+        "`CeefaxStation-Setup.exe` from this latest release."
+    )
+    lines.append(
+        "Linux: website **Download Linux** uses the stable asset "
+        "`ceefax-station.deb` from this latest release."
+    )
+    lines.append(
+        "Mac Intel (macOS 13+): website **Download Mac Intel** uses "
+        "`CeefaxStation-Intel.pkg`."
+    )
+    lines.append(
+        "Mac Apple Silicon: website **Download Mac Apple Silicon** uses "
+        "`CeefaxStation-AppleSilicon.pkg`."
+    )
+    return "\n".join(lines)
 
 
 def release_exists(tag: str) -> bool:
@@ -133,10 +167,17 @@ def publish(*, version_label: str | None, dry_run: bool) -> None:
 
     setup = resolve_setup_exe(ver)
     linux_deb = resolve_linux_deb(label)
-    if setup is None and linux_deb is None:
+    mac_intel = resolve_mac_pkg(
+        MAC_INTEL_STABLE_NAME, "CeefaxStation-Intel-{ver}.pkg", ver
+    )
+    mac_arm = resolve_mac_pkg(
+        MAC_ARM_STABLE_NAME, "CeefaxStation-AppleSilicon-{ver}.pkg", ver
+    )
+    if setup is None and linux_deb is None and mac_intel is None and mac_arm is None:
         raise SystemExit(
             f"No installer found in {INSTALLERS} for version {label}.\n"
-            "Build the Windows Setup EXE or run: python scripts/build_debian_package.py"
+            "Build the Windows Setup EXE, run python scripts/build_debian_package.py, "
+            "or python scripts/build_macos_package.py --arch intel|apple-silicon"
         )
 
     tag = f"v{ver}"
@@ -156,6 +197,16 @@ def publish(*, version_label: str | None, dry_run: bool) -> None:
         print(f"Linux alias   : {LINUX_STABLE_NAME}")
     else:
         print("Linux         : (missing)")
+    if mac_intel is not None:
+        print(f"Mac Intel     : {mac_intel} ({mac_intel.stat().st_size} bytes)")
+        print(f"Intel alias   : {MAC_INTEL_STABLE_NAME}")
+    else:
+        print("Mac Intel     : (missing)")
+    if mac_arm is not None:
+        print(f"Mac ARM       : {mac_arm} ({mac_arm.stat().st_size} bytes)")
+        print(f"ARM alias     : {MAC_ARM_STABLE_NAME}")
+    else:
+        print("Mac ARM       : (missing)")
 
     with tempfile.TemporaryDirectory(prefix="ceefax-release-") as tmp:
         upload_paths: list[str] = []
@@ -169,6 +220,17 @@ def publish(*, version_label: str | None, dry_run: bool) -> None:
             if linux_deb.name != LINUX_STABLE_NAME:
                 upload_paths.append(str(linux_deb))
             upload_paths.append(str(linux_stable))
+        for pkg, stable_name in (
+            (mac_intel, MAC_INTEL_STABLE_NAME),
+            (mac_arm, MAC_ARM_STABLE_NAME),
+        ):
+            if pkg is None:
+                continue
+            mac_stable = Path(tmp) / stable_name
+            shutil.copy2(pkg, mac_stable)
+            if pkg.name != stable_name:
+                upload_paths.append(str(pkg))
+            upload_paths.append(str(mac_stable))
 
         if dry_run:
             print("--- dry-run notes ---")
@@ -229,6 +291,16 @@ def publish(*, version_label: str | None, dry_run: bool) -> None:
         print(
             "Linux URL: "
             f"https://github.com/thaum-labs/ceefax_station/releases/latest/download/{LINUX_STABLE_NAME}"
+        )
+    if mac_intel is not None:
+        print(
+            "Mac Intel URL: "
+            f"https://github.com/thaum-labs/ceefax_station/releases/latest/download/{MAC_INTEL_STABLE_NAME}"
+        )
+    if mac_arm is not None:
+        print(
+            "Mac Apple Silicon URL: "
+            f"https://github.com/thaum-labs/ceefax_station/releases/latest/download/{MAC_ARM_STABLE_NAME}"
         )
 
 

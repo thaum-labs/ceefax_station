@@ -8,7 +8,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   <img src="https://img.shields.io/badge/version-0.1.9--alpha-orange" alt="Version 0.1.9-alpha" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6?logo=linux&logoColor=white" alt="Windows and Linux" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D6?logo=apple&logoColor=white" alt="Windows, Linux, and macOS" />
   <br/>
   <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
   <img src="https://img.shields.io/badge/Dire%20Wolf-packet%20radio-2E8B57" alt="Dire Wolf" />
@@ -82,6 +82,30 @@ That installs the `ceefaxstation` command. First run stores config and pages in 
 
 The same file is also the GitHub Release asset `ceefax-station.deb` (website: [ceefaxstation.com/download/linux](https://ceefaxstation.com/download/linux)). To rebuild: `python scripts/build_debian_package.py` — see [`packaging/debian/README.md`](packaging/debian/README.md).
 
+### macOS (Intel and Apple Silicon)
+
+Needs **macOS 13 Ventura** or later. Apple menu → About This Mac shows the chip.
+
+**Apple Silicon** (M1 / M2 / M3 / M4):
+
+```bash
+curl -L -o CeefaxStation-AppleSilicon.pkg \
+  https://github.com/thaum-labs/ceefax_station/releases/latest/download/CeefaxStation-AppleSilicon.pkg
+sudo installer -pkg ./CeefaxStation-AppleSilicon.pkg -target /
+ceefaxstation
+```
+
+**Intel:**
+
+```bash
+curl -L -o CeefaxStation-Intel.pkg \
+  https://github.com/thaum-labs/ceefax_station/releases/latest/download/CeefaxStation-Intel.pkg
+sudo installer -pkg ./CeefaxStation-Intel.pkg -target /
+ceefaxstation
+```
+
+You can also open the `.pkg` in Finder, or use [ceefaxstation.com/download/mac](https://ceefaxstation.com/download/mac). First run stores config and pages in `~/.ceefax_station`. For live FM receive: `brew install direwolf`. If macOS blocks the package, System Settings → Privacy & Security → **Open Anyway**. Rebuild notes: [`packaging/macos/README.md`](packaging/macos/README.md).
+
 ### Windows
 
 Windows installs can also self-update later (`U` in the viewer or `ceefaxstation update`). A setup EXE is in [`installers/`](installers/) and at [ceefaxstation.com/download](https://ceefaxstation.com/download).
@@ -113,6 +137,8 @@ On Windows also run:
 ```bash
 python -m pip install windows-curses
 ```
+
+On macOS, Python 3.11 from [python.org](https://www.python.org/downloads/) or `brew install python@3.11` is enough (no extra curses package).
 
 4. **Set your station name**
 
@@ -187,17 +213,19 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 **Windows:** [`installers/CeefaxStation-Setup-0.1.9.exe`](installers/CeefaxStation-Setup-0.1.9.exe).
 
-Website **Download Windows** (`https://ceefaxstation.com/download`) uses the latest GitHub Release asset `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. See [`installers/README.md`](installers/README.md).
+**macOS:** GitHub Release assets `CeefaxStation-AppleSilicon.pkg` (arm64) and `CeefaxStation-Intel.pkg` (x86_64, macOS 13+). Built in CI — see [`packaging/macos/README.md`](packaging/macos/README.md).
+
+Website **Download Windows** (`https://ceefaxstation.com/download`) uses `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. **Download Mac** (`https://ceefaxstation.com/download/mac`) offers both `.pkg` files. See [`installers/README.md`](installers/README.md).
 
 Once installed, the app can upgrade itself from GitHub Releases: press **U** in the viewer, or run `ceefaxstation update` (no uninstall required).
 
-The Windows installer is the easiest install on that platform (bundles the app **and Dire Wolf** for live RX). The Debian package uses system Python and recommends the distro `direwolf` package. After install, use **U** / `ceefaxstation update` to pull newer GitHub Releases without uninstalling. Prefer From source above if you want bleeding-edge source.
+Windows is the easiest install on that platform (bundles the app, Dire Wolf, and modem73). Debian uses system Python and recommends distro `direwolf`; install modem73 separately for HF. Mac packages bundle Python 3.11 (no Homebrew Python needed) and recommend `brew install direwolf` for live FM RX. After install, use **U** / `ceefaxstation update`. Prefer From source above if you want bleeding-edge source.
 
 ---
 
 ## Radio (TX / RX)
 
-You need a valid licence, a radio, and audio into the PC. The default band is VHF FM: 1200 baud AFSK, decoded by [Dire Wolf](https://github.com/wb2osz/direwolf). The Windows installer bundles Dire Wolf under `ceefax/tools/direwolf`. On Linux, `sudo apt install direwolf` (the Debian package recommends this). Manual installs should put `direwolf` / `direwolf.exe` on `PATH` or in that folder.
+You need a valid licence, a radio, and audio into the PC. The default band is VHF FM: 1200 baud AFSK, decoded by [Dire Wolf](https://github.com/wb2osz/direwolf). The Windows installer bundles Dire Wolf under `ceefax/tools/direwolf`. On Linux, `sudo apt install direwolf` (the Debian package recommends this). On macOS, `brew install direwolf`. Manual installs should put `direwolf` / `direwolf.exe` on `PATH` or in that folder.
 
 ### FM or HF
 
@@ -225,7 +253,7 @@ A VHF station never starts modem73. Dire Wolf cannot send or receive RDM-600S or
 
 On HF receive the app does not choose RDM-600S versus RDM-300S. modem73's receiver has those decoders on together and auto-detects the mode of each frame. Only the transmitter's `[hf] mode` matters. RDM-600S is the normal choice. Set `RDM-300S` when the path is weak. A missed page is picked up on the next hourly pass. There is no ACK and no automatic retry.
 
-The Windows installer bundles modem73 beside Dire Wolf. On Linux the Ceefax `.deb` does not contain it: install the official modem73 package for that CPU (amd64, arm64, or armhf) and leave `modem73` on `PATH`. PTT stays in modem73 (rigctl, serial, or CM108).
+The Windows installer bundles modem73 beside Dire Wolf. On Linux the Ceefax `.deb` does not contain it: install the official modem73 package for that CPU (amd64, arm64, or armhf) and leave `modem73` on `PATH`. On macOS, install [modem73](https://modem73.app) yourself and leave `modem73` on `PATH`. PTT stays in modem73 (rigctl, serial, or CM108).
 
 The page footer shows the active link, `VHF FM` or `HF RDM-600S`.
 
@@ -307,7 +335,8 @@ ceefax/           station app, page updaters, viewer
 ceefaxstation/    CLI (`python -m ceefaxstation ...`)
 ceefaxweb/        official site source (ceefaxstation.com — not for self-hosting)
 installers/       Windows Setup .exe + Linux .deb (last packaged: 0.1.9-alpha / tag v0.1.9)
-packaging/debian/ build notes for the Debian package
+packaging/debian/ Debian package build
+packaging/macos/  Intel and Apple Silicon .pkg build (CI / GitHub Release assets)
 ```
 
 ```bash

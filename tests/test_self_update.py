@@ -7,6 +7,7 @@ from ceefaxstation.self_update import (
     ReleaseInfo,
     apply_update,
     fetch_latest_release,
+    installer_asset_for_platform,
     is_remote_newer,
     normalize_version,
     run_cli_update,
@@ -176,3 +177,58 @@ def test_run_cli_update_check_only_exit_codes() -> None:
         return_value=("0.1.4-alpha", latest, False),
     ):
         assert run_cli_update(check_only=True) == 0
+
+
+def test_fetch_latest_release_prefers_mac_intel_pkg() -> None:
+    payload = {
+        "tag_name": "v0.1.6",
+        "name": "Ceefax Station 0.1.6-alpha",
+        "published_at": "2026-09-22T12:00:00Z",
+        "assets": [
+            {
+                "name": "CeefaxStation-Intel-0.1.6.pkg",
+                "browser_download_url": "https://example.com/versioned-intel.pkg",
+            },
+            {
+                "name": "CeefaxStation-Intel.pkg",
+                "browser_download_url": "https://example.com/stable-intel.pkg",
+            },
+            {
+                "name": "CeefaxStation-AppleSilicon.pkg",
+                "browser_download_url": "https://example.com/stable-arm.pkg",
+            },
+        ],
+    }
+    with patch("ceefaxstation.self_update._http_json", return_value=payload):
+        info = fetch_latest_release(asset="CeefaxStation-Intel.pkg")
+    assert info.asset_name == "CeefaxStation-Intel.pkg"
+    assert info.download_url == "https://example.com/stable-intel.pkg"
+
+
+def test_fetch_latest_release_prefers_mac_arm_pkg() -> None:
+    payload = {
+        "tag_name": "v0.1.6",
+        "name": "Ceefax Station 0.1.6-alpha",
+        "assets": [
+            {
+                "name": "CeefaxStation-AppleSilicon-0.1.6.pkg",
+                "browser_download_url": "https://example.com/versioned-arm.pkg",
+            },
+            {
+                "name": "CeefaxStation-AppleSilicon.pkg",
+                "browser_download_url": "https://example.com/stable-arm.pkg",
+            },
+        ],
+    }
+    with patch("ceefaxstation.self_update._http_json", return_value=payload):
+        info = fetch_latest_release(asset="CeefaxStation-AppleSilicon.pkg")
+    assert info.asset_name == "CeefaxStation-AppleSilicon.pkg"
+    assert info.download_url == "https://example.com/stable-arm.pkg"
+
+
+def test_installer_asset_for_platform_macos(monkeypatch) -> None:
+    monkeypatch.setattr("ceefaxstation.self_update.sys.platform", "darwin")
+    monkeypatch.setattr("ceefaxstation.self_update.platform.machine", lambda: "arm64")
+    assert installer_asset_for_platform() == "CeefaxStation-AppleSilicon.pkg"
+    monkeypatch.setattr("ceefaxstation.self_update.platform.machine", lambda: "x86_64")
+    assert installer_asset_for_platform() == "CeefaxStation-Intel.pkg"

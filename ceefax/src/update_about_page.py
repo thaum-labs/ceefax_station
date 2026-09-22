@@ -52,7 +52,10 @@ def detect_platform() -> str:
             pass
         return "Linux"
     if system == "Darwin":
-        return "Mac"
+        machine = (machine or "").lower()
+        if machine in {"arm64", "aarch64"}:
+            return "Mac (Apple Silicon)"
+        return "Mac (Intel)"
     return f"{system} ({machine})"
 
 

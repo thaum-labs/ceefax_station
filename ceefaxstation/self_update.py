@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -17,6 +18,8 @@ from urllib.request import Request, urlopen
 DEFAULT_REPO = "thaum-labs/ceefax_station"
 STABLE_ASSET_WINDOWS = "CeefaxStation-Setup.exe"
 STABLE_ASSET_LINUX = "ceefax-station.deb"
+STABLE_ASSET_MAC_INTEL = "CeefaxStation-Intel.pkg"
+STABLE_ASSET_MAC_ARM = "CeefaxStation-AppleSilicon.pkg"
 STABLE_ASSET = STABLE_ASSET_WINDOWS
 GITHUB_API_LATEST = "https://api.github.com/repos/{repo}/releases/latest"
 GITHUB_DOWNLOAD_LATEST = (
@@ -72,6 +75,11 @@ def updates_dir() -> Path:
 def installer_asset_for_platform() -> str:
     if sys.platform.startswith("linux"):
         return STABLE_ASSET_LINUX
+    if sys.platform == "darwin":
+        machine = (platform.machine() or "").lower()
+        if machine in {"arm64", "aarch64"}:
+            return STABLE_ASSET_MAC_ARM
+        return STABLE_ASSET_MAC_INTEL
     return STABLE_ASSET_WINDOWS
 
 
@@ -86,6 +94,20 @@ def _is_windows_setup_name(name: str) -> bool:
     lower = name.lower()
     return lower == STABLE_ASSET_WINDOWS or (
         lower.startswith("ceefaxstation-setup-") and lower.endswith(".exe")
+    )
+
+
+def _is_mac_intel_pkg_name(name: str) -> bool:
+    lower = name.lower()
+    return lower == STABLE_ASSET_MAC_INTEL.lower() or (
+        lower.startswith("ceefaxstation-intel-") and lower.endswith(".pkg")
+    )
+
+
+def _is_mac_arm_pkg_name(name: str) -> bool:
+    lower = name.lower()
+    return lower == STABLE_ASSET_MAC_ARM.lower() or (
+        lower.startswith("ceefaxstation-applesilicon-") and lower.endswith(".pkg")
     )
 
 
@@ -132,11 +154,26 @@ def fetch_latest_release(
             download_url = url
             asset_name = name
             break
-        linux_wanted = wanted.lower().endswith(".deb")
+        wanted_l = wanted.lower()
+        linux_wanted = wanted_l.endswith(".deb")
+        mac_intel_wanted = _is_mac_intel_pkg_name(wanted)
+        mac_arm_wanted = _is_mac_arm_pkg_name(wanted)
         if linux_wanted and _is_linux_deb_name(name) and not fallback_url:
             fallback_url = url
             fallback_name = name
-        if not linux_wanted and _is_windows_setup_name(name) and not fallback_url:
+        elif mac_intel_wanted and _is_mac_intel_pkg_name(name) and not fallback_url:
+            fallback_url = url
+            fallback_name = name
+        elif mac_arm_wanted and _is_mac_arm_pkg_name(name) and not fallback_url:
+            fallback_url = url
+            fallback_name = name
+        elif (
+            not linux_wanted
+            and not mac_intel_wanted
+            and not mac_arm_wanted
+            and _is_windows_setup_name(name)
+            and not fallback_url
+        ):
             fallback_url = url
             fallback_name = name
 
@@ -203,6 +240,7 @@ def launch_installer(setup_path: Path, *, silent: bool = True) -> None:
 
     Windows: Inno Setup with UAC elevation.
     Linux: `pkexec dpkg -i` (or sudo) for the Debian package.
+    macOS: `installer -pkg` with an admin privileges prompt.
     """
     setup_path = setup_path.resolve()
     if not setup_path.is_file():
@@ -212,6 +250,12 @@ def launch_installer(setup_path: Path, *, silent: bool = True) -> None:
         sys.platform.startswith("linux") and setup_path.name.lower().endswith(".deb")
     ):
         _launch_deb(setup_path)
+        return
+
+    if setup_path.suffix.lower() == ".pkg" or (
+        sys.platform == "darwin" and setup_path.name.lower().endswith(".pkg")
+    ):
+        _launch_pkg(setup_path)
         return
 
     args = [str(setup_path)]
@@ -269,6 +313,30 @@ def _launch_deb(deb_path: Path) -> None:
     )
 
 
+def _launch_pkg(pkg_path: Path) -> None:
+    pkg = str(pkg_path)
+    quoted = pkg.replace("\\", "\\\\").replace('"', '\\"')
+    if shutil.which("osascript"):
+        subprocess.Popen(
+            [
+                "osascript",
+                "-e",
+                f'do shell script "installer -pkg \\"{quoted}\\" -target /" with administrator privileges',
+            ]
+        )
+        return
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        subprocess.Popen(["installer", "-pkg", pkg, "-target", "/"])
+        return
+    if shutil.which("sudo"):
+        subprocess.Popen(["sudo", "installer", "-pkg", pkg, "-target", "/"])
+        return
+    raise OSError(
+        "Need an admin password to install the macOS package. "
+        f"You can install it manually with: sudo installer -pkg {pkg} -target /"
+    )
+
+
 def apply_update(
     *,
     repo: str = DEFAULT_REPO,
@@ -311,6 +379,8 @@ def apply_update(
 
     if dest.suffix.lower() == ".deb":
         note("Starting Debian installer (authenticate if prompted)...")
+    elif dest.suffix.lower() == ".pkg":
+        note("Starting macOS installer (authenticate if prompted)...")
     else:
         note("Starting installer (approve UAC if prompted)...")
     try:
@@ -362,6 +432,8 @@ def run_cli_update(*, check_only: bool = False, yes: bool = False, force: bool =
         return 0
     if status == "launched":
         if sys.platform.startswith("linux"):
+            print("Installer started. Authenticate if prompted, then relaunch Ceefax Station.")
+        elif sys.platform == "darwin":
             print("Installer started. Authenticate if prompted, then relaunch Ceefax Station.")
         else:
             print("Installer started. Ceefax Station will exit so files can be replaced.")

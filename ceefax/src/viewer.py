@@ -251,6 +251,7 @@ def _find_direwolf_exe(explicit: str | None = None) -> str:
     Prefer the writable user data tree, then the install directory (Program Files
     for the Windows installer, /usr/lib/ceefax-station on Debian), then PATH.
     Linux packages typically use the system `direwolf` binary from apt.
+    macOS packages look on PATH (`brew install direwolf`).
     """
     if explicit:
         return explicit
@@ -3293,7 +3294,7 @@ def main() -> None:
         "--direwolf",
         dest="direwolf",
         default=None,
-        help="Path to the Dire Wolf executable (bundled tools/direwolf on Windows, or PATH on Linux).",
+        help="Path to the Dire Wolf executable (bundled tools/direwolf on Windows, or PATH on Linux/macOS).",
     )
     parser.add_argument(
         "--dest",

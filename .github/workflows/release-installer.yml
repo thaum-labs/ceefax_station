@@ -1,8 +1,10 @@
-name: Publish Windows installer release
+name: Publish installer release
 
 # Keeps ceefaxstation.com/download working by publishing:
 #   - CeefaxStation-Setup-X.Y.Z.exe
 #   - CeefaxStation-Setup.exe  (stable alias on the latest release)
+#   - ceefax-station.deb
+#   - CeefaxStation-Intel.pkg / CeefaxStation-AppleSilicon.pkg
 
 on:
   push:
@@ -11,10 +13,13 @@ on:
     paths:
       - "installers/CeefaxStation-Setup-*.exe"
       - "installers/ceefax-station*.deb"
+      - "installers/CeefaxStation-Intel*.pkg"
+      - "installers/CeefaxStation-AppleSilicon*.pkg"
       - "VERSION"
       - "CHANGELOG.json"
       - "scripts/publish_github_release.py"
       - "scripts/build_debian_package.py"
+      - "scripts/build_macos_package.py"
       - ".github/workflows/release-installer.yml"
   workflow_dispatch:
     inputs:

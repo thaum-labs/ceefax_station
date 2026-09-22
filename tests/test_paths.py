@@ -55,6 +55,17 @@ def test_packaged_ceefax_root_uses_user_data(monkeypatch, tmp_path: Path) -> Non
     assert paths.uses_user_data()
 
 
+def test_applications_install_is_packaged(monkeypatch, tmp_path: Path) -> None:
+    from ceefax.src import paths
+
+    fake = tmp_path / "Applications" / "CeefaxStation.app" / "Contents" / "Resources" / "ceefax" / "src" / "paths.py"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("# stub\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "__file__", str(fake))
+    monkeypatch.delenv("CEEFAX_PACKAGED", raising=False)
+    assert paths.is_packaged_install()
+
+
 def test_load_config_falls_back_to_default_toml() -> None:
     from ceefax.src.config import load_config
 

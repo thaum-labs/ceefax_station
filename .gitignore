@@ -145,3 +145,8 @@ playwright-report/
 blob-report/
 qa/.runtime/
 qa/report/
+
+# macOS .pkg products are built on macOS runners (too large to keep in git)
+installers/*.pkg
+installers/*.dmg
+packaging/macos/.cache/

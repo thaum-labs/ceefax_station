@@ -253,3 +253,20 @@ def test_download_routes_redirect_to_github_release_assets(tmp_path: Path, monke
         alias = client.get("/download/windows", follow_redirects=False)
         assert alias.status_code == 302
         assert alias.headers["location"].endswith("CeefaxStation-Setup.exe")
+
+        mac_page = client.get("/download/mac", follow_redirects=False)
+        assert mac_page.status_code == 200
+        assert "Apple Silicon" in mac_page.text
+        assert "Intel" in mac_page.text
+
+        mac_intel = client.get("/download/mac/intel", follow_redirects=False)
+        assert mac_intel.status_code == 302
+        assert mac_intel.headers["location"].endswith("CeefaxStation-Intel.pkg")
+
+        mac_arm = client.get("/download/mac/apple-silicon", follow_redirects=False)
+        assert mac_arm.status_code == 302
+        assert mac_arm.headers["location"].endswith("CeefaxStation-AppleSilicon.pkg")
+
+        macos_alias = client.get("/download/macos/intel", follow_redirects=False)
+        assert macos_alias.status_code == 302
+        assert macos_alias.headers["location"].endswith("CeefaxStation-Intel.pkg")

@@ -177,6 +177,53 @@ def create_app() -> FastAPI:
     def download_windows() -> RedirectResponse:
         return download_app()
 
+    @app.get("/download/mac/intel")
+    def download_mac_intel() -> RedirectResponse:
+        """Redirect to the newest Intel (x86_64, macOS 13+) installer."""
+        return RedirectResponse(
+            url=(
+                "https://github.com/thaum-labs/ceefax_station/"
+                "releases/latest/download/CeefaxStation-Intel.pkg"
+            ),
+            status_code=302,
+        )
+
+    @app.get("/download/mac/apple-silicon")
+    def download_mac_apple_silicon() -> RedirectResponse:
+        """Redirect to the newest Apple Silicon (arm64) installer."""
+        return RedirectResponse(
+            url=(
+                "https://github.com/thaum-labs/ceefax_station/"
+                "releases/latest/download/CeefaxStation-AppleSilicon.pkg"
+            ),
+            status_code=302,
+        )
+
+    @app.get("/download/macos/intel")
+    def download_macos_intel() -> RedirectResponse:
+        return download_mac_intel()
+
+    @app.get("/download/macos/apple-silicon")
+    def download_macos_apple_silicon() -> RedirectResponse:
+        return download_mac_apple_silicon()
+
+    @app.get("/download/mac/arm64")
+    def download_mac_arm64() -> RedirectResponse:
+        return download_mac_apple_silicon()
+
+    @app.get("/download/mac", response_class=HTMLResponse)
+    def download_mac() -> HTMLResponse:
+        """Chooser for Intel vs Apple Silicon .pkg installers."""
+        page = static_dir / "download-mac.html"
+        if not page.exists():
+            raise HTTPException(status_code=404, detail="Mac download page not found")
+        html = page.read_text(encoding="utf-8")
+        return HTMLResponse(content=html, headers=_NO_CACHE_HEADERS)
+
+    @app.get("/download/macos", response_class=HTMLResponse)
+    def download_macos() -> HTMLResponse:
+        return download_mac()
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/api/map")

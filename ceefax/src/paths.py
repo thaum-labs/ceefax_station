@@ -76,7 +76,8 @@ def install_root() -> Path:
 
 def is_packaged_install() -> bool:
     """
-    True for Debian/system installs (code under /usr or /opt, or CEEFAX_PACKAGED=1).
+    True for Debian/system/macOS pkg installs (code under /usr, /opt,
+    /Applications, /Library, or CEEFAX_PACKAGED=1).
 
     Dev checkouts keep using the repository tree so pages/config stay local.
     """
@@ -86,7 +87,14 @@ def is_packaged_install() -> bool:
     if flag in _FALSE:
         return False
     posix = Path(__file__).resolve().as_posix()
-    return posix.startswith("/usr/") or posix.startswith("/opt/")
+    return (
+        posix.startswith("/usr/")
+        or posix.startswith("/opt/")
+        or posix.startswith("/Library/")
+        or posix.startswith("/Applications/")
+        or "/CeefaxStation.app/" in posix
+        or "/Ceefax Station.app/" in posix
+    )
 
 
 def uses_user_data() -> bool:

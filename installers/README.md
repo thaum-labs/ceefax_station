@@ -39,6 +39,27 @@ https://github.com/thaum-labs/ceefax_station/raw/main/installers/ceefax-station.
 
 See [`packaging/debian/README.md`](../packaging/debian/README.md).
 
+## Current macOS installers
+
+Built on GitHub Actions (not stored in git — the `.pkg` files are large and need macOS `pkgbuild`):
+
+- **CeefaxStation-Intel.pkg** — Intel x86_64, **macOS 13 Ventura** and later
+- **CeefaxStation-AppleSilicon.pkg** — Apple Silicon (arm64), macOS 13+
+
+```bash
+# Apple Silicon
+curl -L -o CeefaxStation-AppleSilicon.pkg \
+  https://github.com/thaum-labs/ceefax_station/releases/latest/download/CeefaxStation-AppleSilicon.pkg
+sudo installer -pkg ./CeefaxStation-AppleSilicon.pkg -target /
+ceefaxstation
+```
+
+Website **Download Mac** (`https://ceefaxstation.com/download/mac`) links both packages.
+Direct Intel: `https://ceefaxstation.com/download/mac/intel`
+Direct Apple Silicon: `https://ceefaxstation.com/download/mac/apple-silicon`
+
+See [`packaging/macos/README.md`](../packaging/macos/README.md).
+
 ## Current Windows installer
 
 - **CeefaxStation-Setup-0.1.9.exe** - Version 0.1.9-alpha (HF transmit paces by frame time and no longer aborts while modem73 is sending; in-app self-update from GitHub Releases)
@@ -57,7 +78,7 @@ Installed stations can upgrade without uninstalling:
 - In the viewer: press **U**, confirm, approve UAC if prompted
 - From a terminal: `ceefaxstation update` (or `ceefaxstation update --check`)
 
-This downloads `CeefaxStation-Setup.exe` from the latest GitHub Release and runs the silent Setup upgrade.
+This downloads the platform installer from the latest GitHub Release (Windows Setup EXE, Linux `.deb`, or macOS `.pkg`) and runs the upgrade.
 
 ## Building New Installers
 
@@ -92,17 +113,21 @@ When you want to create a new installer for a new version:
    ```
 
    Pushing a new `installers/CeefaxStation-Setup-*.exe` (or `VERSION` / changelog) to `main`
-   runs **Publish Windows installer release**, which creates/updates the GitHub Release with:
+   runs **Publish installer release**, which creates/updates the GitHub Release with:
 
    - `CeefaxStation-Setup-X.Y.Z.exe`
    - `CeefaxStation-Setup.exe` (stable alias)
    - `ceefax-station.deb` when a Debian package is present in `installers/`
+   - `CeefaxStation-Intel.pkg` / `CeefaxStation-AppleSilicon.pkg` when Mac packages are present
 
    Windows download: `https://ceefaxstation.com/download`
    (`…/releases/latest/download/CeefaxStation-Setup.exe`).
 
    Linux download: `https://ceefaxstation.com/download/linux`
    (`…/releases/latest/download/ceefax-station.deb`).
+
+   Mac download: `https://ceefaxstation.com/download/mac`
+   (`…/releases/latest/download/CeefaxStation-Intel.pkg` and `CeefaxStation-AppleSilicon.pkg`).
 
    Manual / local publish (same script CI uses):
 
@@ -112,14 +137,27 @@ When you want to create a new installer for a new version:
    python scripts/publish_github_release.py --version 0.1.2-alpha
    ```
 
-   Or run the workflow from GitHub Actions → **Publish Windows installer release** → Run workflow.
+   Or run the workflow from GitHub Actions → **Publish installer release** → Run workflow.
+
+## Building macOS installers
+
+On a Mac (or via **Build macOS installers** in GitHub Actions):
+
+```bash
+python scripts/build_macos_package.py --arch intel
+python scripts/build_macos_package.py --arch apple-silicon
+```
+
+Intel packages set `LSMinimumSystemVersion` / installer `os-version` to **13.0** and bundle the x86_64 CPython standalone runtime. Apple Silicon packages bundle the arm64 runtime.
 
 ## Notes
 
-- Installers are built using PyInstaller and Inno Setup
-- The installer bundles the app EXE (Python runtime) plus Dire Wolf for live RX
+- Windows Setup EXEs are built with PyInstaller and Inno Setup (app + Dire Wolf + modem73)
+- Linux `.deb` files are built with `python scripts/build_debian_package.py` (system Python)
+- macOS `.pkg` files are built on GitHub Actions with `python scripts/build_macos_package.py` (bundled CPython 3.11)
 - Installers may lag behind the latest code on GitHub
 - Users can always use the manual installation method for the latest code
 - Website **Download Windows** always uses the latest GitHub release’s `CeefaxStation-Setup.exe` alias
 - Website **Download Linux** always uses the latest GitHub release’s `ceefax-station.deb` alias
+- Website **Download Mac** always uses the latest GitHub release’s `CeefaxStation-Intel.pkg` and `CeefaxStation-AppleSilicon.pkg` aliases
 - Do **not** skip the GitHub Release step: without the stable alias on the latest release, **Download app** on ceefaxstation.com will 404

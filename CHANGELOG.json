@@ -6,29 +6,11 @@
       "date": "2026-09-22",
       "version": "0.1.9-alpha",
       "changes": [
-        "HF transmit paces by the RDM frame time. modem73's transmitted-frame count does not move while a frame is on the air, and 0.1.8 treated that as a stall and stopped the pass"
-      ]
-    },
-    {
-      "date": "2026-09-22",
-      "version": "0.1.8-alpha",
-      "changes": [
-        "HF transmit waits for modem73 to send frames before queueing more, so a full carousel is not cut off at 256 frames"
-      ]
-    },
-    {
-      "date": "2026-09-22",
-      "version": "0.1.7-alpha",
-      "changes": [
-        "Opt-in HF path beside FM. The default stays VHF FM: same 1200 baud AFSK frames, same Dire Wolf decode, modem73 not started",
-        "The viewer station setup asks for the link on every launch: VHF FM, or HF with RDM-600S or RDM-300S. Enter saves, ESC keeps the previous choice",
-        "HF transmit progress is estimated from the RDM frame time (about 3.6 s or 7.1 s), not from the FM AX.25 WAV length",
-        "Set [radio] band to \"hf\" to send and receive with modem73. HF modes are only RDM-600S (default) and RDM-300S. The app does not pick a mode from the transmit frequency",
-        "HF is one carousel loop per hour. Pages are split into KISS frames of at most 170 bytes and reassembled with the same fragment headers as FM",
-        "An HF receiver does not choose RDM-600S or RDM-300S. modem73 decodes every robust mode at once. FM receive still uses Dire Wolf",
-        "Each HF pass starts with a station beacon (callsign, frequency, grid, tx id) so heard stations can be named. A missed beacon still decodes pages",
-        "TX reports include band and mode. FM reports keep the existing WAV filename. HF reports are named by tx id",
-        "Windows installer build downloads modem73-win next to Dire Wolf. The Debian package does not embed modem73; Linux HF stations install the official amd64, arm64, or armhf build"
+        "HF transmit paces by the RDM frame time. modem73's transmitted-frame count does not move while a frame is on the air, and 0.1.8 treated that as a stall and stopped the pass",
+        "Mac installers for Intel (x86_64, macOS 13 Ventura and later) and Apple Silicon (arm64)",
+        "Website **Download Mac** (`/download/mac`) with direct links for Intel and Apple Silicon `.pkg` files",
+        "Self-update (`U` / `ceefaxstation update`) installs the matching Mac package on macOS",
+        "CI builds both `.pkg` files on macOS runners and attaches them to the GitHub Release"
       ]
     },
     {

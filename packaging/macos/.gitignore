@@ -1,0 +1,2 @@
+# Cache for python-build-standalone tarballs used by scripts/build_macos_package.py
+.cache/
