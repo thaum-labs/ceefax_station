@@ -44,6 +44,14 @@ def run_hourly_ax25_audio(
       - stream-to-stdout modes encode on the hour so PCM begins at :00
       - transmit a full 3× carousel as one continuous WAV/PCM stream
     """
+    if config.radio.band == "hf":
+        _run_hourly_hf(
+            config,
+            refresh_lead_seconds=refresh_lead_seconds,
+            carousel_loops=carousel_loops,
+        )
+        return
+
     ax = config.ax25
     au = config.audio
 
@@ -184,3 +192,82 @@ def run_hourly_ax25_audio(
             finalize_tx_report(wav_path)
         except Exception as exc:  # noqa: BLE001
             logging.exception("TX report finalize/upload failed: %s", exc)
+
+
+def hourly_transport(config: AppConfig) -> str:
+    """'vhf' keeps the AFSK scheduler. 'hf' is the only path that starts modem73."""
+    if config.radio.band == "hf":
+        return "hf"
+    return "vhf"
+
+
+def _run_hourly_hf(
+    config: AppConfig,
+    *,
+    refresh_lead_seconds: int | None = None,
+    carousel_loops: int | None = None,
+) -> None:
+    """
+    Hourly HF pass. Starts at the hour and streams KISS frames. No WAV is rendered.
+    One loop unless the operator set hf.loops_per_hour. ax25.loops_per_hour is not used.
+    """
+    from .hf import run_hf_pass
+
+    ax = config.ax25
+    if not ax.callsign:
+        raise ValueError("ax25.callsign must be set for HF transmit")
+
+    if carousel_loops is None:
+        loops = max(1, int(config.hf.loops_per_hour))
+    else:
+        loops = max(1, int(carousel_loops))
+
+    while True:
+        now = datetime.now()
+        hour = _next_hour_local(now)
+        lead = ax.refresh_lead_seconds if refresh_lead_seconds is None else int(refresh_lead_seconds)
+        refresh_at = hour - timedelta(seconds=max(0, lead))
+
+        if datetime.now() < refresh_at:
+            logging.info("Next HF cycle: refresh at %s, TX at %s (%s)", refresh_at, hour, config.hf.mode)
+            _sleep_until(refresh_at)
+        else:
+            logging.info("Within refresh window; refreshing now for HF TX at %s", hour)
+
+        prime_user_settings(callsign=ax.callsign, frequency="", auto_location=True)
+        try:
+            from .hub_pages import refresh_station_pages
+
+            refresh_station_pages(callsign=ax.callsign, frequency="", auto_location=True)
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("Refresh failed: %s", exc)
+
+        pages = load_all_pages(config.general.page_dir)
+        if not pages:
+            logging.error("No pages found after refresh in %s", config.general.page_dir)
+            _sleep_until(hour)
+            continue
+
+        now2 = datetime.now()
+        if now2 < hour:
+            _sleep_until(hour)
+        elif now2 > hour + timedelta(seconds=5):
+            logging.warning(
+                "HF refresh overran the hour (%s >= %s); skipping this hour",
+                now2,
+                hour,
+            )
+            continue
+
+        logging.info("Starting HF %s pass at %s (%d loop(s), no WAV)", config.hf.mode, hour, loops)
+        try:
+            run_hf_pass(config, pages, callsign=ax.callsign, loops=loops)
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("HF pass failed (scheduler continues): %s", exc)
+
+        finished = datetime.now()
+        if finished >= hour + timedelta(hours=1):
+            logging.warning(
+                "HF pass was still running at the next hour (%s). That hour was skipped.",
+                hour + timedelta(hours=1),
+            )

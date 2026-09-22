@@ -82,6 +82,8 @@ def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
     data = {
         "schema": 1,
         "kind": "ceefax_tx_report",
+        "band": "vhf",
+        "mode": "AFSK1200",
         "tx_id": plan.tx_id,
         "station_callsign": plan.src_callsign,
         "station_grid": grid or None,
@@ -97,6 +99,67 @@ def _write_tx_log(*, wav_path: str, plan: Ax25AudioPlan) -> str:
         "ui_frames_total": len(plan.ui_frames),
     }
     log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return str(log_path)
+
+
+def _tx_log_path_for_id(tx_id: str) -> Path:
+    out = _tx_log_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    safe = (tx_id or "unknown").replace("/", "_").replace("\\", "_")
+    return out / f"{safe}.json"
+
+
+def write_hf_tx_report(*, plan, frequency: str, grid: str, dest_callsign: str) -> str:
+    """
+    TX report for an HF pass. Keyed on tx_id because there is no WAV.
+
+    FM reports stay on the WAV stem so existing uploads keep their filenames.
+    """
+    log_path = _tx_log_path_for_id(plan.tx_id)
+    data = {
+        "schema": 1,
+        "kind": "ceefax_tx_report",
+        "band": "hf",
+        "mode": plan.mode,
+        "tx_id": plan.tx_id,
+        "station_callsign": plan.src_callsign,
+        "station_grid": (grid or "").strip().upper() or None,
+        "dest_callsign": dest_callsign,
+        "frequency": (frequency or "").strip() or None,
+        "wav_name": None,
+        "wav_path": None,
+        "generated_at": _utc_now_iso(),
+        "loops": plan.loops,
+        "page_ids": plan.page_ids,
+        "page_count": len(plan.page_ids),
+        "fragments_total": plan.fragments,
+        "ui_frames_total": len(plan.payloads),
+    }
+    log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return str(log_path)
+
+
+def finalize_hf_tx_report(tx_id: str | None) -> str | None:
+    """Stamp completed_at on the tx_id report and upload it."""
+    if not tx_id:
+        return None
+    log_path = _tx_log_path_for_id(tx_id)
+    if not log_path.is_file():
+        return None
+    try:
+        data = json.loads(log_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        data["completed_at"] = _utc_now_iso()
+        log_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        from ceefaxstation.uploader import auto_upload_log
+
+        auto_upload_log(log_path, wait_stable=False)
+    except Exception:  # noqa: BLE001
+        pass
     return str(log_path)
 
 

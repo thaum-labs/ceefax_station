@@ -45,6 +45,61 @@ class _FakeWindow(_SizedWindow):
         pass
 
 
+def test_startup_wizard_saves_hf_link_choice(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from ceefax.src import viewer
+
+    saved: dict = {}
+    monkeypatch.setattr(viewer.curses, "has_colors", lambda: False)
+    monkeypatch.setattr(
+        viewer,
+        "_load_radio_config",
+        lambda: {"callsign": "M7TJF", "frequency": "7.090 MHz", "grid": "IO91WM"},
+    )
+    monkeypatch.setattr(
+        viewer,
+        "load_config",
+        lambda path=None: SimpleNamespace(
+            radio=SimpleNamespace(band="vhf"),
+            hf=SimpleNamespace(mode="RDM-600S"),
+        ),
+    )
+    monkeypatch.setattr(viewer, "_frequency_choices", lambda: ["7.090 MHz"])
+    monkeypatch.setattr("ceefax.src.update_all.persist_radio_config", lambda *args, **kwargs: saved.update(callsign=args[0] if args else kwargs.get("callsign")))
+    monkeypatch.setattr(
+        "ceefax.src.config.save_link_settings",
+        lambda band, mode, path=None: saved.update(band=band, mode=mode),
+    )
+
+    class _WizardWindow(_FakeWindow):
+        def __init__(self) -> None:
+            super().__init__(24, 80)
+            self._keys = [
+                9,  # frequency
+                9,  # grid
+                9,  # link
+                curses.KEY_RIGHT,  # VHF -> HF
+                9,  # mode
+                curses.KEY_RIGHT,  # RDM-600S -> RDM-300S
+                10,  # save
+            ]
+
+        def nodelay(self, _flag: bool) -> None:
+            return None
+
+        def keypad(self, _flag: bool) -> None:
+            return None
+
+        def getch(self) -> int:
+            return self._keys.pop(0)
+
+    assert viewer._station_setup_in_tui(_WizardWindow(), force=True) is True
+    assert saved["band"] == "hf"
+    assert saved["mode"] == "RDM-300S"
+    assert saved["callsign"] == "M7TJF"
+
+
 def test_layout_reserves_footer_at_80x24_and_centers_when_taller() -> None:
     assert _ui_layout(_SizedWindow(24, 80)) == (0, 15, 22, 50)
     assert _ui_layout(_SizedWindow(30, 100)) == (2, 25, 23, 50)

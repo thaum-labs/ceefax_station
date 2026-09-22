@@ -256,7 +256,9 @@ Description: Ceefax-style teletext viewer and amateur radio station
  over amateur radio using AX.25 AFSK.
  .
  Stations download a shared page pack from ceefaxstation.com automatically.
- Live receive decode uses Dire Wolf when the direwolf package is installed.
+ Live FM receive uses Dire Wolf when the direwolf package is installed.
+ HF (RDM-600S / RDM-300S) needs the separate official modem73 package
+ for this CPU. It is not included here. The default band stays FM.
  Runtime data is stored in ~/.ceefax_station.
 """
 

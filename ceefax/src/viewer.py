@@ -56,12 +56,46 @@ class _Ax25FragmentReassembler:
       v2: b'CFX2' + tx_id(16 bytes) + page(3 ascii) + subpage(2 ascii) + idx(1) + total(1) + chunk...
     """
 
-    def __init__(self) -> None:
-        self._buf = {}  # (tx_id:str, page:str, subpage:int) -> {"total": int, "chunks": {idx:int->bytes}}
+    def __init__(
+        self,
+        *,
+        max_partials: int = 128,
+        max_age_s: float = 90 * 60,
+        clock=None,
+    ) -> None:
+        # Partials are only removed on success unless they go stale or the buffer
+        # exceeds max_partials. Defaults sit far above an FM pass (seconds, a
+        # handful of pages) so a page that completes is unaffected.
+        self._buf = {}  # (tx_id:str, page:str, subpage:int) -> {"total", "chunks", "touched"}
+        self._max_partials = max(1, int(max_partials))
+        self._max_age_s = float(max_age_s)
+        self._clock = clock or time.monotonic
+
+    def pending_count(self) -> int:
+        return len(self._buf)
+
+    def _evict(self, *, protect=None) -> None:
+        now = float(self._clock())
+        for key in list(self._buf):
+            if key == protect:
+                continue
+            touched = float(self._buf[key].get("touched", now))
+            if now - touched > self._max_age_s:
+                del self._buf[key]
+        overflow = len(self._buf) - self._max_partials
+        if overflow <= 0:
+            return
+        victims = sorted(
+            (key for key in self._buf if key != protect),
+            key=lambda key: float(self._buf[key].get("touched", 0.0)),
+        )
+        for key in victims[:overflow]:
+            del self._buf[key]
 
     def add(self, info_bytes: bytes):
         parsed = _parse_cfx_info(info_bytes)
         if not parsed:
+            self._evict()
             return None
         tx_id = parsed["tx_id"]
         page = parsed["page"]
@@ -71,11 +105,13 @@ class _Ax25FragmentReassembler:
         chunk = parsed["chunk"]
 
         key = (tx_id, page, subpage)
+        now = float(self._clock())
         st = self._buf.get(key)
         if st is None:
-            st = {"total": int(total), "chunks": {}}
+            st = {"total": int(total), "chunks": {}, "touched": now}
             self._buf[key] = st
         else:
+            st["touched"] = now
             # Total fragments should be stable; if we see it change, keep the max so
             # we can still complete the page without discarding already-received data.
             st["total"] = max(int(st.get("total", 0)), int(total))
@@ -93,8 +129,10 @@ class _Ax25FragmentReassembler:
             return None
 
         if len(chunks) < want:
+            self._evict(protect=key)
             return None
         if any(i not in chunks for i in range(want)):
+            self._evict(protect=key)
             return None
 
         data = b"".join(chunks[i] for i in range(want))
@@ -378,6 +416,17 @@ def _draw_too_small(stdscr: "curses._CursesWindow") -> None:
     for i, line in enumerate(lines):
         _safe_addstr(stdscr, start + i, max((max_x - len(line)) // 2, 0), line, curses.A_BOLD)
     stdscr.refresh()
+
+
+def _active_link_label() -> str:
+    """Band and mode for the station chrome. Defaults to VHF FM if config cannot be read."""
+    try:
+        cfg = load_config()
+    except (SystemExit, Exception):  # noqa: BLE001
+        return "VHF FM"
+    if cfg.radio.band == "hf":
+        return f"HF {cfg.hf.mode}"
+    return "VHF FM"
 
 
 def _draw_footer(
@@ -1090,9 +1139,10 @@ def _draw_page(
                 _safe_addstr(stdscr, row, offset_x, (line or "")[:frame_width], body_attr)
                 row += 1
 
-    status = f"PAGE {page.page_id}  {index + 1}/{total}"
+    link = _active_link_label()
+    status = f"{link}  PAGE {page.page_id}  {index + 1}/{total}"
     if footer_mode == "rx":
-        status = f"RECEIVE MODE  PAGE {page.page_id}  {index + 1}/{total}"
+        status = f"{link}  PAGE {page.page_id}  {index + 1}/{total}"
     _draw_footer(
         stdscr,
         status=status,
@@ -1409,11 +1459,12 @@ def _frequency_choices() -> list[str]:
 
 def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False) -> bool:
     """
-    Station setup in the curses UI (callsign, selectable frequency, grid).
+    Station setup in the curses UI (callsign, frequency, grid, and the radio link).
 
     Frequency is chosen from the recommended band list (LEFT/RIGHT), not typed.
-    Shows automatically when incomplete, or when force=True (viewer S key).
-    Returns True if settings were saved.
+    The link line is VHF FM or HF. On HF, the mode line is RDM-600S or RDM-300S.
+    The viewer shows this on every launch (force=True). S in the viewer does the same.
+    ESC leaves the previous choice and continues. Returns True if settings were saved.
     """
     from .hub_pages import _needs_station_setup
     from .update_all import persist_radio_config
@@ -1427,6 +1478,13 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
         callsign = ""
     frequency = str(radio.get("frequency") or "").strip()
     grid = str(radio.get("grid") or "").strip().upper()
+    try:
+        link_cfg = load_config()
+        link_band = link_cfg.radio.band
+        link_mode = link_cfg.hf.mode
+    except (SystemExit, ValueError):
+        link_band = "vhf"
+        link_mode = "RDM-600S"
 
     freq_choices = _frequency_choices()
     if not freq_choices:
@@ -1445,7 +1503,7 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
             freq_idx = 0
     frequency = freq_choices[freq_idx]
 
-    field = 0  # 0=callsign, 1=frequency, 2=grid
+    field = 0  # 0=callsign, 1=frequency, 2=grid, 3=link, 4=hf mode
     stdscr.nodelay(False)
     stdscr.keypad(True)
 
@@ -1453,26 +1511,47 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
         freq_disp = frequency
         if field == 1:
             freq_disp = f"< {frequency} >  ({freq_idx + 1}/{len(freq_choices)})"
+        band_disp = "VHF FM" if link_band == "vhf" else "HF"
+        if field == 3:
+            band_disp = f"< {band_disp} >"
+        if link_band == "hf":
+            mode_disp = link_mode
+        else:
+            mode_disp = "AFSK1200"
+        if field == 4 and link_band == "hf":
+            mode_disp = f"< {mode_disp} >"
         fields = [
             ("Callsign", (callsign + "_") if field == 0 else (callsign or "(required)")),
             ("Frequency", freq_disp if field == 1 else (frequency or "(required)")),
             ("Grid", (grid + "_") if field == 2 else (grid or "(optional)")),
+            ("Link", band_disp),
+            ("Mode", mode_disp),
         ]
         if field == 1:
-            msg = "LEFT/RIGHT selects a recommended band frequency."
-            footer = "LEFT/RIGHT: BAND  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
+            msg = "LEFT/RIGHT selects a recommended frequency. That label does not choose FM or HF."
+            footer = "LEFT/RIGHT: FREQUENCY  TAB: NEXT  ENTER: SAVE  ESC: SKIP"
+        elif field == 3:
+            msg = "LEFT/RIGHT chooses VHF FM (Dire Wolf) or HF (modem73)."
+            footer = "LEFT/RIGHT: LINK  TAB: NEXT  ENTER: SAVE  ESC: SKIP"
+        elif field == 4:
+            if link_band == "hf":
+                msg = "LEFT/RIGHT chooses RDM-600S or RDM-300S. Receive decodes both."
+                footer = "LEFT/RIGHT: HF MODE  TAB: NEXT  ENTER: SAVE  ESC: SKIP"
+            else:
+                msg = "VHF FM is always 1200 baud AFSK. TAB back to Link to choose HF."
+                footer = "TAB: NEXT  ENTER: SAVE  ESC: SKIP"
         elif field == 0:
-            msg = "Type your callsign. TAB moves to frequency list."
-            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
+            msg = "Type your callsign. TAB moves through frequency, grid, and the radio link."
+            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: SKIP"
         else:
             msg = "Maidenhead grid e.g. IO91WM (optional but needed for the map)."
-            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: CANCEL"
+            footer = "TYPE  TAB: NEXT  ENTER: SAVE  ESC: SKIP"
 
         _draw_mode_screen(
             stdscr,
             mode="TX",
             title="Station setup",
-            status="Configure callsign, frequency, and grid",
+            status="Callsign, frequency, grid, and radio link",
             fields=fields,
             message=msg,
             footer_status=footer,
@@ -1481,10 +1560,10 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
         if ch == 27:
             return False
         if ch in (9,):  # TAB
-            field = (field + 1) % 3
+            field = (field + 1) % 5
             continue
         if ch == curses.KEY_BTAB:
-            field = (field - 1) % 3
+            field = (field - 1) % 5
             continue
         if ch in (10, 13, curses.KEY_ENTER):
             if callsign.strip() and frequency.strip():
@@ -1493,6 +1572,9 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
                     frequency=frequency.strip(),
                     grid=(grid.strip().upper() or None),
                 )
+                from .config import save_link_settings
+
+                save_link_settings(link_band, link_mode)
                 return True
             if not callsign.strip():
                 field = 0
@@ -1507,6 +1589,26 @@ def _station_setup_in_tui(stdscr: "curses._CursesWindow", *, force: bool = False
             elif ch in (curses.KEY_RIGHT, curses.KEY_DOWN, ord("+"), ord("=")):
                 freq_idx = (freq_idx + 1) % len(freq_choices)
                 frequency = freq_choices[freq_idx]
+            continue
+
+        if field == 3:
+            if ch in (curses.KEY_LEFT, curses.KEY_UP, ord("-")):
+                link_band = "hf" if link_band == "vhf" else "vhf"
+            elif ch in (curses.KEY_RIGHT, curses.KEY_DOWN, ord("+"), ord("=")):
+                link_band = "hf" if link_band == "vhf" else "vhf"
+            continue
+
+        if field == 4:
+            if link_band == "hf" and ch in (
+                curses.KEY_LEFT,
+                curses.KEY_RIGHT,
+                curses.KEY_UP,
+                curses.KEY_DOWN,
+                ord("-"),
+                ord("+"),
+                ord("="),
+            ):
+                link_mode = "RDM-300S" if link_mode == "RDM-600S" else "RDM-600S"
             continue
 
         if field == 0:
@@ -1541,6 +1643,8 @@ def _confirm_tx(
     """Show the final TX safety summary; return True on Enter."""
     stdscr.nodelay(False)
     fields = [
+        ("Band", "VHF"),
+        ("Mode", "AFSK1200"),
         ("Callsign", callsign),
         ("Frequency", frequency or "Not configured"),
         ("Data freq", data_frequency or "Use configured frequency"),
@@ -1977,6 +2081,49 @@ def _wav_duration_seconds(path: str) -> float:
         return 30.0
 
 
+def _hf_tx_progress(
+    *,
+    elapsed_s: float,
+    frame_count: int,
+    seconds_per_frame: float,
+    page_ids: List[str],
+    finished: bool = False,
+) -> dict:
+    """
+    Estimate HF on-air progress from the robust-mode frame time.
+
+    RDM-600S is about 3.6 s per frame and RDM-300S about 7.1 s. This is not the
+    AX.25 WAV duration used for FM, and it is not how fast frames were queued.
+    """
+    frames = max(0, int(frame_count))
+    per_frame = max(0.0, float(seconds_per_frame))
+    duration = frames * per_frame
+    elapsed = max(0.0, float(elapsed_s))
+    if finished or duration <= 0:
+        frac = 1.0 if finished else 0.0
+        remain = 0.0
+        on_air = frames
+    else:
+        frac = min(0.99, elapsed / duration)
+        remain = max(0.0, duration - elapsed)
+        on_air = min(frames, int(elapsed / per_frame) + 1) if per_frame > 0 else 0
+    page_id, page_i, page_n = _estimate_tx_page(
+        page_ids,
+        loop_elapsed=min(elapsed, duration) if duration else 0.0,
+        loop_duration=duration or 1.0,
+    )
+    return {
+        "fraction": frac,
+        "remaining_s": remain,
+        "duration_s": duration,
+        "on_air_frame": on_air,
+        "frame_count": frames,
+        "page_id": page_id,
+        "page_index": page_i,
+        "page_count": page_n,
+    }
+
+
 def _estimate_tx_page(
     page_ids: List[str],
     *,
@@ -2157,6 +2304,9 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     stdscr.keypad(True)
 
     cfg = load_config()
+    if cfg.radio.band == "hf":
+        _tx_mode_loop_hf(stdscr, pages, cfg)
+        return
     from .paths import ceefax_root
 
     config_file = ceefax_root() / "radio_config.json"
@@ -2288,6 +2438,367 @@ def _tx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
         time.sleep(3)
 
 
+def _hf_confirm_tx(
+    stdscr: "curses._CursesWindow",
+    *,
+    callsign: str,
+    frequency: str,
+    mode: str,
+    page_count: int,
+    loops: int,
+    estimate_min: float,
+) -> bool:
+    stdscr.nodelay(False)
+    fields = [
+        ("Band", "HF"),
+        ("Mode", mode),
+        ("Callsign", callsign),
+        ("Frequency", frequency or "Not configured"),
+        ("Pages", str(page_count)),
+        ("Loops", str(loops)),
+        ("Estimate", f"{estimate_min:.0f} min"),
+        ("Modem", "modem73"),
+        ("PTT", "rigctl, serial, or CM108"),
+    ]
+    while True:
+        _draw_mode_screen(
+            stdscr,
+            mode="TX",
+            title="HF transmission ready",
+            status="Check modem73",
+            fields=fields,
+            message="ENTER starts one HF pass and arms the next hour. ESC cancels. No WAV is played.",
+            footer_status="HF READY  ENTER: START  ESC: CANCEL",
+        )
+        ch = stdscr.getch()
+        if ch in (10, 13, curses.KEY_ENTER):
+            return True
+        if ch == 27:
+            return False
+
+
+def _run_hf_pass_with_screen(stdscr, pages, cfg, *, callsign: str, loops: int) -> bool:
+    """Stream one HF pass. Progress follows RDM airtime, not the AX.25 WAV clock."""
+    from .hf import FRAME_SECONDS, build_hf_pass_plan, run_hf_pass
+
+    preview = build_hf_pass_plan(
+        pages=pages,
+        loops=loops,
+        src_callsign=callsign,
+        frequency="",
+        grid="",
+        max_frame_bytes=cfg.hf.max_frame_bytes,
+        mode=cfg.hf.mode,
+    )
+    seconds_per_frame = FRAME_SECONDS[cfg.hf.mode]
+    state = {"sent": 0, "total": len(preview.payloads), "done": False, "err": None}
+    stop = threading.Event()
+
+    def on_frame(sent: int, total: int) -> None:
+        state["sent"] = sent
+        state["total"] = max(1, total)
+
+    def worker() -> None:
+        try:
+            run_hf_pass(
+                cfg,
+                pages,
+                callsign=callsign,
+                loops=loops,
+                stop_check=stop.is_set,
+                on_frame=on_frame,
+            )
+        except Exception as exc:  # noqa: BLE001
+            state["err"] = exc
+        finally:
+            state["done"] = True
+
+    stdscr.nodelay(True)
+    started = time.monotonic()
+    threading.Thread(target=worker, daemon=True).start()
+    while not state["done"]:
+        ch = stdscr.getch()
+        if ch == 27:
+            stop.set()
+        # After ESC, only frames already queued will go out.
+        frame_count = int(state["sent"]) if stop.is_set() else len(preview.payloads)
+        progress = _hf_tx_progress(
+            elapsed_s=time.monotonic() - started,
+            frame_count=max(1, frame_count),
+            seconds_per_frame=seconds_per_frame,
+            page_ids=preview.page_ids,
+            finished=False,
+        )
+        remain = int(progress["remaining_s"])
+        status = (
+            "Finishing frames already queued"
+            if stop.is_set()
+            else f"Transmitting page {progress['page_id']} (est.)"
+        )
+        _draw_tx_screen(
+            stdscr,
+            status,
+            progress["fraction"],
+            cfg.hf.mode,
+            show_logo=True,
+            fields=[
+                ("Band", "HF"),
+                ("Mode", cfg.hf.mode),
+                ("Page", f"{progress['page_id']} ({progress['page_index']}/{progress['page_count']})"),
+                ("Frame", f"{progress['on_air_frame']}/{progress['frame_count']}"),
+                ("Each", f"{seconds_per_frame:.1f} s"),
+                ("Est. left", f"{remain // 60:02d}:{remain % 60:02d}"),
+            ],
+            message="Estimated from the RDM frame time, not the FM WAV. ESC stops queueing.",
+            footer_status="HF TRANSMIT  ESC: STOP QUEUEING  (airtime estimated)",
+        )
+        stdscr.refresh()
+        time.sleep(0.15)
+    if state["err"] is not None:
+        _draw_tx_screen(
+            stdscr,
+            f"HF pass failed: {str(state['err'])[:60]}",
+            0.0,
+            "HF pass",
+            footer_status="HF TRANSMIT  ESC: RETURN",
+        )
+        stdscr.refresh()
+        time.sleep(3)
+        return False
+    return not stop.is_set()
+
+
+def _tx_mode_loop_hf(stdscr: "curses._CursesWindow", pages: List[Page], cfg) -> None:
+    """HF transmit: one modem73 pass, then the same hour boundary as FM. No WAV."""
+    from .hf import build_hf_pass_plan
+    from .paths import ceefax_root
+
+    config_file = ceefax_root() / "radio_config.json"
+    callsign = ""
+    if config_file.exists():
+        try:
+            config_data = json.loads(config_file.read_text(encoding="utf-8"))
+            callsign = str(config_data.get("callsign") or "").strip().upper()
+        except Exception:  # noqa: BLE001
+            callsign = ""
+    if not callsign:
+        callsign = _prompt_callsign_in_tui(stdscr)
+        if not callsign:
+            return
+
+    src = callsign or cfg.ax25.callsign or "N0CALL"
+    loops = max(1, int(cfg.hf.loops_per_hour))
+    lead = max(0, int(getattr(cfg.ax25, "refresh_lead_seconds", 180) or 180))
+    frequency_info, _data_frequency = _tx_frequency_labels(config_file)
+
+    try:
+        if not _tx_refresh_pages(stdscr, pages, src=src, page_dir=cfg.general.page_dir):
+            return
+        preview = build_hf_pass_plan(
+            pages=pages,
+            loops=loops,
+            src_callsign=src,
+            frequency=frequency_info,
+            grid="",
+            max_frame_bytes=cfg.hf.max_frame_bytes,
+            mode=cfg.hf.mode,
+        )
+        if not _hf_confirm_tx(
+            stdscr,
+            callsign=src,
+            frequency=frequency_info,
+            mode=cfg.hf.mode,
+            page_count=len(pages),
+            loops=loops,
+            estimate_min=preview.estimated_seconds / 60.0,
+        ):
+            return
+        if not _run_hf_pass_with_screen(stdscr, pages, cfg, callsign=src, loops=loops):
+            return
+
+        while True:
+            now = datetime.now()
+            hour = _next_hour_local(now)
+            refresh_at = hour - timedelta(seconds=lead)
+            hour_label = hour.strftime("%H:00")
+            if now < refresh_at:
+                if not _tx_wait_until(
+                    stdscr,
+                    refresh_at,
+                    countdown_to=hour,
+                    status=f"Next HF transmission at {hour_label}",
+                    message="HF stays on modem73. ESC stops the schedule.",
+                    fields=[
+                        ("Band", "HF"),
+                        ("Mode", cfg.hf.mode),
+                        ("Callsign", src),
+                        ("Next TX", hour_label),
+                    ],
+                ):
+                    return
+            if not _tx_refresh_pages(
+                stdscr,
+                pages,
+                src=src,
+                page_dir=cfg.general.page_dir,
+                stage_label="hourly",
+            ):
+                return
+            now2 = datetime.now()
+            if now2 < hour:
+                if not _tx_wait_until(
+                    stdscr,
+                    hour,
+                    countdown_to=hour,
+                    status=f"HF transmit at {hour_label}",
+                    message="Pass starts on the hour.",
+                    fields=[("Band", "HF"), ("Mode", cfg.hf.mode), ("Callsign", src)],
+                ):
+                    return
+            if not _run_hf_pass_with_screen(stdscr, pages, cfg, callsign=src, loops=loops):
+                return
+    except Exception as exc:  # noqa: BLE001
+        _draw_tx_screen(stdscr, f"Error: {str(exc)[:50]}", 0.0, "Error")
+        stdscr.refresh()
+        time.sleep(3)
+
+
+def _rx_viewer_loop_hf(
+    stdscr: "curses._CursesWindow",
+    cfg,
+    *,
+    listener_callsign: str | None = None,
+) -> None:
+    """Live HF receive. modem73 decodes every robust mode; Dire Wolf is not started."""
+    from .hf import HF_LISTENER_NOTE, receive_hf
+    from .paths import ceefax_root
+
+    curses.curs_set(0)
+    stdscr.keypad(True)
+    stdscr.timeout(100)
+
+    pages: List[Page] = []
+    matrices: List[List[str]] = []
+    idx = 0
+    page_entry = ""
+    notice = ""
+    q: "queue.Queue[tuple[Page, List[str]]]" = queue.Queue()
+    stop_event = threading.Event()
+    stats_lock = threading.Lock()
+    rcfg = _load_radio_config()
+    freq = (rcfg.get("frequency") or "").strip() if isinstance(rcfg, dict) else ""
+    grid = (rcfg.get("grid") or "").strip().upper() if isinstance(rcfg, dict) else ""
+    live_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = ceefax_root() / "logs_rx" / f"ceefax_hf_live_{live_ts}.json"
+    stats: dict = {
+        "schema": 1,
+        "band": "hf",
+        "mode": cfg.hf.mode,
+        "decoder": "modem73",
+        "listener_callsign": (listener_callsign or "").strip(),
+        "listener_grid": grid or None,
+        "rx_mode": "hf_live",
+        "started_at": datetime.now().isoformat(),
+        "frequency": freq or None,
+        "rx_db": None,
+        "station_callsign": None,
+        "tx_id": None,
+        "tx_ids_seen": [],
+        "cfx_frames": 0,
+        "stations_heard": {},
+        "pages_decoded": {},
+        "page_progress": {},
+        "note": HF_LISTENER_NOTE,
+    }
+    _update_rx_log_summary(stats)
+    _write_json(log_path, stats)
+    rx_err = {"msg": None}
+
+    def rx_thread() -> None:
+        try:
+            receive_hf(
+                cfg,
+                out_q=q,
+                stop_event=stop_event,
+                stats=stats,
+                stats_lock=stats_lock,
+                log_path=log_path,
+            )
+        except FileNotFoundError as exc:
+            rx_err["msg"] = str(exc)
+        except Exception as exc:  # noqa: BLE001
+            rx_err["msg"] = f"HF RX error: {exc}"
+        finally:
+            if rx_err["msg"]:
+                with stats_lock:
+                    stats["rx_error"] = rx_err["msg"]
+
+    threading.Thread(target=rx_thread, daemon=True).start()
+    try:
+        while True:
+            updated = False
+            while True:
+                try:
+                    page_obj, matrix = q.get_nowait()
+                except queue.Empty:
+                    break
+                _upsert_sorted_page(pages, matrices, page_obj, matrix)
+                updated = True
+            if pages:
+                idx = max(0, min(idx, len(pages) - 1))
+                with stats_lock:
+                    snapshot = dict(stats)
+                _draw_page(
+                    stdscr,
+                    pages[idx],
+                    matrices[idx],
+                    idx,
+                    len(pages),
+                    callsign_override=listener_callsign,
+                    page_entry=page_entry,
+                    notice=notice or _rx_footer_status(snapshot),
+                    footer_mode="rx",
+                )
+            else:
+                with stats_lock:
+                    snapshot = dict(stats)
+                _draw_rx_screen(
+                    stdscr,
+                    "Listening",
+                    rx_err["msg"] or HF_LISTENER_NOTE,
+                    stats=snapshot,
+                    source="modem73 (all robust modes)",
+                    device=f"KISS {cfg.hf.kiss_host}:{cfg.hf.kiss_port}",
+                )
+            ch = stdscr.getch()
+            idx, page_entry, key_notice, handled = _handle_page_key(ch, pages, idx, page_entry)
+            if handled:
+                notice = key_notice
+                continue
+            page_entry = ""
+            notice = ""
+            if ch in (ord("q"), ord("Q")) or ch == 27:
+                break
+            if ch in (ord("n"), curses.KEY_RIGHT, curses.KEY_NPAGE):
+                if pages:
+                    idx = (idx + 1) % len(pages)
+            elif ch in (ord("p"), curses.KEY_LEFT, curses.KEY_PPAGE):
+                if pages:
+                    idx = (idx - 1) % len(pages)
+            if not updated:
+                time.sleep(0.02)
+    finally:
+        stop_event.set()
+        with stats_lock:
+            stats["ended_at"] = datetime.now().isoformat()
+            decoded = list(stats.get("pages_decoded", {}).values())
+            stats["decoded_pages"] = sorted(
+                decoded, key=lambda item: (int(item["page"]), int(item["subpage"]))
+            )
+            _update_rx_log_summary(stats)
+        _write_json(log_path, stats)
+
+
 def _rx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     """
     RX mode: Auto-detect soundcard and start live reception.
@@ -2298,26 +2809,38 @@ def _rx_mode_loop(stdscr: "curses._CursesWindow", pages: List[Page]) -> None:
     
     # Show initializing message with RX logo
     _draw_rx_screen(stdscr, "Initializing receive mode...", "Auto-detecting soundcard...")
-    
-    # Find direwolf
-    dw = _find_direwolf_exe(None)
-    
-    # Auto-detect device (None = auto-detect)
-    device = None
-    
+
+    try:
+        cfg = load_config()
+    except ValueError as exc:
+        _draw_rx_screen(stdscr, "Config error", str(exc)[:120])
+        stdscr.refresh()
+        time.sleep(3)
+        return
+
     # Get listener callsign from config or use default
     from .paths import ceefax_root
 
     config_file = ceefax_root() / "radio_config.json"
     listener = None
-    
+
     if config_file.exists():
         try:
             config_data = json.loads(config_file.read_text(encoding="utf-8"))
             listener = config_data.get("callsign", "").strip().upper()
         except Exception:  # noqa: BLE001
             pass
-    
+
+    if cfg.radio.band == "hf":
+        _rx_viewer_loop_hf(stdscr, cfg, listener_callsign=listener)
+        return
+
+    # Find direwolf. HF does not reach this, and a VHF station does not start modem73.
+    dw = _find_direwolf_exe(None)
+
+    # Auto-detect device (None = auto-detect)
+    device = None
+
     # Start live RX mode (this will handle its own loop and ESC key)
     _rx_viewer_loop_live(
         stdscr,
@@ -2697,7 +3220,7 @@ def _rx_viewer_loop_live(
                 )
             else:
                 # Show RX screen with waiting message
-                msg = rx_err["msg"] or "Waiting for AX.25 pages from live audio..."
+                msg = rx_err["msg"] or "Waiting for AX.25 pages. FM decode uses Dire Wolf."
                 with stats_lock:
                     snapshot = dict(stats)
                 _draw_rx_screen(
@@ -2705,7 +3228,7 @@ def _rx_viewer_loop_live(
                     "Listening",
                     msg,
                     stats=snapshot,
-                    source="Live audio",
+                    source="Dire Wolf (VHF FM)",
                     device=device or "Default device",
                 )
 
@@ -2806,7 +3329,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = load_config()
+    try:
+        config = load_config()
+    except ValueError as exc:
+        print(f"Config error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
 
     # Resolve RX mode inputs BEFORE curses starts. Prompts via `input()` don't behave
     # well once curses has taken control of the terminal.
@@ -2820,7 +3347,9 @@ def main() -> None:
 
     # We pass pages by reference so reload can update in-place.
     def runner(stdscr: "curses._CursesWindow") -> None:
-        if args.rx_live:
+        if args.rx_live and config.radio.band == "hf":
+            _rx_viewer_loop_hf(stdscr, config, listener_callsign=listener or None)
+        elif args.rx_live:
             dw = _find_direwolf_exe(args.direwolf)
             _rx_viewer_loop_live(
                 stdscr,
@@ -2842,7 +3371,8 @@ def main() -> None:
                 listener_callsign=listener,
             )
         else:
-            _station_setup_in_tui(stdscr)
+            # Ask every launch. Enter keeps or changes the link. ESC leaves the saved choice.
+            _station_setup_in_tui(stdscr, force=True)
             pages = load_all_pages(config.general.page_dir)
             _viewer_loop(stdscr, pages)
 

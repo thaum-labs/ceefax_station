@@ -46,6 +46,17 @@ refresh_lead_seconds = 180
 [carousel]
 page_duration_ms = 1500
 loop_delay_ms = 200
+
+[radio]
+band = "vhf"
+
+[hf]
+mode = "RDM-600S"
+kiss_host = "127.0.0.1"
+kiss_port = 8001
+control_port = 8073
+max_frame_bytes = 170
+loops_per_hour = 1
 """
 
 DEFAULT_RADIO_CONFIG_JSON = """{

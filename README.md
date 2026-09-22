@@ -197,7 +197,37 @@ The Windows installer is the easiest install on that platform (bundles the app *
 
 ## Radio (TX / RX)
 
-You need a valid licence, a radio, and audio into the PC. For live receive decode you need [Dire Wolf](https://github.com/wb2osz/direwolf) — the Windows installer bundles it under `ceefax/tools/direwolf`. On Linux, `sudo apt install direwolf` (the Debian package recommends this). Manual installs should put `direwolf` / `direwolf.exe` on `PATH` or in that folder.
+You need a valid licence, a radio, and audio into the PC. The default band is VHF FM: 1200 baud AFSK, decoded by [Dire Wolf](https://github.com/wb2osz/direwolf). The Windows installer bundles Dire Wolf under `ceefax/tools/direwolf`. On Linux, `sudo apt install direwolf` (the Debian package recommends this). Manual installs should put `direwolf` / `direwolf.exe` on `PATH` or in that folder.
+
+### FM or HF
+
+The viewer asks for this every time it starts, on the station setup screen. The values are filled in from the last choice. Left and right on **Link** switches VHF FM and HF. On HF, left and right on **Mode** switches RDM-600S and RDM-300S. Enter saves. ESC keeps the previous choice and opens the pages.
+
+The frequency in `radio_config.json` is only the text stored for the map, the TX report, and the HF station beacon. Leaving it as `145.500 MHz` or `7.090 MHz` does not switch modems. You can still set the same keys in `config.toml` before launch:
+
+```toml
+[radio]
+band = "vhf"          # "vhf" (FM, default) or "hf"
+
+[hf]
+mode = "RDM-600S"     # or "RDM-300S"
+loops_per_hour = 1
+```
+
+| | VHF (`band = "vhf"`) | HF (`band = "hf"`) |
+| --- | --- | --- |
+| Modem | Dire Wolf, 1200 baud AFSK | [modem73](https://modem73.app), RDM-600S or RDM-300S |
+| Who picks the mode | Fixed. Always AFSK1200 | You set `[hf] mode`. Nothing steps it from the frequency, the SNR, or a failed page |
+| Transmit | 3 carousel loops, played as a WAV. The bar follows the WAV length | 1 loop per hour, sent over KISS. The bar follows about 3.6 s (RDM-600S) or 7.1 s (RDM-300S) per frame |
+| Receive | Dire Wolf | modem73, which decodes every robust mode at once |
+
+A VHF station never starts modem73. Dire Wolf cannot send or receive RDM-600S or RDM-300S, so an FM receiver will not decode an HF transmission, and an HF receiver will not decode 1200 baud AFSK. Both ends set `band` to the same value.
+
+On HF receive the app does not choose RDM-600S versus RDM-300S. modem73's receiver has those decoders on together and auto-detects the mode of each frame. Only the transmitter's `[hf] mode` matters. RDM-600S is the normal choice. Set `RDM-300S` when the path is weak. A missed page is picked up on the next hourly pass. There is no ACK and no automatic retry.
+
+The Windows installer bundles modem73 beside Dire Wolf. On Linux the Ceefax `.deb` does not contain it: install the official modem73 package for that CPU (amd64, arm64, or armhf) and leave `modem73` on `PATH`. PTT stays in modem73 (rigctl, serial, or CM108).
+
+The page footer shows the active link, `VHF FM` or `HF RDM-600S`.
 
 ```bash
 # Transmit once
@@ -211,7 +241,7 @@ python -m ceefaxstation rx latest
 python -m ceefaxstation rx live
 ```
 
-In the interactive viewer, **T** transmits now (3 loops) and then **stays armed**: it refreshes before the next hour and retransmits at `:00` until you press ESC.
+In the interactive viewer, **T** transmits now (3 loops on FM) and then **stays armed**: it refreshes before the next hour and retransmits at `:00` until you press ESC. On HF, **T** sends one modem73 pass per hour instead of playing a WAV.
 
 ### Appear on the map
 

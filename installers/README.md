@@ -70,7 +70,7 @@ When you want to create a new installer for a new version:
    .\build_installer.ps1 -RepoRoot "C:\Users\tobot\Documents\GitHub\ceefax_station"
    ```
 
-   The build script downloads Dire Wolf (Windows x64) into `vendor\direwolf` and Inno Setup installs it to `{app}\ceefax\tools\direwolf`.
+   The build script downloads Dire Wolf (Windows x64) into `vendor\direwolf` and modem73-win into `vendor\modem73`. Inno Setup installs them to `{app}\ceefax\tools\direwolf` and `{app}\ceefax\tools\modem73`. modem73 is only launched when the station band is HF.
 
 3. **Output locations**:
    - Build output: `...\ceefax-installer-build\dist\CeefaxStation-Setup-X.X.X.exe`

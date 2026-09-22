@@ -51,11 +51,95 @@ class GeneralConfig:
 
 
 @dataclass
+class RadioConfig:
+    band: str
+
+
+@dataclass
+class HfConfig:
+    mode: str
+    kiss_host: str
+    kiss_port: int
+    control_port: int
+    max_frame_bytes: int
+    loops_per_hour: int
+
+
+@dataclass
 class AppConfig:
     general: GeneralConfig
     audio: AudioConfig
     ax25: Ax25Config
     carousel: CarouselConfig
+    radio: RadioConfig
+    hf: HfConfig
+
+
+VALID_BANDS = ("vhf", "hf")
+VALID_HF_MODES = ("RDM-600S", "RDM-300S")
+
+
+def _require_choice(value: str, allowed: tuple[str, ...], label: str) -> str:
+    if value not in allowed:
+        choices = ", ".join(allowed)
+        raise ValueError(f"{label} must be one of {choices}, got {value!r}")
+    return value
+
+
+def _upsert_toml_assignment(text: str, section: str, key: str, literal: str) -> str:
+    """Set key = literal inside [section], appending the section when it is missing."""
+    lines = text.splitlines()
+    header = f"[{section}]"
+    start = None
+    for index, line in enumerate(lines):
+        if line.strip() == header:
+            start = index
+            break
+    assignment = f"{key} = {literal}"
+    if start is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.extend([header, assignment])
+    else:
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            if lines[index].strip().startswith("[") and lines[index].strip().endswith("]"):
+                end = index
+                break
+        replaced = False
+        prefix = f"{key}"
+        for index in range(start + 1, end):
+            stripped = lines[index].strip()
+            if stripped.startswith(prefix) and "=" in stripped.split("#", 1)[0]:
+                name = stripped.split("=", 1)[0].strip()
+                if name == key:
+                    lines[index] = assignment
+                    replaced = True
+                    break
+        if not replaced:
+            lines.insert(end, assignment)
+    body = "\n".join(lines)
+    if text.endswith("\n") or not text:
+        body += "\n"
+    return body
+
+
+def save_link_settings(band: str, mode: str, path: str | None = None) -> None:
+    """
+    Write [radio] band and [hf] mode into the active config.toml.
+
+    The viewer asks for these on every launch. Other keys in the file are left as they are.
+    """
+    from .paths import config_path
+
+    band = _require_choice(str(band).strip().lower(), VALID_BANDS, "radio.band")
+    mode = _require_choice(str(mode).strip(), VALID_HF_MODES, "hf.mode")
+    target = config_path() if path is None else Path(path)
+    existing = target.read_text(encoding="utf-8") if target.exists() else ""
+    updated = _upsert_toml_assignment(existing, "radio", "band", f'"{band}"')
+    updated = _upsert_toml_assignment(updated, "hf", "mode", f'"{mode}"')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(updated, encoding="utf-8")
 
 
 def load_config(path: str | None = None) -> AppConfig:
@@ -149,9 +233,24 @@ def load_config(path: str | None = None) -> AppConfig:
         loop_delay_ms=int(get("carousel", "loop_delay_ms", 200)),
     )
 
+    # Band and HF mode are the only validated fields. Everything else stays permissive.
+    band = _require_choice(str(get("radio", "band", "vhf")).strip().lower(), VALID_BANDS, "radio.band")
+    hf_mode = _require_choice(str(get("hf", "mode", "RDM-600S")).strip(), VALID_HF_MODES, "hf.mode")
+    radio = RadioConfig(band=band)
+    hf = HfConfig(
+        mode=hf_mode,
+        kiss_host=str(get("hf", "kiss_host", "127.0.0.1")),
+        kiss_port=int(get("hf", "kiss_port", 8001)),
+        control_port=int(get("hf", "control_port", 8073)),
+        max_frame_bytes=int(get("hf", "max_frame_bytes", 170)),
+        loops_per_hour=int(get("hf", "loops_per_hour", 1)),
+    )
+
     return AppConfig(
         general=general,
         audio=audio,
         ax25=ax25,
         carousel=carousel,
+        radio=radio,
+        hf=hf,
     )

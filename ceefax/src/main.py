@@ -41,13 +41,20 @@ def _prompt_tx_callsign(default_callsign: str) -> str:
 
 
 def main():
-    config = load_config()
+    try:
+        config = load_config()
+    except ValueError as exc:
+        print(f"Config error: {exc}", file=sys.stderr)
+        sys.exit(1)
     setup_logging(config.general.log_level)
 
     logging.info("Starting Ceefax Station Broadcast System")
 
     if config.general.mode.lower() == "ax25_audio":
-        logging.info("Mode ax25_audio: hourly scheduler + AX.25 AFSK output")
+        if config.radio.band == "hf":
+            logging.info("Mode ax25_audio: hourly HF scheduler via modem73 %s", config.hf.mode)
+        else:
+            logging.info("Mode ax25_audio: hourly scheduler + AX.25 AFSK output")
         # Prompt for TX callsign at runtime (do not require editing config.toml).
         # Skip prompting in non-interactive environments so services don't hang.
         try:

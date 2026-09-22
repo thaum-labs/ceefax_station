@@ -123,7 +123,11 @@ def _tx_now(
     from ceefax.src.playback import play_wav_file
     from ceefax.src.paths import config_path
 
-    cfg = load_config(str(config_path()))
+    try:
+        cfg = load_config(str(config_path()))
+    except ValueError as exc:
+        print(f"Config error: {exc}", file=sys.stderr)
+        return 1
 
     if refresh:
         _refresh_pages(
@@ -139,6 +143,17 @@ def _tx_now(
         return 2
 
     src = (callsign or cfg.ax25.callsign).strip()
+    if cfg.radio.band == "hf":
+        from ceefax.src.hf import run_hf_pass
+
+        loops = cfg.hf.loops_per_hour if carousel_loops is None else max(1, int(carousel_loops))
+        if play:
+            print("HF transmit uses modem73 PTT, not WAV playback.", file=sys.stderr)
+        plan = run_hf_pass(cfg, pages, callsign=src, loops=loops)
+        print(f"HF {plan.mode} TX_ID: {plan.tx_id}")
+        print(f"KISS frames: {len(plan.payloads)}  about {plan.estimated_seconds / 60.0:.1f} min")
+        return 0
+
     loops_in_wav = cfg.ax25.loops_per_hour if carousel_loops is None else int(carousel_loops)
     plan = build_ax25_audio_plan(
         pages=pages,
@@ -200,7 +215,11 @@ def _tx_hourly(
     from ceefax.src.hourly_ax25_audio import run_hourly_ax25_audio
     from ceefax.src.paths import config_path
 
-    cfg = load_config(str(config_path()))
+    try:
+        cfg = load_config(str(config_path()))
+    except ValueError as exc:
+        print(f"Config error: {exc}", file=sys.stderr)
+        return 1
     if callsign:
         cfg.ax25.callsign = callsign.strip().upper()
 
