@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/version-0.1.6--alpha-orange" alt="Version 0.1.6-alpha" />
+  <img src="https://img.shields.io/badge/version-0.1.7--alpha-orange" alt="Version 0.1.7-alpha" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-0078D6?logo=linux&logoColor=white" alt="Windows and Linux" />
   <br/>
   <img src="https://img.shields.io/badge/AX.25-AFSK1200-0B3D0B" alt="AX.25 AFSK1200" />
@@ -61,7 +61,7 @@ Best way to get the **latest** version: install from GitHub. Installed apps can 
 
 ### Linux (Debian / Ubuntu / Raspberry Pi OS)
 
-Install the Debian package (tag **v0.1.5** / version 0.1.5-alpha):
+Install the Debian package (tag **v0.1.7** / version 0.1.7-alpha):
 
 ```bash
 # From this repo (main)
@@ -183,9 +183,9 @@ If the hub is briefly down, Ceefax falls back to building pages on your PC (some
 
 ## Optional: installers
 
-**Linux (v0.1.5):** [`installers/ceefax-station.deb`](installers/ceefax-station.deb) and [`installers/ceefax-station_0.1.5~alpha-1_all.deb`](installers/ceefax-station_0.1.5~alpha-1_all.deb). Install with `sudo apt install ./installers/ceefax-station.deb`.
+**Linux (v0.1.7):** [`installers/ceefax-station.deb`](installers/ceefax-station.deb) and [`installers/ceefax-station_0.1.7~alpha-1_all.deb`](installers/ceefax-station_0.1.7~alpha-1_all.deb). Install with `sudo apt install ./installers/ceefax-station.deb`.
 
-**Windows:** [`installers/CeefaxStation-Setup-0.1.4.exe`](installers/CeefaxStation-Setup-0.1.4.exe).
+**Windows:** [`installers/CeefaxStation-Setup-0.1.7.exe`](installers/CeefaxStation-Setup-0.1.7.exe).
 
 Website **Download Windows** (`https://ceefaxstation.com/download`) uses the latest GitHub Release asset `CeefaxStation-Setup.exe`. **Download Linux** (`https://ceefaxstation.com/download/linux`) uses `ceefax-station.deb`. See [`installers/README.md`](installers/README.md).
 
@@ -306,7 +306,7 @@ Disable automatic uploads with environment variable `CEEFAX_AUTO_UPLOAD=0`.
 ceefax/           station app, page updaters, viewer
 ceefaxstation/    CLI (`python -m ceefaxstation ...`)
 ceefaxweb/        official site source (ceefaxstation.com — not for self-hosting)
-installers/       Windows Setup .exe + Linux .deb (last packaged: 0.1.5-alpha / tag v0.1.5)
+installers/       Windows Setup .exe + Linux .deb (last packaged: 0.1.7-alpha / tag v0.1.7)
 packaging/debian/ build notes for the Debian package
 ```
 

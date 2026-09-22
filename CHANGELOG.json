@@ -1,10 +1,10 @@
 {
-  "current_version": "0.1.6-alpha",
+  "current_version": "0.1.7-alpha",
   "stage": "alpha",
   "entries": [
     {
       "date": "2026-09-22",
-      "version": "0.1.6-alpha",
+      "version": "0.1.7-alpha",
       "changes": [
         "Opt-in HF path beside FM. The default stays VHF FM: same 1200 baud AFSK frames, same Dire Wolf decode, modem73 not started",
         "The viewer station setup asks for the link on every launch: VHF FM, or HF with RDM-600S or RDM-300S. Enter saves, ESC keeps the previous choice",
