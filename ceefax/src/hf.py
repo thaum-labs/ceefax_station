@@ -32,6 +32,10 @@ HF_PHY_MTU = 170
 BEACON_MAGIC = b"CFXB"
 FRAME_SECONDS = {"RDM-600S": 3.6, "RDM-300S": 7.1}
 ROBUST_MODE = {"RDM-600S": 6, "RDM-300S": 7}
+# modem73 drops a KISS frame once 256 are already queued. The control port
+# has no queue depth, so stay this far ahead of tx_frame_count instead.
+TX_QUEUE_LIMIT = 256
+TX_QUEUE_WINDOW = 32
 
 HF_LISTENER_NOTE = (
     "HF uses modem73, which decodes every robust mode at once. "
@@ -445,6 +449,49 @@ def wait_until_drained(
     raise TimeoutError(f"modem73 TX queue did not drain (last get_status: {last})")
 
 
+def _tx_completed(baseline: int, status: dict) -> int:
+    completed = int(status.get("tx_frame_count") or 0) - int(baseline)
+    return max(0, completed)
+
+
+def _wait_for_tx_room(
+    client: ControlClient,
+    *,
+    sent: int,
+    baseline: int,
+    window: int,
+    stall_timeout_s: float,
+    poll_s: float,
+    stop_check: Callable[[], bool] | None,
+) -> bool:
+    """
+    Block until fewer than `window` submitted frames are still untransmitted.
+
+    Returns False when stop_check asks to stop queueing. Raises TimeoutError
+    if tx_frame_count does not advance, which is how a full 256-frame modem
+    queue shows up: modem73 drops the frame and never counts it.
+    """
+    if sent < window:
+        return True
+    deadline = time.monotonic() + stall_timeout_s
+    last: dict = {}
+    while True:
+        if stop_check and stop_check():
+            return False
+        last = client.get_status()
+        completed = _tx_completed(baseline, last)
+        if sent - completed < window:
+            return True
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"modem73 TX queue stalled with {sent} frames queued and "
+                f"{completed} transmitted. It drops frames once "
+                f"{TX_QUEUE_LIMIT} are queued "
+                f"(last get_status: {last})"
+            )
+        time.sleep(poll_s)
+
+
 class Modem73Session:
     """
     Talk to modem73 on the configured loopback ports.
@@ -562,6 +609,9 @@ class Modem73Session:
         mode: str,
         stop_check: Callable[[], bool] | None = None,
         on_frame: Callable[[int, int], None] | None = None,
+        window: int = TX_QUEUE_WINDOW,
+        poll_s: float = 0.25,
+        stall_timeout_s: float | None = None,
     ) -> int:
         if self.kiss is None or self.control is None:
             raise RuntimeError("modem73 session is not open")
@@ -569,9 +619,23 @@ class Modem73Session:
         self.configure_mode(mode)
         before = self.control.get_status()
         baseline = int(before.get("tx_frame_count") or 0)
+        per_frame = FRAME_SECONDS.get(mode, 3.6)
+        if stall_timeout_s is None:
+            stall_timeout_s = max(15.0, per_frame * 4)
+        room = max(1, int(window))
         sent = 0
         for payload in queued:
             if stop_check and stop_check():
+                break
+            if not _wait_for_tx_room(
+                self.control,
+                sent=sent,
+                baseline=baseline,
+                window=room,
+                stall_timeout_s=stall_timeout_s,
+                poll_s=poll_s,
+                stop_check=stop_check,
+            ):
                 break
             self.kiss.send_payload(payload)
             sent += 1
@@ -582,6 +646,7 @@ class Modem73Session:
             self.control,
             min_tx_frames=baseline + sent,
             timeout_s=max(15.0, timeout_s),
+            poll_s=poll_s,
         )
         return sent
 

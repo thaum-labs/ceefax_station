@@ -330,3 +330,114 @@ def test_control_port_length_prefix_roundtrip() -> None:
         server.close()
     assert seen["cmd"] == {"cmd": "get_status"}
     assert status["channel_state"] == "idle"
+
+
+class _QueueControl:
+    """get_status transmits one queued frame per call after set_config."""
+
+    def __init__(self) -> None:
+        self.tx = 0
+        self.queued = 0
+        self.configured = False
+        self.freeze = False
+
+    def get_status(self) -> dict:
+        if not self.configured:
+            return {"channel_state": "idle", "ptt_on": False, "tx_frame_count": 0}
+        if not self.freeze and self.tx < self.queued:
+            self.tx += 1
+        done = self.queued > 0 and self.tx >= self.queued and not self.freeze
+        return {
+            "channel_state": "idle" if done else "tx",
+            "ptt_on": not done,
+            "tx_frame_count": self.tx,
+        }
+
+    def set_config(self, _fields: dict) -> dict:
+        self.configured = True
+        return {"ok": True}
+
+
+class _RecordingKiss:
+    def __init__(self, control: _QueueControl) -> None:
+        self.control = control
+        self.sent: list[bytes] = []
+        self.outstanding_before: list[int] = []
+
+    def send_payload(self, payload: bytes) -> None:
+        self.outstanding_before.append(len(self.sent) - self.control.tx)
+        self.sent.append(payload)
+        self.control.queued = len(self.sent)
+
+
+def _open_session(control: _QueueControl, kiss: _RecordingKiss):
+    from ceefax.src.hf import Modem73Session
+
+    session = Modem73Session.__new__(Modem73Session)
+    session.control = control
+    session.kiss = kiss
+    return session
+
+
+def test_send_payloads_keeps_a_window_and_queues_past_256(monkeypatch) -> None:
+    monkeypatch.setattr("ceefax.src.hf.time.sleep", lambda _seconds: None)
+    control = _QueueControl()
+    kiss = _RecordingKiss(control)
+    session = _open_session(control, kiss)
+    total = 300
+    notes: list[int] = []
+
+    sent = session.send_payloads(
+        [b"\x00"] * total,
+        mode="RDM-600S",
+        on_frame=lambda n, _total: notes.append(n),
+        window=32,
+        poll_s=0,
+    )
+
+    assert sent == total
+    assert len(kiss.sent) == total
+    assert notes == list(range(1, total + 1))
+    assert max(kiss.outstanding_before) < 32
+
+
+def test_send_payloads_stops_when_the_modem_queue_stalls(monkeypatch) -> None:
+    monkeypatch.setattr("ceefax.src.hf.time.sleep", lambda _seconds: None)
+    control = _QueueControl()
+    control.freeze = True
+    kiss = _RecordingKiss(control)
+    session = _open_session(control, kiss)
+
+    with pytest.raises(TimeoutError, match="2 frames queued and 0 transmitted"):
+        session.send_payloads(
+            [b"\x01", b"\x02", b"\x03"],
+            mode="RDM-600S",
+            window=2,
+            poll_s=0,
+            stall_timeout_s=0.05,
+        )
+
+    assert len(kiss.sent) == 2
+
+
+def test_send_payloads_stop_check_during_window_wait(monkeypatch) -> None:
+    monkeypatch.setattr("ceefax.src.hf.time.sleep", lambda _seconds: None)
+    control = _QueueControl()
+    kiss = _RecordingKiss(control)
+    session = _open_session(control, kiss)
+    checks = {"n": 0}
+
+    def stop_check() -> bool:
+        checks["n"] += 1
+        return checks["n"] >= 3
+
+    sent = session.send_payloads(
+        [b"\x01", b"\x02", b"\x03"],
+        mode="RDM-600S",
+        stop_check=stop_check,
+        window=1,
+        poll_s=0,
+    )
+
+    assert sent == 1
+    assert len(kiss.sent) == 1
