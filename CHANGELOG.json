@@ -1,7 +1,14 @@
 {
-  "current_version": "0.1.7-alpha",
+  "current_version": "0.1.8-alpha",
   "stage": "alpha",
   "entries": [
+    {
+      "date": "2026-09-22",
+      "version": "0.1.8-alpha",
+      "changes": [
+        "HF transmit waits for modem73 to send frames before queueing more, so a full carousel is not cut off at 256 frames"
+      ]
+    },
     {
       "date": "2026-09-22",
       "version": "0.1.7-alpha",
