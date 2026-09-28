@@ -663,9 +663,8 @@
         <div class="row">
           <label for="mapStyle">Map</label>
           <select id="mapStyle">
+            <option value="voyager" selected>Voyager (CARTO)</option>
             <option value="osm">Street (light)</option>
-            <option value="carto-light">Light (CARTO)</option>
-            <option value="carto-dark">Dark (CARTO)</option>
             <option value="topo">Topographic</option>
           </select>
         </div>
@@ -795,20 +794,15 @@
       const CARTO_BASEMAP_KEY = 'cb1_3nxz_2_5c52e4284e978fc6401ea327';
 
       const MAP_STYLES = {
+        voyager: {
+          url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          maxZoom: 20
+        },
         osm: {
           url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 19
-        },
-        'carto-light': {
-          url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          maxZoom: 20
-        },
-        'carto-dark': {
-          url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          maxZoom: 20
         },
         topo: {
           url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -819,7 +813,7 @@
 
       let baseLayer = null;
       function applyMapStyle(styleId) {
-        const style = MAP_STYLES[styleId] || MAP_STYLES.osm;
+        const style = MAP_STYLES[styleId] || MAP_STYLES.voyager;
         if (baseLayer) map.removeLayer(baseLayer);
         baseLayer = L.tileLayer(style.url, {
           maxZoom: style.maxZoom || 18,
@@ -829,7 +823,7 @@
 
       const mapStyleSel = document.getElementById('mapStyle');
       const savedMapStyle = (() => {
-        try { return localStorage.getItem('ceefax.mapStyle') || 'osm'; } catch { return 'osm'; }
+        try { return localStorage.getItem('ceefax.mapStyle') || 'voyager'; } catch { return 'voyager'; }
       })();
       if (MAP_STYLES[savedMapStyle]) mapStyleSel.value = savedMapStyle;
       applyMapStyle(mapStyleSel.value);

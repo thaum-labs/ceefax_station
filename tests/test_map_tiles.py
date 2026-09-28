@@ -12,8 +12,6 @@ def test_carto_basemap_urls_include_api_key() -> None:
     html = INDEX_HTML.read_text(encoding="utf-8")
     assert f"const CARTO_BASEMAP_KEY = '{CARTO_BASEMAP_KEY}';" in html
     assert (
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY"
+        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY"
     ) in html
-    assert (
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=' + CARTO_BASEMAP_KEY"
-    ) in html
+    assert "localStorage.getItem('ceefax.mapStyle') || 'voyager'" in html
